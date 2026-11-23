@@ -2145,11 +2145,7 @@ export function AgentThread({
           return [...prev, ...chips.filter((c) => !kept.has(c.localId))]
         })
       }
-      // The failure itself lands in the flow as a gray system row (never a
-      // toast — turn.failed is a fact of the conversation). The row is
-      // local-only; on a persisted turn the user bubble it answers IS
-      // durable, so a refresh keeps the question and drops only this row —
-      // the honest shape of "asked, not answered".
+      // A durable failure keeps the same message identity in Live and history.
       // A structured credits shortfall (the judged-start 422 riding the
       // turn.failed frame) takes the shared grey-row seat — 双路同语义
       // with the typed Start.
@@ -2165,7 +2161,7 @@ export function AgentThread({
         setMessages((prev) => [
           ...prev,
           {
-            id: crypto.randomUUID(),
+            id: (e instanceof StreamTurnError && e.messageId) || crypto.randomUUID(),
             role: "assistant",
             content: detail,
             turnId:

@@ -8,7 +8,7 @@ I6 有条件收官。通用文字动画与显式 Skill 的 OxValue 宣传片均�
 
 ## 0. 当前里程碑与施工序列
 
-**I8 暂缓合并。** Agent 在“结尾再留半秒”一轮只延长了字幕，重复裁剪被拒后，Chat 遗漏已经保存的修改。旧正式成片、一次收费与恢复均有实证。Working Draft 合同已定稿，先修部分成功的持久事实结算，再校准普通结束的陈述；产品施工待审批。[最终验收](tasks/agent-editor-evidence/iteration-8/final-acceptance/README.md) · [施工范围](tasks/i8.md#15-现行处置与交付)
+**I8 P0 已完成，P1 待审批。** 第四轮保存字幕后重复裁剪被拒，Chat 现可交代字幕延长半秒、主画面保持六秒和旧成片的去处。原轮次记录与本轮真实供应商过载分别回放，核对终帧、刷新历史和原交付卡片。普通 Finish 和 Renderer 合并仍待独立审批。[P0 验收与费用](tasks/agent-editor-evidence/iteration-8/final-acceptance/p0-partial-settlement.md) · [施工范围](tasks/i8.md#15-现行处置与交付)
 
 ### 0.1 里程碑状态
 

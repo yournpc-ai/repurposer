@@ -161,6 +161,7 @@ export class StreamTurnError extends Error {
     fallback: string,
     persisted = false,
     turnId: string | null = null,
+    readonly messageId?: string,
   ) {
     super(typeof detail === "string" && detail ? detail : fallback)
     this.name = "StreamTurnError"
@@ -314,6 +315,7 @@ function streamTurn<T>(
                 "Stream failed",
                 frame.persisted,
                 frame.turnId,
+                frame.messageId,
               ),
             )
             break

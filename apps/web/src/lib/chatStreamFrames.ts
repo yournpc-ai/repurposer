@@ -104,7 +104,7 @@ export type RoutedStreamFrame =
   | { kind: "row_append"; row: RowAppendPayload }
   | { kind: "row_update"; id: string; frame: ActivityRowFramePayload }
   | { kind: "completed"; envelope: unknown }
-  | { kind: "failed"; detail: unknown; persisted: boolean; turnId: string | null }
+  | { kind: "failed"; detail: unknown; persisted: boolean; turnId: string | null; messageId?: string }
   | { kind: "ignored" }
 
 /** Live Candidate Surface reducer. Set identity comes from the server frame;
@@ -268,10 +268,12 @@ export function routeStreamFrame(
     const parsed = JSON.parse(data) as {
       detail?: unknown
       persisted?: boolean
+      message_id?: string
       turn_id?: string | null
     }
     return {
       kind: "failed",
+      ...(typeof parsed.message_id === "string" ? { messageId: parsed.message_id } : {}),
       detail: parsed.detail,
       persisted: !!parsed.persisted,
       turnId: typeof parsed.turn_id === "string" ? parsed.turn_id : null,

@@ -1,7 +1,7 @@
 """Saved-work editing through the real turn fence and Postgres version store."""
 
 import asyncio
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import func, select
@@ -370,3 +370,96 @@ async def test_transition_boundaries_and_targeted_keyframe_edit(database):
         expected.timeline.tracks[1].clips[0].animations[-1].keyframes[1].value = 1.1
         assert head.timeline == expected.timeline.model_dump(mode="json")
         assert head.version == first.version + 1
+
+
+@pytest.mark.parametrize("exit_kind", ["no_progress", "exhausted", "refusal", "provider_failure", "history_first"])
+async def test_partial_edit_final_message(database, monkeypatch, exit_kind):
+    from app.agents.tool_loop import LoopResult
+    from app.chat.editor import ExtendStillArgs
+    from app.chat.editor_recovery import recover_interrupted_edits
+    from app.chat.plan_turn import PlanTurn
+    from app.chat.service import _create_message, settle_failed_chat_turn
+    from app.editing.store import apply_composition_edits, content_of
+    from app.models.schemas import ChatRequest
+
+    monkeypatch.setattr("app.models.database.AsyncSessionLocal", database)
+    owner = await _user(database)
+    pid = await _project(database, owner)
+    await _snapshots(database, owner)
+    work, first, _ = await _create(database, owner, pid)
+    draft = content_of(first)
+    caption = draft.timeline.tracks[1]
+    caption.role = "caption"
+    caption.clips[0].animations.clear()
+    async with database() as db:
+        _, base, _ = await apply_composition_edits(
+            db, owner_id=owner, composition_id=work.id, base_version_id=first.id,
+            base_digest=first.content_digest, content=draft.model_dump(mode="json"),
+        )
+        conv = Conversation(user_id=owner, project_id=pid)
+        db.add(conv)
+        await db.flush()
+        opening_id = uuid4()
+        question = "结尾再留半秒，其他保持原样。"
+        opening = Message(id=opening_id, conversation_id=conv.id, seq=1, role="user",
+                          content=question, turn_state="in_flight")
+        db.add_all([opening, MessageSeqCounter(conversation_id=conv.id, last_seq=1)])
+        await db.commit()
+        project = await db.get(Project, pid)
+        # The long-lived Chat session already holds the old opening in its identity map.
+        async with database() as writer:
+            args = dict(name="extend_still", project=project, opening_id=opening_id,
+                        conversation_id=conv.id, call_id="caption", args=ExtendStillArgs(clip_id="clp_title", seconds=.5),
+                        base={"composition_id": str(work.id), "composition_version_id": str(base.id),
+                              "content_digest": base.content_digest})
+            saved = await edit_clip(writer, **args)
+        assert not (opening.intent or {}).get("editor_commits")
+        expected_head = saved["version_id"]
+        if exit_kind == "exhausted":
+            async with database() as other:
+                # A later writer may move the head while the original opening is running.
+                _, later, _ = await apply_composition_edits(
+                    other, owner_id=owner, composition_id=work.id,
+                    base_version_id=UUID(saved["version_id"]), base_digest=saved["content_digest"],
+                    content=draft.model_dump(mode="json"),
+                )
+                expected_head = str(later.id)
+                await _create_message(
+                    other, conv.id, "assistant", "允许导出吗？", turn_id=opening_id,
+                    intent={"media_permission": {"quote": {}}}, question={"kind": "question"},
+                )
+                await other.commit()
+        if exit_kind in ("provider_failure", "history_first"):
+            if exit_kind == "history_first":
+                async with database() as reader:
+                    assert await recover_interrupted_edits(reader, conv.id)
+                    await reader.commit()
+            state, row = await settle_failed_chat_turn(opening_id, conv.id, "服务暂不可用。")
+            state_again, duplicate = await settle_failed_chat_turn(opening_id, conv.id, "服务暂不可用。")
+            assert state == state_again == "failed"
+            assert row.id == duplicate.id
+        else:
+            turn = PlanTurn(db, owner, conv, project, ChatRequest(project_id=pid, message=question),
+                            turn_id=opening_id)
+            result = LoopResult("", None, None, 11, exhausted=exit_kind == "exhausted",
+                                no_progress_tool="trim_clip" if exit_kind == "no_progress" else None,
+                                ended_by="review_video" if exit_kind == "refusal" else None,
+                                refusal_facts={"kind": "video_review_failure"})
+            row, _ = await turn.finish(result)
+            opening.turn_state = "settled"
+            await db.commit()
+        assert row.turn_id == opening_id
+        assert "字幕延长了 0.5 秒" in row.content and "没有延长主画面" in row.content
+        assert "之前交付" not in row.content
+        expected = {"no_progress": "重复尝试", "exhausted": "处理上限",
+                    "refusal": "复查未完成", "provider_failure": "服务暂不可用", "history_first": "本轮已中断"}
+        assert expected[exit_kind] in row.content
+        assert ("此后作品还有其他已保存的修改" in row.content) == (exit_kind == "exhausted")
+        assert ("费用等待确认" in row.content) == (exit_kind == "exhausted")
+    async with database() as replay:
+        assert (await edit_clip(replay, **args))["version_id"] == saved["version_id"]
+        assert not await recover_interrupted_edits(replay, conv.id)
+        messages = (await replay.scalars(select(Message).where(Message.turn_id == opening_id))).all()
+        assert [(m.id, m.content) for m in messages if not m.question] == [(row.id, row.content)]
+        _, head = await get_video_version(replay, owner_id=owner, composition_id=work.id)
+        assert str(head.id) == expected_head

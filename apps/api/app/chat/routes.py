@@ -50,6 +50,7 @@ from app.chat.service import (
     record_candidates_log,
     settle_activity_row,
     settle_interrupted_turn,
+    settle_failed_chat_turn,
     stamp_turn_failed,
     stop_turn_at_visible_frontier,
 )
@@ -577,7 +578,7 @@ async def _sse_pump(
 
     Queue protocol (turn-specific bodies only push tuples):
     ``("completed", <JSON-able payload>)`` /
-    ``("failed", <detail str|dict>[, <persisted bool|None>, <turn_id str|None>])``
+    ``("failed", <detail str|dict>[, <persisted bool|None>, <turn_id str|None>, <message_id str|None>])``
     — a dict detail is a typed failure payload (credits.insufficient), sent
     as the frame's ``detail`` object verbatim.
     """
@@ -617,6 +618,8 @@ async def _sse_pump(
                 }
                 if len(item) > 2 and item[2] is not None:
                     payload["persisted"] = item[2]
+                if len(item) > 4 and item[4] is not None:
+                    payload["message_id"] = item[4]
                 yield _sse(failed_event, json.dumps(payload))
                 return
     finally:
@@ -804,21 +807,22 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
             # flow keeps the bubble instead of rolling the user's own words
             # back. A prepare-stage rejection (entry caps) never persisted —
             # persisted=False keeps the old rollback for those.
-            interrupted_state = None
-            if turn_user_message_id is not None and turn_conversation_id is not None:
-                interrupted_state = await settle_interrupted_turn(
-                    turn_user_message_id,
-                    turn_conversation_id,
-                )
-            if turn_user_message_id is not None:
-                await stamp_turn_failed(turn_user_message_id)
             detail = _failure_detail(exc, ui_language)
+            interrupted_state, partial_failure = None, None
+            if turn_user_message_id is not None and turn_conversation_id is not None:
+                interrupted_state, partial_failure = await settle_failed_chat_turn(
+                    turn_user_message_id, turn_conversation_id,
+                    detail if isinstance(detail, str) else None,
+                )
+                if partial_failure is not None and isinstance(detail, str):
+                    detail = partial_failure.content
+                await stamp_turn_failed(turn_user_message_id)
             # 失败行持久化: the honest line lands as a durable assistant row
             # (fresh session inside) so a refresh keeps the failure's stage
             # and next step; a STRUCTURED detail (typed credits shortfall)
             # stays frame-only — its seat is the dock's typed row.
             if (
-                isinstance(detail, str)
+                partial_failure is None and isinstance(detail, str)
                 and turn_conversation_id is not None
                 and interrupted_state not in {"cancelled", "retracted"}
             ):
@@ -838,6 +842,7 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
                     detail,
                     turn_user_message_id is not None,
                     str(turn_user_message_id) if turn_user_message_id else None,
+                    str(partial_failure.id) if partial_failure is not None and isinstance(detail, str) else None,
                 )
             )
         except BaseException:

@@ -328,6 +328,14 @@ describe("terminal pair", () => {
       .toEqual({ kind: "failed", detail: "boom", persisted: false, turnId: null })
   })
 
+  it("keeps the persisted partial edit's assistant message id", () => {
+    expect(routeStreamFrame("turn.failed", JSON.stringify({
+      detail: "Caption saved", persisted: true, turn_id: "opening", message_id: "final",
+    }), CHAT_TERMINAL)).toEqual({
+      kind: "failed", detail: "Caption saved", persisted: true, turnId: "opening", messageId: "final",
+    })
+  })
+
   it("terminal.failed exposes the answer continuation's inherited identity", () => {
     expect(
       routeStreamFrame(

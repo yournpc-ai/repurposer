@@ -2014,10 +2014,14 @@ async def stop_turn_at_visible_frontier(
     return "cancelled"
 
 
-async def settle_interrupted_turn(
-    user_message_id: UUID,
-    conversation_id: UUID,
-) -> str | None:
+async def settle_interrupted_turn(user_message_id: UUID, conversation_id: UUID) -> str | None:
+    state, _ = await settle_failed_chat_turn(user_message_id, conversation_id)
+    return state
+
+
+async def settle_failed_chat_turn(
+    user_message_id: UUID, conversation_id: UUID, failure_detail: str | None = None,
+) -> tuple[str | None, Message | None]:
     """Idempotently clean up an unexpected disconnect.
 
     Stop has already been settled atomically by its control endpoint. This path
@@ -2028,22 +2032,28 @@ async def settle_interrupted_turn(
     try:
         async with AsyncSessionLocal() as db:
             row = await db.get(Message, user_message_id, with_for_update=True)
-            if row is None:
-                return None
+            if row is None or row.conversation_id != conversation_id:
+                return None, None
             if row.turn_state != "in_flight":
-                return row.turn_state
+                message = None
+                if row.turn_state == "failed" and failure_detail is not None:
+                    message = await db.scalar(select(Message).where(
+                        Message.turn_id == row.id, Message.conversation_id == conversation_id,
+                        Message.intent["type"].astext.in_(("editor_recovery", "turn_failed")),
+                    ).order_by(Message.seq.desc()).limit(1))
+                return row.turn_state, message
             from app.chat.editor_recovery import report_committed_edits
-            await report_committed_edits(db, row)
+            message = await report_committed_edits(db, row, failure_detail=failure_detail)
             row.turn_state = "failed"
             await db.commit()
-            return "failed"
+            return "failed", message
     except Exception as e:  # noqa: BLE001 — teardown is best-effort
         logger.warning(
             "turn_interrupted_settle_error",
             message_id=str(user_message_id),
             error=str(e),
         )
-        return None
+        return None, None
 
 
 async def stamp_turn_failed(user_message_id) -> None:
@@ -2209,10 +2219,24 @@ async def chat(
     """
     prepared = await prepare_chat_turn(db, user_id, request)
     from app.chat.routes import persistent_activity_hooks
+    from app.pipeline.errors import user_error_line
+    from app.providers.llm.base import LLMError
+    from app.ui_locale import current_ui_language
 
-    hooks, cancel_open = persistent_activity_hooks(db, prepared.conversation_id, prepared.user_message.id)
+    opening_id = prepared.user_message.id
+    hooks, cancel_open = persistent_activity_hooks(db, prepared.conversation_id, opening_id)
     try:
         return await execute_chat_turn(db, prepared, request, **hooks)
+    except LLMError as exc:
+        # Release the turn transaction before inspecting separately committed edits.
+        await db.rollback()
+        opening = await db.get(Message, opening_id)
+        if opening and (opening.intent or {}).get("editor_commits"):
+            detail = user_error_line(exc, current_ui_language() or "en")
+            _, message = await settle_failed_chat_turn(opening_id, prepared.conversation_id, detail)
+            if message is not None:
+                raise HTTPException(status.HTTP_502_BAD_GATEWAY, message.content) from exc
+        raise
     finally:
         await cancel_open()
 

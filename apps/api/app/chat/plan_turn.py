@@ -965,6 +965,31 @@ class PlanTurn:
         # flushes (the queued prose IS the reply), a rejection-marked queue
         # drops (every queued word was rejected speech).
         await self._resolve_deferred()
+        if self.turn_id and (result.no_progress_tool or result.exhausted or result.ended_by):
+            from app.chat.editor_recovery import partial_edit_text
+            from app.chat.service import _lock_turn_for_transcript_write, _prefers_zh
+
+            # Edits committed on separate sessions. Read the fresh opening under
+            # the same fence as the final reply, including any concurrent Stop.
+            opening = await _lock_turn_for_transcript_write(self.db, self.turn_id)
+            zh = _prefers_zh(opening.content)
+            if result.no_progress_tool:
+                reason = "后续调整未完成，重复尝试已停止。" if zh else "The follow-up edit did not finish. Repeated attempts have stopped."
+            elif result.ended_by:
+                kind = (result.refusal_facts or {}).get("kind")
+                reasons = {
+                    "sfx_import_failure": ("音效导入未完成。", "The sound import did not finish."),
+                    "video_review_failure": ("成片复查未完成。", "The output recheck did not finish."),
+                    "video_capability": ("现有工具无法完成后续调整。", "The available tools could not complete the follow-up change."),
+                }
+                reason = reasons.get(kind, ("后续操作未完成。", "The follow-up operation did not finish."))[0 if zh else 1]
+            else:
+                reason = "已达到本轮处理上限，后续工作未完成。" if zh else "The turn reached its processing limit before the follow-up work finished."
+            partial = await partial_edit_text(self.db, opening, reason)
+            if partial:
+                message = await _create_message(self.db, self.conversation_id, "assistant", partial, turn_id=self.turn_id)
+                await self._stamp_video_presentation(message)
+                return message, self.settled_pending
         if result.no_progress_tool is not None:
             video_read = self._video_presentation_pending
             assistant_message = await _create_message(

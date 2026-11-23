@@ -1,0 +1,428 @@
+{
+  "base_commit": "684af654aadbbf39f2cd06b3f99b9bcbf9d8e1a7",
+  "historical_opening": "d97f317a-e905-4fa4-88aa-b911a4e6c4bc",
+  "historical_v4": "2c22736a-0f27-4a42-b53e-17dd642ba92b",
+  "historical_output_id": "7a47ca27-0e05-5a2c-94aa-98d51893eee0",
+  "timebase": 90000,
+  "real_minimax": {
+    "first_529_failure": {
+      "opening": "d9f1bef5-a777-4160-abbd-762562d646ce",
+      "terminal": "turn.failed",
+      "message_id": null,
+      "text": "The AI service is unavailable right now — please try again later",
+      "state": "failed",
+      "head": "873df8c8-453c-42ad-a630-73c4f8f0a946",
+      "number": 4,
+      "commits": [
+        "extend_still"
+      ],
+      "main_end": 540000,
+      "caption_end": 585000,
+      "jobs_and_cost": {
+        "exports": 1,
+        "media": 0,
+        "cumulative_charge": 12
+      },
+      "request": 9,
+      "response": 6,
+      "error": 3,
+      "input_tokens": 57386,
+      "output_tokens": 1694,
+      "estimated_usd": 0.0096243,
+      "sse_sha256": "606d5738a918a5118d84c4711e1999307ff90e59f251121209352628b9bc134f",
+      "provider_calls": [
+        {
+          "id": "3e100929-487c-46fb-89d7-6f92088983f5",
+          "phase": "response",
+          "input": 8135,
+          "output": 46
+        },
+        {
+          "id": "d1761f33-e9ee-4f06-8577-057439a0b203",
+          "phase": "response",
+          "input": 9125,
+          "output": 392
+        },
+        {
+          "id": "6c24018c-f3f5-41a8-8714-33ad75d4da01",
+          "phase": "response",
+          "input": 9591,
+          "output": 311
+        },
+        {
+          "id": "96dc96ab-e4ba-4eb6-8146-2a6d21113808",
+          "phase": "response",
+          "input": 9972,
+          "output": 522
+        },
+        {
+          "id": "20cadf27-ee8b-4231-8c55-b3d8047a2f37",
+          "phase": "response",
+          "input": 9716,
+          "output": 174
+        },
+        {
+          "id": "63ea2bec-160c-46db-9da0-dfa4e3dbfbef",
+          "phase": "response",
+          "input": 10847,
+          "output": 249
+        },
+        {
+          "id": "63f07c10-6786-4ac5-9961-620b12b6f188",
+          "phase": "error",
+          "http_status": 529,
+          "error_type": "overloaded_error",
+          "provider_message": "当前服务集群负载较高，请稍后重试，感谢您的耐心等待。 (2064)",
+          "provider_request_id": "0753211d2a6720dd7f9d2e03c4a3e07a"
+        },
+        {
+          "id": "5745996a-fae2-48b8-8848-caade02cd887",
+          "phase": "error",
+          "http_status": 529,
+          "error_type": "overloaded_error",
+          "provider_message": "当前服务集群负载较高，请稍后重试，感谢您的耐心等待。 (2064)",
+          "provider_request_id": "07532125522a331b7143a0a5e6cb979e"
+        },
+        {
+          "id": "3117ff79-715b-4a54-8ab8-397f96807907",
+          "phase": "error",
+          "http_status": 529,
+          "error_type": "overloaded_error",
+          "provider_message": "当前服务集群负载较高，请稍后重试，感谢您的耐心等待。 (2064)",
+          "provider_request_id": "075321277149b93353e65d355297b62c"
+        }
+      ]
+    },
+    "fixed_original_wording_no_write": {
+      "opening": "27c6d2f1-3a2a-4a05-a7c0-05aa59fdf023",
+      "terminal": "turn.completed",
+      "message_id": "0c6cdae9-3cfe-4ad4-8301-42e3885bb29b",
+      "text": "这次调整没有完成，我没有保存新的分镜，也没有开始制作。我已停止重复尝试。请再发一次，我会重新尝试。",
+      "state": "settled",
+      "head": "4682cc68-125e-4ee0-9471-45358b27f905",
+      "number": 3,
+      "commits": [],
+      "main_end": 540000,
+      "caption_end": 540000,
+      "jobs_and_cost": {
+        "exports": 1,
+        "media": 0,
+        "cumulative_charge": 12
+      },
+      "request": 6,
+      "response": 6,
+      "error": 0,
+      "input_tokens": 61131,
+      "output_tokens": 2488,
+      "estimated_usd": 0.01066245,
+      "sse_sha256": "899fe04ed6595cc3b3bae8450dcd18166acd23a8d8baa9bea98bc627f78b68aa",
+      "provider_calls": [
+        {
+          "id": "d8564478-b001-417c-80e4-e63b74c59d97",
+          "phase": "response",
+          "input": 8135,
+          "output": 61
+        },
+        {
+          "id": "9d7c7be5-59f2-4695-8000-7b8b0ed91c11",
+          "phase": "response",
+          "input": 9140,
+          "output": 352
+        },
+        {
+          "id": "30edeaff-2e05-4d44-85d7-b54fad4d1d66",
+          "phase": "response",
+          "input": 9566,
+          "output": 578
+        },
+        {
+          "id": "553dbdfd-a9ed-4af7-b392-b1b45cf45092",
+          "phase": "response",
+          "input": 11815,
+          "output": 439
+        },
+        {
+          "id": "c883d75e-4388-471f-9454-70077ef10745",
+          "phase": "response",
+          "input": 11187,
+          "output": 546
+        },
+        {
+          "id": "1b77e9c9-d9bc-4fea-8b02-e41eb57af73b",
+          "phase": "response",
+          "input": 11288,
+          "output": 512
+        }
+      ]
+    },
+    "directed_natural_finish": {
+      "opening": "163830ba-9a14-4918-8605-e700862f72c2",
+      "terminal": "turn.completed",
+      "message_id": "9dea9edd-9f5d-4335-ad12-3e10aac5526d",
+      "text": "字幕延长已完成并保留：0–6.5 秒的片段 从 0–6.0s 延长到 0–6.5s，其余镜头（主画面 0–6.0s、右上角图层 2–4s）位置未变。\n\n主镜头无法延长。原因：0–6 秒的片段 的源区间已是原始素材 product-demo-1795415429-epXJqQ.mp4 的完整长度（0–6.0 秒，素材本身总时长就是 6 秒），没有剩余的源画面可向后取用。尝试用 trim 保留到 6.5s 也被拒绝（超出已解析目标的可用范围）。若要延长 0.5 秒，需要提供一段额外的素材或允许延长现有素材，这超出你本次“不要添加素材”的限制，所以我没有做。\n\n按要求未添加任何素材，也未导出。需要我把延长后的字幕变化先预览一遍给你看吗？",
+      "state": "settled",
+      "head": "a6bf9ed5-18c8-4d83-b7c4-cb0b248cb910",
+      "number": 4,
+      "commits": [
+        "extend_still"
+      ],
+      "main_end": 540000,
+      "caption_end": 585000,
+      "jobs_and_cost": {
+        "exports": 1,
+        "media": 0,
+        "cumulative_charge": 12
+      },
+      "request": 6,
+      "response": 6,
+      "error": 0,
+      "input_tokens": 56668,
+      "output_tokens": 1100,
+      "estimated_usd": 0.0091602,
+      "sse_sha256": "c05c5d2b19db11ee1c98a38c84cf80b055b9ade330d53e51776b77a6d7c9214d",
+      "provider_calls": [
+        {
+          "id": "f74643d3-98d1-4abd-865e-77033708f761",
+          "phase": "response",
+          "input": 8128,
+          "output": 112
+        },
+        {
+          "id": "a72ae81c-cc2d-4fa5-84e8-6e5eba0e28bf",
+          "phase": "response",
+          "input": 9183,
+          "output": 169
+        },
+        {
+          "id": "5bcf8520-0d22-4876-b03f-904796f26e75",
+          "phase": "response",
+          "input": 9426,
+          "output": 168
+        },
+        {
+          "id": "1b807f7f-a841-475e-a9c6-117296648ec8",
+          "phase": "response",
+          "input": 9222,
+          "output": 55
+        },
+        {
+          "id": "17290325-bab8-41e1-adeb-19dfc389611c",
+          "phase": "response",
+          "input": 10238,
+          "output": 181
+        },
+        {
+          "id": "abf33255-e96e-47ad-85c8-e64bfb515cb6",
+          "phase": "response",
+          "input": 10471,
+          "output": 415
+        }
+      ],
+      "browser": {
+        "browser": "157.0.8103.79",
+        "terminal": "event: turn.completed",
+        "final_text": "字幕延长已完成并保留：0–6.5 秒的片段 从 0–6.0s 延长到 0–6.5s，其余镜头（主画面 0–6.0s、右上角图层 2–4s）位置未变。\n\n主镜头无法延长。原因：0–6 秒的片段 的源区间已是原始素材 product-demo-1795415429-epXJqQ.mp4 的完整长度（0–6.0 秒，素材本身总时长就是 6 秒），没有剩余的源画面可向后取用。尝试用 trim 保留到 6.5s 也被拒绝（超出已解析目标的可用范围）。若要延长 0.5 秒，需要提供一段额外的素材或允许延长现有素材，这超出你本次“不要添加素材”的限制，所以我没有做。\n\n按要求未添加任何素材，也未导出。需要我把延长后的字幕变化先预览一遍给你看吗？",
+        "visible_live": true,
+        "visible_after_reload": true,
+        "old_output_played_seconds": 0.227917
+      }
+    },
+    "after_topup_original_wording": {
+      "opening": "9391916e-0630-40a2-b770-ef3dde513078",
+      "terminal": "turn.completed",
+      "message_id": "32522583-c40a-45ad-b52d-357d87f76a8b",
+      "text": "已按要求把结尾再延长 0.5 秒，其余画面、字幕、声音未改动。\n\n- 改动：结尾字幕条（STUDIO LAMP）的停留由 6.5 秒延长到 7.0 秒（源视频本身只有 6 秒，尾部是黑底标题的定格）。\n- 核对：播放 5.0–7.0 秒窗口，6.0 秒后视频画面结束，黑底加「STUDIO LAMP」标题条稳定保留到 7.0 秒，音频轨道未被改动。\n- 保存版本：v5（第 5 版）。\n\n本次未做正式导出；如需导出成片请告知。",
+      "state": "settled",
+      "head": "65f6a54a-0c6a-4012-9f50-05b388799e88",
+      "number": 5,
+      "commits": [
+        "extend_still",
+        "extend_still"
+      ],
+      "main_end": 540000,
+      "caption_end": 630000,
+      "jobs_and_cost": {
+        "exports": 1,
+        "media": 0,
+        "cumulative_charge": 12
+      },
+      "request": 10,
+      "response": 10,
+      "error": 0,
+      "input_tokens": 111346,
+      "output_tokens": 2270,
+      "estimated_usd": 0.0180639,
+      "sse_sha256": "2f237049c46c1cb3f23bd2a6532014aed0f57018882809ce3da8e2c184f9dcf5",
+      "provider_calls": [
+        {
+          "id": "af469796-7174-4fb4-a487-977255063692",
+          "phase": "response",
+          "input": 8135,
+          "output": 56
+        },
+        {
+          "id": "037d5631-572e-4ed9-a6af-0bfe9a800d6e",
+          "phase": "response",
+          "input": 9135,
+          "output": 194
+        },
+        {
+          "id": "9c68c399-b6b8-46ee-bb96-c1de3a89a938",
+          "phase": "response",
+          "input": 9399,
+          "output": 285
+        },
+        {
+          "id": "61046962-e293-4739-affc-cb4fe25baefd",
+          "phase": "response",
+          "input": 9494,
+          "output": 196
+        },
+        {
+          "id": "cc207f9e-6339-4c47-bb8d-adc82c206af2",
+          "phase": "response",
+          "input": 11528,
+          "output": 276
+        },
+        {
+          "id": "451b05c2-b225-4b42-a93e-6d6b60ae64e7",
+          "phase": "response",
+          "input": 11926,
+          "output": 260
+        },
+        {
+          "id": "840e9c2e-575a-4458-baa6-3feae3f2f573",
+          "phase": "response",
+          "input": 11762,
+          "output": 209
+        },
+        {
+          "id": "01f523be-af82-4aeb-9560-3ba03e555bb3",
+          "phase": "response",
+          "input": 12926,
+          "output": 546
+        },
+        {
+          "id": "4265cbb2-4037-49cc-9abf-2f6f49a423d8",
+          "phase": "response",
+          "input": 12000,
+          "output": 86
+        },
+        {
+          "id": "db344582-8660-47bd-b236-59dd5c129884",
+          "phase": "response",
+          "input": 15041,
+          "output": 162
+        }
+      ],
+      "live_dom_probe": "The original literal-text probe stopped on a Markdown list marker after recording the completed SSE envelope.",
+      "browser_history": {
+        "browser": "157.0.8103.79",
+        "visible_message_ids": [
+          "32522583-c40a-45ad-b52d-357d87f76a8b",
+          "32522583-c40a-45ad-b52d-357d87f76a8b"
+        ],
+        "cache_disabled": true,
+        "terminal": "turn.completed",
+        "final_text": "已按要求把结尾再延长 0.5 秒，其余画面、字幕、声音未改动。\n\n- 改动：结尾字幕条（STUDIO LAMP）的停留由 6.5 秒延长到 7.0 秒（源视频本身只有 6 秒，尾部是黑底标题的定格）。\n- 核对：播放 5.0–7.0 秒窗口，6.0 秒后视频画面结束，黑底加「STUDIO LAMP」标题条稳定保留到 7.0 秒，音频轨道未被改动。\n- 保存版本：v5（第 5 版）。\n\n本次未做正式导出；如需导出成片请告知。",
+        "history_reopen": true,
+        "visible_after_reload": true,
+        "old_output_played_seconds": 0.221912
+      }
+    }
+  },
+  "controlled_replays": {
+    "original_no_progress_sse": {
+      "opening": "61a306e9-4a51-4d3b-9f39-621b2cf01857",
+      "terminal": "turn.completed",
+      "message_id": "28ab32a8-652f-48fd-a9ef-d42efae1b195",
+      "text": "后续调整未完成，重复尝试已停止。\n已保存：字幕延长了 0.5 秒，这次修改没有延长主画面（第 4 版）。\n之前交付的成片仍可从原消息打开。\n可以从当前稿继续修改。",
+      "state": "settled",
+      "head": "1b348b80-c808-4cbc-b0c9-c942f8fa015e",
+      "number": 4,
+      "commits": [
+        "extend_still"
+      ],
+      "main_end": 540000,
+      "caption_end": 585000,
+      "jobs_and_cost": {
+        "exports": 1,
+        "media": 0,
+        "cumulative_charge": 12
+      },
+      "native_call_replayed": "call_01a2071e05eb72a5aa16cb72",
+      "fresh_history_reads": 2,
+      "v3_output_sha256": "2b642ac8864dea3c537d34d1bfa15c50c7faae8b8ca07666cdf4e6d8229308fd",
+      "request": 11,
+      "response": 11,
+      "error": 0,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "estimated_usd": 0.0,
+      "browser": {
+        "browser": "157.0.8103.79",
+        "visible_message_ids": [
+          "28ab32a8-652f-48fd-a9ef-d42efae1b195",
+          "28ab32a8-652f-48fd-a9ef-d42efae1b195"
+        ],
+        "cache_disabled": true,
+        "terminal": "event: turn.completed",
+        "final_text": "后续调整未完成，重复尝试已停止。\n已保存：字幕延长了 0.5 秒，这次修改没有延长主画面（第 4 版）。\n之前交付的成片仍可从原消息打开。\n可以从当前稿继续修改。",
+        "visible_live": true,
+        "visible_after_reload": true,
+        "old_output_played_seconds": 0.206897
+      },
+      "sse_sha256": "6b339ba8c7110b76ce1edf17d7156fa599e327cc14b576fc575d212ff42b60bd"
+    },
+    "provider_529_sse": {
+      "opening": "d8483859-4121-4d46-a931-8294b40cb610",
+      "terminal": "turn.failed",
+      "message_id": "32cb30e7-ebd9-48d3-ba17-9a344b86cade",
+      "text": "The AI service is unavailable right now — please try again later\nSaved: extended the caption by 0.5 seconds, without extending the main picture (version 4).\nThe previously delivered film is still available in its original message.\nYou can continue editing the current draft.",
+      "state": "failed",
+      "head": "0b891166-0ec0-4874-83e2-bea705a086c2",
+      "number": 4,
+      "commits": [
+        "extend_still"
+      ],
+      "main_end": 540000,
+      "caption_end": 585000,
+      "jobs_and_cost": {
+        "exports": 1,
+        "media": 0,
+        "cumulative_charge": 12
+      },
+      "native_call_replayed": "call_01a20759eb3e765fbed35ead",
+      "fresh_history_reads": 2,
+      "v3_output_sha256": "2b642ac8864dea3c537d34d1bfa15c50c7faae8b8ca07666cdf4e6d8229308fd",
+      "request": 9,
+      "response": 6,
+      "error": 3,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "estimated_usd": 0.0,
+      "browser": {
+        "browser": "157.0.8103.79",
+        "visible_message_ids": [
+          "32cb30e7-ebd9-48d3-ba17-9a344b86cade",
+          "32cb30e7-ebd9-48d3-ba17-9a344b86cade"
+        ],
+        "cache_disabled": true,
+        "terminal": "event: turn.failed",
+        "final_text": "The AI service is unavailable right now — please try again later\nSaved: extended the caption by 0.5 seconds, without extending the main picture (version 4).\nThe previously delivered film is still available in its original message.\nYou can continue editing the current draft.",
+        "visible_live": true,
+        "visible_after_reload": true,
+        "old_output_played_seconds": 0.219149
+      },
+      "sse_sha256": "87b1511b63a538ab7943c9b1c561e4fe3fff88ec0c423c0dbadfd6e9893ada76"
+    },
+    "provider_529_json": {
+      "status": 502,
+      "body": "The AI service is unavailable right now — please try again later\nSaved: extended the caption by 0.5 seconds, without extending the main picture (version 4).\nThe previously delivered film is still available in its original message.\nYou can continue editing the current draft.",
+      "message_id": "9b631086-66e2-4163-8396-381b66c144a0",
+      "opening": "e101e4db-f0bc-4965-bffa-7094c4be3ddb",
+      "state": "failed",
+      "history_equal": true
+    }
+  }
+}
