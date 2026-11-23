@@ -950,6 +950,17 @@ async def edit_clip(
             if related.clip_ids != {target.clip_id}:
                 raise ValueError("Removing this clip would also remove linked clips or derived captions.")
             ops = expand_revision_op(RemoveClipOp(op="remove_clip", clip_id=target.clip_id), content, facts={})
+            remaining_end = max(
+                (c.range.end for _, c in entries if c.clip_id != target.clip_id),
+                default=0,
+            )
+            for scene in content.scenes:
+                if scene.range.start < remaining_end < scene.range.end:
+                    ops.append(UpdateScene(
+                        op="update_scene",
+                        scene_id=scene.scene_id,
+                        range=TimeRange(start=scene.range.start, end=remaining_end),
+                    ))
             extra["removed_clip_id"] = target.clip_id
         elif name == "split_clip":
             cut = target.range.start + _ticks(args.time, rate)
