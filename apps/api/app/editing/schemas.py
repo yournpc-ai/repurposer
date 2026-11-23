@@ -661,6 +661,9 @@ class ProductShowcaseProps(BaseModel):
         if isinstance(data, dict):
             out = dict(data)
             out.setdefault("accent_color", "#0D9488")
+            raw_callout = out.get("callout")
+            if raw_callout in ("", "null", "none", "None", {}):
+                out["callout"] = None
             return out
         return data
 
@@ -687,6 +690,9 @@ class StatementHookProps(BaseModel):
         if isinstance(data, dict):
             out = dict(data)
             out.setdefault("accent_color", "#0D9488")
+            for k in ("eyebrow", "highlight_phrase", "subheadline"):
+                if out.get(k) in ("", "null", "none", "None"):
+                    out[k] = None
             return out
         return data
 
@@ -723,6 +729,9 @@ class MetricGridProps(BaseModel):
         if isinstance(data, dict):
             out = dict(data)
             out.setdefault("accent_color", "#0D9488")
+            for k in ("eyebrow", "title"):
+                if out.get(k) in ("", "null", "none", "None"):
+                    out[k] = None
             return out
         return data
 
