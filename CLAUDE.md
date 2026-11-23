@@ -20,7 +20,7 @@
 **固定入口只有两层**：先读本文与 `docs/PROGRESS.md` §0，再读当前任务的状态/合同。随后只读下表命中的具体章节；完整导航与文档职责见 `docs/README.md`。不创建历史文档库；排障需要证据时查当前代码、测试与运行数据。
 
 - **当前状态 / 排期**：`docs/PROGRESS.md` §0 是唯一事实源；局部任务可以维护实施状态，但不得复制全局排期。
-- **Video Project**：项目、作品、版本与唯一内容写口读 `docs/VIDEO_PROJECT.md` §0、§8 与命中章节，目录契约见 §12。当前主线施工合同读 `docs/tasks/oxvalue-mg-sound.md`（I8 基础剪辑已阶段封板，见 `docs/tasks/i8.md`）。当前优先级见 PROGRESS §0。
+- **Video Project**：项目、作品、版本与唯一内容写口读 `docs/VIDEO_PROJECT.md` §0、§8 与命中章节，目录契约见 §12。当前主线施工合同读 `docs/tasks/batch2-multiscene-skill.md`（I8 基础剪辑已阶段封板，见 `docs/tasks/i8.md`）。当前优先级见 PROGRESS §0。
 - **模块 / 表 / 队列 / 代码地图**：`docs/MODULE_ARCHITECTURE.md` §4（表归属）、§5（跨模块规则）、§7（代码地图与队列）；新表、新模块、新认领源必须登记。
 - **Studio UI**：`docs/UI_GUIDELINES.md` 的相关组件/布局章节；只有改 chat 行为时才同时读 CHAT_ARCHITECTURE。
 - **Chat、多轮与用户约束**：读 `docs/CHAT_ARCHITECTURE.md` 和 `docs/tasks/new-agent.md`。
@@ -58,7 +58,7 @@ Use lucide-react for application icons. Third-party logos and the existing brand
 
 Repurposer 是通过自然语言操作持久视频工程的专业 AI 剪辑师。用户提供目标与素材，Agent 定位对象、执行编辑、观察并续改。保留 MentionEditor、附件、显式 Skill、原问题、费用授权、Stop 和按版本回放。仅在必要决定阻塞时提问。分镜按需展示，历史交付始终钉住原 Output。通用 UI 用 Clean，布局用 Tailwind，过渡用 Motion。
 
-正式产品能力按 Chat-Origin End-to-End 验收：同一真实 Chat 从 Provider 工具调用追到不可变版本、实际播放或交付，再验证续改与恢复。隔离测试只证明测到的边界。施工先按 [Agent 总合同](docs/tasks/new-agent.md) 扩展现有 ToolLoop。视觉来源与原生 `MotionBlockObject` 边界见 [作品模型](docs/VIDEO_PROJECT.md)，共享纯 TS 音效引擎与声音合同见 [声音合同](docs/MUSIC_ARCHITECTURE.md)，当前主线验收见 [OxValue MG + Sound 合同](docs/tasks/oxvalue-mg-sound.md)。禁止恢复 Plan、DAG 或 Graph 创作协议，也不为动效和音效另建执行、播放或交付链。
+正式产品能力按 Chat-Origin End-to-End 验收：同一真实 Chat 从 Provider 工具调用追到不可变版本、实际播放或交付，再验证续改与恢复。隔离测试只证明测到的边界。施工先按 [Agent 总合同](docs/tasks/new-agent.md) 扩展现有 ToolLoop。视觉来源与原生 `MotionBlockObject` 边界见 [作品模型](docs/VIDEO_PROJECT.md)，共享纯 TS 音效引擎与声音合同见 [声音合同](docs/MUSIC_ARCHITECTURE.md)，当前主线验收见 [Batch 2 多幕与 Skill 合同](docs/tasks/batch2-multiscene-skill.md)。禁止恢复 Plan、DAG 或 Graph 创作协议，也不为动效和音效另建执行、播放或交付链。
 
 ## Internationalization (i18n)
 

@@ -2,7 +2,7 @@
 
 > Agent 的模型可见工具、执行合同与验收状态见 [Agent Editor 主合同](tasks/new-agent.md)。本页记录作品结构、渲染边界及后续专业编辑目标。
 
-> 本页负责作品模型、可编辑边界与 video-spec。网页宣传片和 MG 是其中的具体消费者。ASR 选段、固定视口、字幕和配音沿用 Composition 对象，完整 Scrub Inspector 待验。当前主线施工与验收见 [OxValue MG + Sound 合同](tasks/oxvalue-mg-sound.md)（基础剪辑已封板，见 [I8](tasks/i8.md)）。旧 Film/Clip 内容沿用既定数据边界，定向清理须有明确授权，schema 变更走 Alembic。
+> 本页负责作品模型、可编辑边界与 video-spec。网页宣传片和 MG 是其中的具体消费者。ASR 选段、固定视口、字幕和配音沿用 Composition 对象，完整 Scrub Inspector 待验。当前主线施工与验收见 [Batch 2 多幕与 Skill 合同](tasks/batch2-multiscene-skill.md)（基础剪辑已封板，见 [I8](tasks/i8.md)）。旧 Film/Clip 内容沿用既定数据边界，定向清理须有明确授权，schema 变更走 Alembic。
 
 ## 0. 核心决策
 

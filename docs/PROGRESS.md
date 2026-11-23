@@ -8,17 +8,19 @@ I6 有条件收官。通用文字动画与显式 Skill 的 OxValue 宣传片均�
 
 ## 0. 当前里程碑与施工序列
 
-**当前唯一产品主线：OxValue 首个专业 MG 音画镜头纵向集成（Batch 1）。** 已拍板采用 **Path β 原生 `MotionBlockObject`**（共享 `@repurposer/video-spec` + `@repurposer/video-remotion` 透明叠层、Web 与服务端同构）+ **共享纯 TS 分层音效引擎 `packages/sound-engine`**（0 新 SQL 表、前后端同构、统一二级分类元数据）+ 现役 MiniMax 模型与 `speech-2.6-hd` 多音色/曲库/结构化声学特征，以真实网站 `https://agent.oxvalue.ai/` 的 8–10 秒专业 MG 镜头完成“创作 → 双维度单实例修订 → 预览试听 → 授权导出与恢复”五面验收及真人盲评。[当前施工合同](tasks/oxvalue-mg-sound.md)
+**当前唯一产品主线：Batch 2 · 多幕商业 MG 宣传片与 Skill + Slot 同款复刻（ACTIVE）。** 在 Batch 1 纵向闭环（`5c234fa2`）与 Renderer 音频时钟候选（`17b0e3dc`）合入 `main@0171cfda` 后，分两道内部检查点推进：**Checkpoint 2A**（`resources[0..N]` 统一 staging + 3 个新 Motion Blocks `statement_hook`/`metric_grid`/`closing_cta` + `product_showcase.callout`/`kinetic_title.pill_caption` + `crossfade` 扩展 + BGM `audio.gain` 淡入淡出/闪避 + `swoosh_cut` → 35–40s OxValue 英文投资人版商业成片交付真人盲评）与 **Checkpoint 2B**（0 新表复用 `UserSkill`/`SkillVersion` 打通 `save_composition_as_skill` → `/` SkillPicker + `instantiate_skill_blueprint` 的 OxValue 跨角度/跨语言复刻与续改），并预留极薄隔离 Gemini 2.5 Pro 同题对照适配器（无 Key 不阻塞主线）。[Batch 2 施工与验收合同](tasks/batch2-multiscene-skill.md)
 
-**I8 阶段性封板，Renderer 候选独立收口。** I8 基础剪辑闭环、P0 部分写入结算、最近对话恢复、P1 轻量 Finish 与双图澄清已验证完毕；停止零散 Prompt 与片尾边缘案例调试，明确要求保留末帧的偏离案例（Scenario C）归档为未来回归样本。本地冻结的 Renderer 音频时钟候选（macOS + ARM64 CI 通过，生产 x86_64 仍运行旧镜像）由独立基础设施轨道补齐 `verifyAudioWindow` 异常注错验证与生产切换门禁，不占用 MG + Sound 主线。独立渲染核心 C 保留研究结论，暂不替换生产 Renderer。
+**前置封板基线。** Batch 1（9s OxValue 单镜创作 + 双维度零漂移修订 + 授权交付与 Chrome 恢复 + Linux Docker 构建）已完成并合入 `main`；I8 基础剪辑已阶段封板；Renderer 音频时钟候选已补完 `verifyAudioWindow` 基线探测失败闭修复与注错单测并合入 `main`（生产 Linux x86_64 验收、旧缓存排空与切换仍按独立基础设施门禁推进）；独立渲染核心 C 继续冻结。
 
 ### 0.1 里程碑状态
 
-- **Batch 1 · OxValue 首个专业 MG 音画镜头（ACTIVE）。** 启动条件已拍板，主集成在基于 `main@a37afc08` 的独立 `git worktree`/分支开工，严格不触碰冻结 Renderer 候选与 Web Settings UI 改动。覆盖 `packages/sound-engine`、`MotionBlockObject`、统一二级分类元数据、`capture_web` 真实闭环、曲库与 MiniMax 多音色开放、以及结构化声学事实回执。[施工与验收合同](tasks/oxvalue-mg-sound.md)
+- **Batch 2 · 多幕商业 MG 宣传片与 Skill + Slot 同款复刻（ACTIVE）。** 基于 `main` 拉取独立 worktree `feat/batch2-multiscene-skill` 施工，0 新 SQL 表，严格先过 **Checkpoint 2A** 真人盲评再进 **Checkpoint 2B**。[施工与验收合同](tasks/batch2-multiscene-skill.md)
+
+- **Batch 1 · OxValue 首个专业 MG 音画镜头（DONE · 已合入 `main@0171cfda`）。** 交付 `packages/sound-engine`（5 配方 `-2.0 dBFS` 归一化）、Path β 原生 `MotionBlockObject`（`kinetic_title` / `product_showcase`）、统一二级分类元数据、`generate_sfx`/`edit_audio_clip`/`insert_motion_block`/`update_motion_block`、曲库与 11 个活体验证 MiniMax 音色及 3-Round 真实 Chat 五面验收。
 
 - **I8 基础专业编辑切片已阶段封板。** 已有视频的固定图片插入、同对象续改、局部与整片回放、无预览诚实收尾、P0 部分写入结算、双图 QuestionDock 指定续行、授权交付与强杀恢复均有真实记录。跨素材开放方差与 Scenario C 留作后续回归样本。[历史范围与证据](tasks/i8.md) · [P1 实测](tasks/agent-editor-evidence/iteration-8/final-acceptance/README.md#p1-普通编辑与结束--2026-11-23) · [P0 验收](tasks/agent-editor-evidence/iteration-8/final-acceptance/p0-partial-settlement.md)
 
-- **Renderer 音频时钟候选（独立基础设施门禁）。** Remotion 4.0.484 候选在 macOS 和 Linux ARM64 完成 24/25/30 fps 样本验证（消除 +2,048 采样 AAC 延迟），尚待独立补齐基线 `verifyAudioWindow` 异常失败闭验证、Linux x86_64 目标架构验收、旧缓存排空及生产切换。[采样与容器证据](experiments/renderer-aac/backport-4.0.484/REPORT.md) · [ARM64 日志](tasks/agent-editor-evidence/iteration-8/final-acceptance/arm64.txt) · [生产只读回执](tasks/agent-editor-evidence/iteration-8/final-acceptance/production.txt)
+- **Renderer 音频时钟候选（已合入 `main@17b0e3dc`，待生产发布门禁）。** Remotion 4.0.484 候选已在 macOS/Linux ARM64 验证并补齐 `verifyAudioWindow` 基线探测失败闭与注错测试（`audio.test.ts`），生产切换尚待 Linux x86_64 目标架构验收与旧缓存排空。[采样与容器证据](experiments/renderer-aac/backport-4.0.484/REPORT.md) · [ARM64 日志](tasks/agent-editor-evidence/iteration-8/final-acceptance/arm64.txt) · [生产只读回执](tasks/agent-editor-evidence/iteration-8/final-acceptance/production.txt)
 
 - **冻结研究边界（不进入 Batch 1 主线）。** 自有薄渲染核心 C 的同场景跨视频 CSS 合成与受控 WAAPI 240 帧确定性研究已收官，暂不替换生产 Renderer；`remotion-project` 任意 TSX 烘焙因现役沙箱仅支持 macOS Seatbelt，推迟至 Linux 生产隔离方案建成后再开放。原创 Whoosh/Impact/Click 声学研究已收官，产品正式升级为洁净室共享纯 TS 分层包 `packages/sound-engine`。[视觉合同](VIDEO_PROJECT.md) · [声音合同](MUSIC_ARCHITECTURE.md) · [渲染合同](RENDERING.md)
 
@@ -38,12 +40,12 @@ I6 有条件收官。通用文字动画与显式 Skill 的 OxValue 宣传片均�
 
 ### 0.2 Active batch 与开放事项
 
-“当前”表示本轮优先；“开放”表示仍有未实现、未验证或阻塞事项，但不等于已授权立即施工。Agent Editor 的当前优先级以本节和 [OxValue MG + Sound 合同](tasks/oxvalue-mg-sound.md) 为准；唯一执行架构见 [主合同](tasks/new-agent.md)。其余项目按各自合同登记，旧官网批次与历史 Run 展示不构成本主线的开工条件。完成项从本表移除；长期约束归母文档，未验收项不得写成完成。
+“当前”表示本轮优先；“开放”表示仍有未实现、未验证或阻塞事项，但不等于已授权立即施工。Agent Editor 的当前优先级以本节和 [Batch 2 合同](tasks/batch2-multiscene-skill.md) 为准；唯一执行架构见 [主合同](tasks/new-agent.md)。其余项目按各自合同登记，旧官网批次与历史 Run 展示不构成本主线的开工条件。完成项从本表移除；长期约束归母文档，未验收项不得写成完成。
 
 | 状态 | 工作 | 当前事实与下一步 | 状态 / 合同 |
 |---|---|---|---|
-| **当前（主线）** | **OxValue 首个专业 MG 音画镜头（Batch 1）** | 独立 `git worktree`/分支开工：共享纯 TS 分层音效包 `packages/sound-engine` + `generate_sfx` / `edit_audio_clip` / 多 `effect` 轨避撞 / 曲库投影 / MiniMax 多音色；Path β 原生 `MotionBlockObject` + `kinetic_title` / `product_showcase` + `insert_motion_block` / `update_motion_block`；统一二级分类 Catalog 元数据；`capture_web` 真实 OxValue 闭环与结构化声学回执。以真实 3-Round Chat 五面证据与真人盲评签收。 | [施工与验收合同](tasks/oxvalue-mg-sound.md) |
-| **当前（独立门禁）** | **Renderer 音频时钟候选发布** | 独立修复冻结候选 `verifyAudioWindow` 基线探测异常捕获分支并做注错测试，随后走 Linux x86_64 验证、缓存排空与生产切换。不与 Batch 1 混入同一提交。 | [渲染合同](RENDERING.md) / [I8 候选证据](tasks/agent-editor-evidence/iteration-8/final-acceptance/README.md) |
+| **当前（主线）** | **多幕商业 MG 宣传片与 Skill + Slot 复刻（Batch 2）** | Checkpoint 2A：`resources[0..N]` staging + `statement_hook`/`metric_grid`/`closing_cta` + `product_showcase.callout`/`kinetic_title.pill_caption` + `MotionBlockObject` `crossfade` + BGM `audio.gain` 淡入淡出/闪避 + `swoosh_cut` → 35–40s OxValue 商业成片盲评；Checkpoint 2B：0 新表 `save_composition_as_skill` + `instantiate_skill_blueprint` 跨角度/跨语言复刻。 | [施工与验收合同](tasks/batch2-multiscene-skill.md) |
+| **当前（独立门禁）** | **Renderer 音频时钟候选生产切换** | `verifyAudioWindow` 基线探测失败闭与注错单测已合入 `main@17b0e3dc`；待执行 Linux x86_64 目标架构验收、旧缓存排空与生产切换。 | [渲染合同](RENDERING.md) / [I8 候选证据](tasks/agent-editor-evidence/iteration-8/final-acceptance/README.md) |
 | 历史验收 | **Agent Editor · 首错归因与最小闭环** | 六个独立素材原始首次仍为 3 完整、2 部分、1 失败，不回填分母。单人是最终视觉陈述过强，字幕是审阅已指出硬要求未满足后仍交付且漏报，开放演讲首错是已有作品上误用 `create_video`。本轮仅调整现有停止/未满足项 Prompt，并在固定源预览补源音频事实。原话复测中字幕本轮目标完整，开放 17 次请求交付但仍有留边误述，单人仍有手部误述；两个新增独立素材主任务达成。双人视觉编辑与 API 续改保持；接缝、片尾卡、媒体生成三项回归因 Worker fencing/固定音频恢复失控未通过。当前 API core 509、Web 44 文件/411、Renderer 28 通过，三份新 Output 实播/硬刷新、Stop 和 Studio 续发已核验。开放审美、主观音频、自然语言事实与 Worker 故障仍未关闭。 | [首错、五面、费用与开放项](tasks/agent-editor-evidence/iteration-5/closure/cross-material/first-error-repair/README.md) |
 | 历史项目 | **Chat-only 视频创作主链** | 已验证 URL 首稿/确认/钉版交付、真实上传选段/字幕/配音、重复确认幂等，以及缓存重传后同片刷新播放。保存版局部修订已改为直接 Op 批与当前目标投影，一次相关修改原子落一个版本；两次真实模型直接 Op 调用（单 Op 与双 Op 批）均通过 schema，但通用成功率未测量。剩余完整 live 矩阵、主观视听、样片、Remotion 许可、部署与公开发布归 P6+P7，精确编辑和 Output region 目标解算归 P10 | [统一视频合同](tasks/skill-package-promo-video.md) |
 | 历史验收 | **官网品牌宣传片批 1A：装配修复、集中澄清、品牌档案与创作状态继承** | Readiness 三阶段、真实 PNG analyze_brand、扩展 Brief/CreativeState、集中问题组前后端和版本/Run 继承已落码；fake provider golden wire 通过，`test/core` 437 项与 Web 410 项通过，TypeScript 通过。真实 LegitEvi BrandProfile 含实测 `#DC0000`、“接近 Inter”和原始宣言；数字 option_id 整组提交已验证标签回填、六项 user-stated、preview/正式 digest 一致、过期/重复 409 与刷新恢复，当时 readiness=design_video（现 create_video）。旧批 1A 验收止于集中作答与本批状态恢复；当前首稿与后续编辑由 Agent Editor v1 主线统一，真实网站行为与能力限制见续批证据。开发库已确认 h8e5a2c4d7f1，生产 migration/恢复和本批真实浏览器问题组仍未验证 | [当期合同与验收记录](tasks/website-promo-evidence-brief-workflow.md) |

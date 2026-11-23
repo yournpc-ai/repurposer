@@ -4,7 +4,7 @@
 
 ## 现役来源与操作
 
-后台已实现下列来源。Batch 1 主线正在补齐普通编辑/创作轮对曲库候选的投影、MiniMax `speech-2.6-hd` 多音色扩展、多 `effect` 轨避撞、库曲正确映射 `music` 轨，以及 `edit_audio_clip(clip_id, gain_db?, source_id?)` 单实例修订能力。[工具注册](../apps/api/app/chat/turn_tools.py) · [每轮实际投影](../apps/api/app/chat/prompts.py) · [Batch 1 合同](tasks/oxvalue-mg-sound.md)
+后台已实现下列来源。普通编辑/创作轮已开放曲库候选投影、11 个活体验证 MiniMax `speech-2.6-hd` 音色、多 `effect` 轨避撞、库曲映射 `music` 轨与 `edit_audio_clip(clip_id, gain_db?, source_id?)` 单实例修订；Batch 2 在此基础上补充 `edit_audio_clip` 的 `audio.gain` 淡入淡出/分段闪避与 `swoosh_cut` 过渡配方。[工具注册](../apps/api/app/chat/turn_tools.py) · [每轮实际投影](../apps/api/app/chat/prompts.py) · [Batch 2 合同](tasks/batch2-multiscene-skill.md)
 
 | 内容 | 如何取得来源 | 如何进入作品 |
 |---|---|---|
