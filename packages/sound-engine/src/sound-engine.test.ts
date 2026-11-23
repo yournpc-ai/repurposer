@@ -8,10 +8,10 @@ import {
 } from "./index.js";
 
 describe("@repurposer/sound-engine core contract", () => {
-  it("renders all 5 recipes deterministically with zero clipping and valid acoustic cues", () => {
+  it("renders all 6 recipes deterministically with zero clipping and valid acoustic cues", () => {
     assert.deepEqual(
       SOUND_RECIPES.map((r) => r.id),
-      ["whoosh", "impact", "click", "riser", "stinger"],
+      ["whoosh", "impact", "click", "riser", "stinger", "swoosh_cut"],
     );
 
     for (const recipe of SOUND_RECIPES) {

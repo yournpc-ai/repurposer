@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     )
 
     # Text/code LLM provider. Media generation stays with its own providers.
-    llm_provider: Literal["minimax", "deepseek"] = "minimax"
+    llm_provider: Literal["minimax", "deepseek", "gemini"] = "minimax"
 
     # Minimax
     minimax_api_key: str = ""
@@ -48,6 +48,12 @@ class Settings(BaseSettings):
     # DeepSeek text/code generation. Tool loops are non-thinking until the
     # harness can replay DeepSeek's required historical reasoning_content.
     deepseek_api_key: str = ""
+
+    # Opt-in Gemini native audio-video multimodal adapter for controlled
+    # side-by-side comparison. Empty key never affects the default provider.
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-2.5-pro"
+    gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai"
     deepseek_model: str = "deepseek-flash"
     deepseek_base_url: str = "https://api.deepseek.com"
     deepseek_reasoning_effort: Literal["low", "high", "max"] = "high"

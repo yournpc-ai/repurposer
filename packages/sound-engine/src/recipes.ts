@@ -410,10 +410,87 @@ const STINGER_RECIPE: InternalSoundRecipe = {
   },
 };
 
+const SWOOSH_CUT_RECIPE: InternalSoundRecipe = {
+  catalog: {
+    id: "swoosh_cut",
+    version: 1,
+    domain: "video",
+    category: "transition",
+    name: "Swoosh Cut",
+    desc: "Compact symmetrical bidirectional air-and-body sweep designed specifically for crossfade scene cuts.",
+    use_for: ["scene crossfade cut", "act-to-act handoff", "product view switch"],
+    avoid: ["static holds", "consecutive cuts less than 2s apart"],
+    suggested_duration_ms: [240, 420],
+    sync_cue: "energy_peak",
+    mix_hint: "Center peak_offset_ms right on the crossfade cut frame; keep gain -14 to -11 dB under narration.",
+    params: {
+      length: param("ms", 320, 200, 520, "Total symmetrical cut-sweep duration."),
+      pitch: param("Hz", 520, 260, 920, "Center filter resonance of the cut body."),
+      tone: param("%", 48, 12, 88, "Upper air sheen; reduce under sibilant speech."),
+      punch: param("%", 56, 15, 92, "Tightness of the center crossing crest."),
+      space: param("%", 52, 0, 90, "Stereo cross-panning width and subtle room tail."),
+    },
+  },
+  buildGraph(p) {
+    const length = p.length;
+    const pitch = p.pitch;
+    const tone = p.tone / 100;
+    const punch = p.punch / 100;
+    const space = p.space / 100;
+    const bellPower = 2.0 + punch * 1.4;
+    const panSpan = 0.68 * space;
+
+    return {
+      durationMs: length,
+      layers: [
+        // Symmetrical fast filtered air body sweeping upward then releasing cleanly
+        {
+          kind: "noise",
+          gain: 0.28,
+          envelope: { attackMs: 8, bellPower },
+          filter: {
+            kind: "bandpass",
+            freqStart: pitch * 0.72,
+            freqEnd: pitch * (1.55 + 0.45 * tone),
+            q: 2.1,
+          },
+          pan: { start: -panSpan, end: panSpan },
+        },
+        // Subtle crisp center shimmer for editorial precision
+        {
+          kind: "noise",
+          gain: 0.12 + 0.14 * tone,
+          envelope: { attackMs: 6, bellPower: bellPower + 0.9 },
+          filter: {
+            kind: "bandpass",
+            freqStart: 1200 + 1600 * tone,
+            freqEnd: 1800 + 2600 * tone,
+            q: 2.4,
+          },
+          pan: { start: panSpan * 0.5, end: -panSpan * 0.5 },
+        },
+        // Soft warm tonal breath anchoring the cut midpoint
+        {
+          kind: "oscillator",
+          waveform: "sine",
+          gain: 0.085 * (0.65 + 0.5 * punch),
+          freqStart: pitch * 0.42,
+          freqEnd: pitch * 0.78,
+          envelope: { attackMs: 10, bellPower: bellPower + 0.3 },
+          pan: { start: -panSpan * 0.4, end: panSpan * 0.4 },
+        },
+      ],
+      reflections: { amount: 0.14 * space, taps: STUDIO_REFLECTIONS },
+      tailFadeMs: 8,
+    };
+  },
+};
+
 export const INTERNAL_SOUND_RECIPES: Readonly<Record<string, InternalSoundRecipe>> = {
   whoosh: WHOOSH_RECIPE,
   impact: IMPACT_RECIPE,
   click: CLICK_RECIPE,
   riser: RISER_RECIPE,
   stinger: STINGER_RECIPE,
+  swoosh_cut: SWOOSH_CUT_RECIPE,
 };

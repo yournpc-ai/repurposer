@@ -555,7 +555,7 @@ def motion_block_ops(
             width=content.settings.width,
             height=content.settings.height,
         ),
-        fit="cover" if block_id == "product_showcase" else "contain",
+        fit="cover" if block_id != "kinetic_title" else "contain",
     )
     ops.append(
         AddClip(
@@ -572,6 +572,114 @@ def motion_block_ops(
         )
     )
     return ops
+
+
+def build_audio_gain_animation(
+    *,
+    object_id: str,
+    clip_start_ticks: int,
+    clip_end_ticks: int,
+    timebase: int,
+    fps_num: int,
+    fps_den: int,
+    fade_in_seconds: float | None = None,
+    fade_out_seconds: float | None = None,
+    duck_windows: list[dict[str, float]] | None = None,
+) -> dict[str, Any] | None:
+    """Build one frame-safe piecewise linear `audio.gain` Animation dict.
+
+    Evaluates fade-in, fade-out, and optional timeline-second ducking windows
+    at deduplicated integer-frame breakpoints so keyframes never collapse on
+    quantization and always stay inside [0.0, 1.0].
+    """
+    from app.editing.timing import frames_to_ticks, ticks_to_frames
+
+    dur_ticks = clip_end_ticks - clip_start_ticks
+    if dur_ticks <= 0:
+        return None
+    fade_in_ticks = seconds_to_ticks(fade_in_seconds, timebase) if fade_in_seconds and fade_in_seconds > 0 else 0
+    fade_out_ticks = seconds_to_ticks(fade_out_seconds, timebase) if fade_out_seconds and fade_out_seconds > 0 else 0
+    fade_in_ticks = min(fade_in_ticks, dur_ticks)
+    fade_out_ticks = min(fade_out_ticks, dur_ticks)
+
+    ducks: list[tuple[int, int, int, float]] = []
+    for win in duck_windows or []:
+        s_abs = seconds_to_ticks(float(win["start_seconds"]), timebase)
+        e_abs = seconds_to_ticks(float(win["end_seconds"]), timebase)
+        s_loc = max(0, min(dur_ticks, s_abs - clip_start_ticks))
+        e_loc = max(0, min(dur_ticks, e_abs - clip_start_ticks))
+        if e_loc <= s_loc:
+            continue
+        ramp = max(1, seconds_to_ticks(float(win.get("ramp_seconds", 0.25)), timebase))
+        mult = max(0.0, min(1.0, 10.0 ** (float(win.get("duck_db", -6.0)) / 20.0)))
+        ducks.append((s_loc, e_loc, ramp, mult))
+
+    if fade_in_ticks == 0 and fade_out_ticks == 0 and not ducks:
+        return None
+
+    raw_points: set[int] = {0, dur_ticks}
+    if fade_in_ticks > 0:
+        raw_points.add(fade_in_ticks)
+    if fade_out_ticks > 0:
+        raw_points.add(max(0, dur_ticks - fade_out_ticks))
+    for s_loc, e_loc, ramp, _ in ducks:
+        raw_points.update({
+            max(0, s_loc - ramp),
+            s_loc,
+            e_loc,
+            min(dur_ticks, e_loc + ramp),
+        })
+
+    def eval_envelope(t: int) -> float:
+        g = 1.0
+        if fade_in_ticks > 0 and t < fade_in_ticks:
+            g *= max(0.0, min(1.0, t / fade_in_ticks))
+        if fade_out_ticks > 0 and t > dur_ticks - fade_out_ticks:
+            rem = dur_ticks - t
+            g *= max(0.0, min(1.0, rem / fade_out_ticks))
+        if ducks:
+            duck_mult = 1.0
+            for s_loc, e_loc, ramp, mult in ducks:
+                if s_loc <= t <= e_loc:
+                    local = mult
+                elif s_loc - ramp < t < s_loc:
+                    u = (t - (s_loc - ramp)) / ramp
+                    local = 1.0 + (mult - 1.0) * u
+                elif e_loc < t < e_loc + ramp:
+                    u = (t - e_loc) / ramp
+                    local = mult + (1.0 - mult) * u
+                else:
+                    local = 1.0
+                if local < duck_mult:
+                    duck_mult = local
+            g *= duck_mult
+        return round(max(0.0, min(1.0, g)), 4)
+
+    # Snap breakpoints to unique quantized frames inside [0, dur_ticks]
+    by_frame: dict[int, int] = {}
+    max_frame = ticks_to_frames(dur_ticks, timebase, fps_num, fps_den)
+    for t in sorted(raw_points):
+        f = max(0, min(max_frame, ticks_to_frames(t, timebase, fps_num, fps_den)))
+        tick = 0 if f == 0 else (dur_ticks if f == max_frame else min(dur_ticks, frames_to_ticks(f, timebase, fps_num, fps_den)))
+        by_frame[f] = tick
+
+    keyframes = [
+        {
+            "at": by_frame[f],
+            "value": eval_envelope(by_frame[f]),
+            "easing": {"kind": "linear", "params": None},
+        }
+        for f in sorted(by_frame)
+    ]
+    if len(keyframes) < 2:
+        return None
+    return {
+        "animation_id": f"anim_gain_{object_id[:48]}",
+        "target_object_id": object_id,
+        "text_part": None,
+        "property": "audio.gain",
+        "keyframes": keyframes,
+    }
 
 
 def fixed_audio_ops(content, *, source_id, source_digest, track_id, role, clip_id, object_id,

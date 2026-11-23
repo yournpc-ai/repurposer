@@ -1,5 +1,5 @@
-"""Centered dissolves over adjacent opaque media, with real source handles."""
-from app.editing.schemas import ImageObject, Transform, VideoObject, WebObject
+"""Centered dissolves over adjacent opaque media or opaque motion blocks, with real source handles."""
+from app.editing.schemas import ImageObject, MotionBlockObject, Transform, VideoObject, WebObject
 from app.editing.timing import SOURCE_TIMEBASE, ticks_to_frames
 
 
@@ -30,15 +30,20 @@ def transition_windows(content, snapshots):
         used_pairs.add(pair)
         for clip, before, after in ((a, 0, end-cut), (b, cut-start, 0)):
             obj = clip.object
-            if not isinstance(obj, (VideoObject, ImageObject, WebObject)):
-                raise ValueError("crossfade currently consumes fixed image/web/video media")
+            if isinstance(obj, MotionBlockObject):
+                if not obj.props.get("show_backdrop", False):
+                    raise ValueError(
+                        "crossfade on motion_block requires an opaque full-canvas backdrop (show_backdrop=True)"
+                    )
+            elif not isinstance(obj, (VideoObject, ImageObject, WebObject)):
+                raise ValueError("crossfade currently consumes fixed image/web/video media or opaque motion blocks")
             box = obj.layout
             if (box.x, box.y, box.width, box.height) != (0, 0, settings.width, settings.height) or obj.fit != "cover":
-                raise ValueError("first crossfade consumer needs full-canvas opaque media with cover fit")
+                raise ValueError("crossfade requires full-canvas opaque media with cover fit")
             if obj.opacity != 1 or obj.transform != Transform() or any(
                 animation.property != "audio.gain" for animation in clip.animations
             ):
-                raise ValueError("first crossfade consumer needs opaque full-canvas media without external visual transforms or opacity animation")
+                raise ValueError("crossfade requires opaque full-canvas media without external visual transforms or opacity animation")
             if clip.source and clip.source.source_range:
                 src = clip.source.source_range
                 total = snapshots[clip.source.snapshot_id].get("duration_ticks")

@@ -13,8 +13,8 @@ from app.agents.tool_loop import ChatTool, ToolObservation, ToolPresentation
 from app.agents.tool_progress import current_call_id, current_group_id
 from app.chat.editor_create import CreateVideoArgs
 from app.editing.catalog import MotionBlockId, SoundRecipeId, VoiceId
-from app.editing.edits import BindSource, SplitClip, TemporalEdit, UpdateClip, UpdateScene
-from app.editing.schemas import ClipSource, EditTarget, MotionBlockObject, TimeRange
+from app.editing.edits import BindSource, SetTransition, SplitClip, TemporalEdit, UpdateClip, UpdateScene
+from app.editing.schemas import Animation, ClipSource, EditTarget, MotionBlockObject, TimeRange, Transition
 from app.editing.store import (
     RequestMismatch,
     StaleBase,
@@ -72,7 +72,7 @@ class GenerateSfxArgs(BaseModel):
     model_config = ConfigDict(extra="forbid")
     recipe_id: SoundRecipeId | None = Field(
         default=None,
-        description="Sound recipe id (whoosh, impact, click, riser, stinger). Omit when revising base_clip_id with the same recipe.",
+        description="Sound recipe id (whoosh, impact, click, riser, stinger, swoosh_cut). Omit when revising base_clip_id with the same recipe.",
     )
     params: dict[str, float | int] | None = Field(
         default=None,
@@ -85,34 +85,79 @@ class GenerateSfxArgs(BaseModel):
     seed: int | None = Field(default=None, ge=0, le=0xFFFFFFFF)
 
 
+class AudioDuckWindowArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    start_seconds: float = Field(ge=0, allow_inf_nan=False, description="Duck start in composition timeline seconds.")
+    end_seconds: float = Field(gt=0, allow_inf_nan=False, description="Duck end in composition timeline seconds.")
+    duck_db: float = Field(default=-6.0, ge=-24.0, le=0.0, allow_inf_nan=False, description="Relative attenuation in dB during this window.")
+    ramp_seconds: float = Field(default=0.25, ge=0.05, le=1.5, allow_inf_nan=False, description="Smooth ramp-in/out duration.")
+
+    @model_validator(mode="after")
+    def check_window(self):
+        if self.end_seconds <= self.start_seconds:
+            raise ValueError("duck window end_seconds must exceed start_seconds.")
+        return self
+
+
 class EditAudioClipArgs(BaseModel):
     model_config = ConfigDict(extra="forbid")
     clip_id: str = Field(min_length=1, max_length=64)
     gain_db: float | None = Field(
         default=None, ge=-60, le=12, allow_inf_nan=False,
-        description="Updated clip gain in decibels for this single clip.",
+        description="Updated base clip gain in decibels for this single clip.",
     )
     source_id: UUID | None = Field(
         default=None,
         description="Replacement fixed audio snapshot ID for this clip only; preserves object_id and other instances.",
     )
+    fade_in_seconds: float | None = Field(
+        default=None, ge=0.0, le=10.0, allow_inf_nan=False,
+        description="Smooth audio fade-in duration from clip start (0 removes fade-in).",
+    )
+    fade_out_seconds: float | None = Field(
+        default=None, ge=0.0, le=10.0, allow_inf_nan=False,
+        description="Smooth audio fade-out duration into clip end (0 removes fade-out).",
+    )
+    duck_windows: list[AudioDuckWindowArgs] | None = Field(
+        default=None, max_length=16,
+        description="Optional timeline-second attenuation windows (e.g. duck BGM cleanly under voice segments).",
+    )
 
     @model_validator(mode="after")
     def check_change(self):
-        if self.gain_db is None and self.source_id is None:
-            raise ValueError("Provide gain_db or source_id to edit this audio clip.")
+        if (
+            self.gain_db is None
+            and self.source_id is None
+            and self.fade_in_seconds is None
+            and self.fade_out_seconds is None
+            and self.duck_windows is None
+        ):
+            raise ValueError("Provide gain_db, source_id, fade_in_seconds, fade_out_seconds, or duck_windows.")
         return self
+
+
+class SetTransitionArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    from_clip_id: str = Field(min_length=1, max_length=64, description="Outgoing clip_id on the visual track.")
+    to_clip_id: str = Field(min_length=1, max_length=64, description="Adjacent incoming clip_id on the same visual track.")
+    kind: Literal["crossfade"] = "crossfade"
+    duration_seconds: float = Field(
+        default=0.4, ge=0.1, le=2.0, allow_inf_nan=False,
+        description="Centered crossfade overlap duration in seconds (typically 0.35-0.5s).",
+    )
 
 
 class InsertMotionBlockArgs(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    block_id: MotionBlockId = Field(description="Native motion block id: kinetic_title or product_showcase.")
+    block_id: MotionBlockId = Field(
+        description="Native motion block id: statement_hook, product_showcase, metric_grid, closing_cta, or kinetic_title.",
+    )
     start_seconds: float = Field(ge=0, allow_inf_nan=False, description="Inclusive start time on timeline.")
     end_seconds: float = Field(gt=0, allow_inf_nan=False, description="Exclusive end time on timeline.")
     props: dict[str, Any] = Field(description="Declarative JSON props for the chosen motion block.")
     resources: list[UUID] | None = Field(
         default=None, max_length=16,
-        description="Pinned image or captured webpage snapshot IDs (required for product_showcase).",
+        description="Pinned image or captured webpage snapshot IDs (required for product_showcase; optional logo for closing_cta).",
     )
     view_id: str | None = Field(
         default=None, max_length=120,
@@ -274,26 +319,31 @@ EDITOR_TOOLS = (
     ),
     _editor_tool(
         "edit_audio_clip",
-        "Update absolute gain_db and/or replace source_id on one existing audio clip only, preserving object_id and all other clips. "
-        "For relative requests (e.g. '-3 dB'), compute once from the pre-turn clip gain_db and check already_saved_this_turn so the delta is never applied twice.",
+        "Update absolute gain_db, replace source_id, and/or set smooth fade_in_seconds, fade_out_seconds, or duck_windows (compiled to audio.gain keyframes) on one existing audio clip only, preserving object_id and all other clips. "
+        "For relative gain requests (e.g. '-3 dB'), compute once from the pre-turn clip gain_db and check already_saved_this_turn so the delta is never applied twice.",
         EditAudioClipArgs, "editAudioClip",
     ),
     _editor_tool(
         "generate_sfx",
-        "Synthesize a deterministic 48 kHz stereo sound effect (whoosh, impact, click, riser, stinger) with zero credit cost. "
+        "Synthesize a deterministic 48 kHz stereo sound effect (whoosh, impact, click, riser, stinger, swoosh_cut) with zero credit cost. "
         "Pass base_clip_id to revise an existing SFX clip while inheriting its recipe and seed. Returns acoustic metrics (duration_ms, peak_offset_ms, spectral_centroid_hz, peak_dbfs).",
         GenerateSfxArgs, "generateSfx",
     ),
     _editor_tool(
         "insert_motion_block",
-        "Insert a native declarative motion block (product_showcase or transparent-ready kinetic_title) onto the timeline below captions. "
-        "Pass captured webpage or image snapshot IDs in resources for product_showcase.",
+        "Insert a native declarative motion block (statement_hook, product_showcase, metric_grid, closing_cta, or transparent-ready kinetic_title) onto the timeline below captions. "
+        "Pass captured webpage or image snapshot IDs in resources for product_showcase (and optional logo for closing_cta).",
         InsertMotionBlockArgs, "insertMotionBlock",
     ),
     _editor_tool(
         "update_motion_block",
-        "Patch declarative props on one existing motion_block clip only (e.g. slower entrance_duration_s), leaving all other tracks and clips unchanged.",
+        "Patch declarative props on one existing motion_block clip only (e.g. slower entrance_duration_s, theme, items), leaving all other tracks and clips unchanged.",
         UpdateMotionBlockArgs, "updateMotionBlock",
+    ),
+    _editor_tool(
+        "set_transition",
+        "Add or update a centered crossfade transition between two adjacent full-canvas opaque clips (including opaque motion blocks with show_backdrop=True) on the same visual track.",
+        SetTransitionArgs, "setTransition",
     ),
     _editor_tool(
         "generate_image", "Create and review one image. Returns the actual pixels and a fixed project source.",
@@ -380,7 +430,7 @@ WRITE_TOOLS = {
     if t.name == "remove_clip" or t.params_model in (
         SplitClipArgs, TrimClipArgs, MoveClipArgs, TranslateArgs, ScaleArgs, SetKeyframeArgs,
         InsertVisualArgs, InsertAudioArgs, EditAudioClipArgs, InsertMotionBlockArgs, UpdateMotionBlockArgs,
-        ExtendStillArgs, BindClipSourceArgs,
+        SetTransitionArgs, ExtendStillArgs, BindClipSourceArgs,
     )
 }
 
@@ -647,6 +697,7 @@ async def edit_clip(
                               object_id=f"obj_{identity.hex}", scene_id=None, start=start, end=end,
                               source_start=0, source_end=source_end, gain_db=args.gain_db)
     elif isinstance(args, EditAudioClipArgs):
+        from app.editing.revisions import build_audio_gain_animation
         from app.editing.timing import source_ticks_to_output_ticks
         from app.models.tables import SourceSnapshot
 
@@ -660,16 +711,11 @@ async def edit_clip(
         )
         old_source_id = str(target.source.snapshot_id) if target.source else None
         new_source_id = str(args.source_id) if args.source_id is not None else old_source_id
-        if updated_obj.gain_db == target.object.gain_db and new_source_id == old_source_id:
-            raise ValueError("The audio clip already has these settings.")
-        extra["gain_db_before"] = target.object.gain_db
-        extra["gain_db_after"] = updated_obj.gain_db
-        extra["source_before"] = old_source_id
-        extra["source_after"] = new_source_id
         update_fields: dict[str, Any] = {}
-        if args.gain_db is not None:
+        if args.gain_db is not None and updated_obj.gain_db != target.object.gain_db:
             update_fields["object"] = updated_obj
-        if args.source_id is not None:
+        effective_range = target.range
+        if args.source_id is not None and new_source_id != old_source_id:
             snapshot = await db.get(SourceSnapshot, args.source_id)
             if (
                 snapshot is None
@@ -698,8 +744,69 @@ async def edit_clip(
                 source_range=TimeRange(start=0, end=used_source_end),
             )
             if new_end != target.range.end:
-                update_fields["range"] = TimeRange(start=target.range.start, end=new_end)
+                effective_range = TimeRange(start=target.range.start, end=new_end)
+                update_fields["range"] = effective_range
+        envelope_requested = (
+            args.fade_in_seconds is not None
+            or args.fade_out_seconds is not None
+            or args.duck_windows is not None
+        )
+        if envelope_requested:
+            gain_anim_dict = build_audio_gain_animation(
+                object_id=target.object.object_id,
+                clip_start_ticks=effective_range.start,
+                clip_end_ticks=effective_range.end,
+                timebase=rate,
+                fps_num=content.settings.fps.num,
+                fps_den=content.settings.fps.den,
+                fade_in_seconds=args.fade_in_seconds,
+                fade_out_seconds=args.fade_out_seconds,
+                duck_windows=[w.model_dump() for w in args.duck_windows] if args.duck_windows else None,
+            )
+            kept = [a for a in target.animations if a.property != "audio.gain"]
+            new_animations = [*kept, Animation.model_validate(gain_anim_dict)] if gain_anim_dict else kept
+            if [a.model_dump(mode="json") for a in new_animations] != [a.model_dump(mode="json") for a in target.animations]:
+                update_fields["animations"] = new_animations
+                extra["audio_gain_keyframes"] = len(gain_anim_dict["keyframes"]) if gain_anim_dict else 0
+                extra["fade_in_seconds"] = args.fade_in_seconds
+                extra["fade_out_seconds"] = args.fade_out_seconds
+        if not update_fields:
+            raise ValueError("The audio clip already has these settings.")
+        extra["gain_db_before"] = target.object.gain_db
+        extra["gain_db_after"] = updated_obj.gain_db
+        extra["source_before"] = old_source_id
+        extra["source_after"] = new_source_id
         ops.append(UpdateClip(op="update_clip", clip_id=target.clip_id, **update_fields))
+    elif isinstance(args, SetTransitionArgs):
+        if args.from_clip_id not in clips or args.to_clip_id not in clips:
+            raise ValueError("Both from_clip_id and to_clip_id must exist on the current timeline.")
+        existing = next(
+            (
+                t for t in content.timeline.transitions
+                if t.from_clip_id == args.from_clip_id and t.to_clip_id == args.to_clip_id
+            ),
+            None,
+        )
+        duration_ticks = _ticks(args.duration_seconds, rate)
+        transition_id = existing.transition_id if existing else f"trn_{identity.hex[:16]}"
+        transition = Transition(
+            transition_id=transition_id,
+            from_clip_id=args.from_clip_id,
+            to_clip_id=args.to_clip_id,
+            kind=args.kind,
+            duration=duration_ticks,
+            alignment="center",
+        )
+        if existing is not None and existing == transition:
+            raise ValueError("This transition already has these settings.")
+        extra["transition"] = {
+            "transition_id": transition_id,
+            "from_clip_id": args.from_clip_id,
+            "to_clip_id": args.to_clip_id,
+            "kind": args.kind,
+            "duration_seconds": args.duration_seconds,
+        }
+        ops.append(SetTransition(op="set_transition", transition=transition))
     elif isinstance(args, InsertMotionBlockArgs):
         from app.editing.revisions import motion_block_ops
         from app.editing.sources import register_web_view_snapshot
@@ -1111,6 +1218,12 @@ async def execute_editor(turn, name, args):
                             source_before=result["source_before"],
                             source_after=result["source_after"],
                         )
+                        if "audio_gain_keyframes" in result:
+                            receipt["audio_gain_keyframes"] = result["audio_gain_keyframes"]
+                            receipt["fade_in_seconds"] = result.get("fade_in_seconds")
+                            receipt["fade_out_seconds"] = result.get("fade_out_seconds")
+                    if name == "set_transition":
+                        receipt["transition"] = result["transition"]
                     if name == "split_clip":
                         receipt["right_clip_id"] = result["right_clip_id"]
                     before = getattr(turn, "_editor_last_preview", None)
@@ -1174,6 +1287,16 @@ async def execute_editor(turn, name, args):
                     scope = {
                         "offset": args.offset,
                         "next_offset": next_offset if next_offset < len(clips) else None,
+                        "transitions": [
+                            {
+                                "transition_id": t.transition_id,
+                                "from_clip_id": t.from_clip_id,
+                                "to_clip_id": t.to_clip_id,
+                                "kind": t.kind,
+                                "duration_seconds": t.duration / content.settings.timebase,
+                            }
+                            for t in content.timeline.transitions
+                        ],
                     }
                 origins = await _load_snapshot_origins(db, [clip for _, clip in page])
                 facts = [_clip_facts(track, clip, content, origins) for track, clip in page]
