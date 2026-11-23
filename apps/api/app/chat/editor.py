@@ -1367,8 +1367,14 @@ async def execute_editor(turn, name, args):
                     valid_for_key=version_key,
                 )
             if name == "save_composition_as_skill":
+                from app.chat.editor_recovery import editor_lock_key
                 from app.skills.blueprint import save_composition_as_skill
 
+                if not turn.turn_id:
+                    raise ValueError("A persisted turn is required.")
+                await turn.db.execute(
+                    select(func.pg_advisory_xact_lock(editor_lock_key(turn.turn_id)))
+                )
                 result = await save_composition_as_skill(
                     db,
                     owner_id=turn.project.user_id,
@@ -1377,6 +1383,9 @@ async def execute_editor(turn, name, args):
                     version_id=version.id,
                     name=args.name,
                     description=args.description,
+                    opening_id=turn.turn_id,
+                    conversation_id=turn.conversation_id,
+                    lock_on_session=False,
                 )
                 return ToolObservation(json.dumps(result), valid_for_key=version_key)
             if name == "deliver_video":

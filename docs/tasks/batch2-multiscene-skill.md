@@ -1,6 +1,6 @@
 # Batch 2 · 多幕商业 MG 宣传片与 Skill + Slot 同款复刻（验收归档）
 
-> **状态（2026-11-24）**：DONE（已合入 `main@857d475a`）。Checkpoint 2A（38.0s OxValue 英文投资人版 v40）与 Checkpoint 2B（Round 4 固化 `oxvalue-promo-blueprint` → Round 5 中文技术转移/治理视角复刻 v7 与单实例零漂移续改）全部真实 Chat 闭环通过并获用户拍板；0 新 SQL 表；全仓核心回归（API 498 · Web 42/42 · 342 · Render 7/7 · sound-engine 2/2 · video-spec 11/11）及 Linux `apps/render/Dockerfile` 构建全绿；8,000 字符窗口 128 次调用实测截断率 6.25%、0 约束丢失；隔离 `gemini.py` 适配器静默预留（无 `GEMINI_API_KEY`，以 MiniMax 实证收口）。上位架构见 [Agent Editor 主合同](new-agent.md)、[作品模型](../VIDEO_PROJECT.md)、[声音合同](../MUSIC_ARCHITECTURE.md) 与 [进度 §0](../PROGRESS.md)。
+> **状态（2026-11-24）**：DONE（已合入 `main@857d475a`）。Checkpoint 2A（38.0s OxValue 英文投资人版 v40）与 Checkpoint 2B（Round 4 固化 `oxvalue-promo-blueprint` → Round 5 中文技术转移/治理视角复刻 v7 与单实例零漂移续改）全部真实 Chat 闭环通过并获用户拍板；0 新 SQL 表；全仓核心回归（API 498 · Web 42/42 · 342 · Render 7/7 · sound-engine 2/2 · video-spec 11/11）及 Linux `apps/render/Dockerfile` 构建全绿；8,000 字符窗口 128 次调用实测截断率 6.25%、0 约束丢失；隔离 `gemini.py` 适配器静默预留（无 `GEMINI_API_KEY`，以 MiniMax 实证收口）。证据范围注：Batch 2 真实旅程未复跑重复授权 `409` 与 Chrome 禁缓存硬刷新恢复（沿用 Batch 1 回归基线）；`batch2a-evidence/evidence.json` 为 v39 快照，最终交付成片为移除误框 `callout` 后的 v40。上位架构见 [Agent Editor 主合同](new-agent.md)、[作品模型](../VIDEO_PROJECT.md)、[声音合同](../MUSIC_ARCHITECTURE.md) 与 [进度 §0](../PROGRESS.md)。
 
 ---
 

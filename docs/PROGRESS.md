@@ -14,7 +14,7 @@ I6 有条件收官。通用文字动画与显式 Skill 的 OxValue 宣传片均�
 
 ### 0.1 里程碑状态
 
-- **Batch 2 · 多幕商业 MG 宣传片与 Skill + Slot 同款复刻（DONE · 已合入 `main@857d475a`）。** 0 新 SQL 表交付多幕商业 MG（`statement_hook` / `metric_grid` / `closing_cta` + `callout`/`pill_caption` + `crossfade` + BGM 淡入淡出/闪避 + `swoosh_cut` + `resources[0..N]` staging）与可复用蓝图闭环（`save_composition_as_skill` / `instantiate_skill_blueprint`，事务外合成 SFX + 实测旁白自适应幕长 + 相对切点重锚音效）；8,000 字符对话窗 128 次模型调用实测截断率 6.25%、0 约束丢失。[施工与验收合同](tasks/batch2-multiscene-skill.md)
+- **Batch 2 · 多幕商业 MG 宣传片与 Skill + Slot 同款复刻（DONE · 已合入 `main@857d475a`）。** 0 新 SQL 表交付多幕商业 MG（`statement_hook` / `metric_grid` / `closing_cta` + `callout`/`pill_caption` + `crossfade` + BGM 淡入淡出/闪避 + `swoosh_cut` + `resources[0..N]` staging）与可复用蓝图闭环（`save_composition_as_skill` / `instantiate_skill_blueprint`，事务外合成 SFX + 实测旁白自适应幕长 + 相对切点重锚音效）；8,000 字符对话窗 128 次模型调用实测截断率 6.25%、0 约束丢失。证据范围注：Batch 2 真实旅程未复跑重复授权 `409` 与 Chrome 禁缓存硬刷新恢复（沿用 Batch 1 回归基线）；`batch2a-evidence/evidence.json` 为 v39 快照，最终交付成片为移除误框 `callout` 后的 v40。[施工与验收合同](tasks/batch2-multiscene-skill.md)
 
 - **Batch 1 · OxValue 首个专业 MG 音画镜头（DONE · 已合入 `main@0171cfda`）。** 交付 `packages/sound-engine`（5 配方 `-2.0 dBFS` 归一化）、Path β 原生 `MotionBlockObject`（`kinetic_title` / `product_showcase`）、统一二级分类元数据、`generate_sfx`/`edit_audio_clip`/`insert_motion_block`/`update_motion_block`、曲库与 11 个活体验证 MiniMax 音色及 3-Round 真实 Chat 五面验收。
 

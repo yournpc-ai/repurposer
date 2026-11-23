@@ -381,13 +381,24 @@ def test_extract_skill_draft_strips_private_snapshots_and_copy():
     assert (bp.sfx_cues[1].act_index, bp.sfx_cues[1].anchor) in {(2, "cut_after"), (3, "act_start")}
     assert bp.sfx_cues[1].offset_s == pytest.approx(0.1, abs=0.01)
 
-    # Zero private snapshot UUIDs or master copy/metrics leak into SKILL.md or blueprint.json
+    # Zero private snapshot UUIDs, master composition_id, or master copy/metrics leak into SKILL.md or blueprint.json
     bp_text = draft.references[0].text
     combined = draft.instructions + "\n" + bp_text
+    assert draft.source_uri == f"composition://{comp_id}@v40"
+    assert str(comp_id) not in combined
+    assert "source_composition_uri" not in bp_text
     for sid in ids.values():
         assert str(sid) not in combined
     for secret in ("SECRET_MASTER_HEADLINE", "SECRET_BADGE", "SECRET_METRICS", "SECRET_BRAND", "SECRET_PILL_TEXT"):
         assert secret not in combined
+
+    # Backward-compatible deserialization when legacy blueprint.json carries source_composition_uri
+    from app.skills.blueprint import SkillBlueprintV1
+
+    legacy = json.loads(bp_text)
+    legacy["source_composition_uri"] = f"composition://{comp_id}@v40"
+    parsed_legacy = SkillBlueprintV1.model_validate(legacy)
+    assert parsed_legacy.source_composition_uri == f"composition://{comp_id}@v40"
 
 
 @pytest.mark.asyncio
@@ -704,3 +715,143 @@ async def test_instantiate_skill_blueprint_sfx_outside_write_lock_and_adaptive_t
             content_digest=saved_ver.content_digest,
         )
         assert len(spec["tracks"]) >= 4
+
+    # Replay short-circuit: same (turn_id, call_id, args) returns saved version WITHOUT calling SFX or apply
+    events.clear()
+    with (
+        patch("app.models.database.AsyncSessionLocal", database),
+        patch("app.tools.video.sfx_synthesis.synthesize_project_sfx", side_effect=fake_synthesize_sfx),
+        patch("app.skills.blueprint.apply_composition_edits", side_effect=spy_apply),
+    ):
+        replayed = await instantiate_skill_blueprint(turn=turn, args=inst_args, call_id="call_bp_1")
+    assert events == []
+    assert replayed["version_id"] == res["version_id"]
+    assert replayed["composition_id"] == res["composition_id"]
+    assert replayed["sfx_clips_count"] == 2
+
+
+@pytest.mark.asyncio
+async def test_stopped_turn_fences_save_and_instantiate_without_side_effects(database):
+    from sqlalchemy import select as sa_select
+
+    from app.chat.service import TurnStopped
+    from app.models.tables import Composition, UserSkill
+
+    content, origins, ids = _sample_master_composition()
+    async with database() as db:
+        owner = User(email=f"{uuid4()}@example.test", name="owner")
+        db.add(owner)
+        await db.flush()
+        p_master = Project(id=uuid4(), user_id=owner.id, title="Master")
+        p_remake = Project(id=uuid4(), user_id=owner.id, title="Stopped Remake")
+        db.add_all([p_master, p_remake])
+        await db.flush()
+        for key, sid in ids.items():
+            kind = "image" if key == "img" else "audio"
+            meta = {"origin": {"kind": "sound_recipe", **origins[sid]}} if sid in origins else {}
+            db.add(SourceSnapshot(
+                id=sid,
+                owner_id=owner.id,
+                origin_project_id=p_master.id,
+                kind=kind,
+                digest=_dig(key),
+                storage_key=f"test/{key}.bin",
+                duration_ticks=seconds_to_ticks(24.0, SOURCE_TIMEBASE) if kind == "audio" else None,
+                meta=meta,
+            ))
+        await db.flush()
+        comp, ver, _ = await apply_composition_edits(
+            db,
+            owner_id=owner.id,
+            origin_project_id=p_master.id,
+            name="Master Promo",
+            content=content.model_dump(mode="json"),
+        )
+        conv_master = Conversation(id=uuid4(), user_id=owner.id, project_id=p_master.id, title="Master Chat")
+        stopped_save_opening = Message(
+            id=uuid4(),
+            conversation_id=conv_master.id,
+            role="user",
+            content="Save skill",
+            turn_state="stopped",
+            intent={},
+        )
+        conv_remake = Conversation(id=uuid4(), user_id=owner.id, project_id=p_remake.id, title="Remake Chat")
+        stopped_inst_opening = Message(
+            id=uuid4(),
+            conversation_id=conv_remake.id,
+            role="user",
+            content="Instantiate skill",
+            turn_state="stopped",
+            intent={},
+        )
+        new_img = SourceSnapshot(
+            id=uuid4(),
+            owner_id=owner.id,
+            origin_project_id=p_remake.id,
+            kind="image",
+            digest=_dig("stopped_img"),
+            storage_key="remake/stopped.png",
+            meta={"content_type": "image/png"},
+        )
+        db.add_all([conv_master, stopped_save_opening, conv_remake, stopped_inst_opening, new_img])
+        await db.commit()
+
+        # 1. Stopped turn blocks save_composition_as_skill before writing UserSkill
+        with pytest.raises(TurnStopped):
+            await save_composition_as_skill(
+                db,
+                owner_id=owner.id,
+                project_id=p_master.id,
+                composition_id=comp.id,
+                version_id=ver.id,
+                name="stopped-skill",
+                description="Should not persist on a stopped turn.",
+                opening_id=stopped_save_opening.id,
+                conversation_id=conv_master.id,
+            )
+        assert await db.scalar(sa_select(UserSkill.id).where(UserSkill.owner_id == owner.id)) is None
+
+        # Save legitimately (without stopped opening) so we have a valid skill_version_id for instantiate check
+        saved_skill = await save_composition_as_skill(
+            db,
+            owner_id=owner.id,
+            project_id=p_master.id,
+            composition_id=comp.id,
+            version_id=ver.id,
+            name="valid-blueprint",
+            description="Valid blueprint for stopped instantiate check.",
+        )
+
+    sfx_calls: list[str] = []
+
+    async def should_not_run_sfx(*, owner_id, project_id, recipe_id, params=None, seed=None):
+        sfx_calls.append(recipe_id)
+        raise AssertionError("synthesize_project_sfx must not be called on a stopped turn")
+
+    turn = SimpleNamespace(
+        project=p_remake,
+        turn_id=stopped_inst_opening.id,
+        conversation_id=conv_remake.id,
+    )
+    inst_args = InstantiateSkillBlueprintArgs(
+        skill_version_id=UUID(saved_skill["skill_version_id"]),
+        name="Should Not Create",
+        acts=[
+            BlueprintActSlotInput(act_id="act_1", props={"headline": "A"}, duration_seconds=4.0),
+            BlueprintActSlotInput(act_id="act_2", props={"url_bar": "a.test"}, resources=[new_img.id], duration_seconds=5.0),
+            BlueprintActSlotInput(act_id="act_3", props={"items": [{"value": "1", "label": "X"}, {"value": "2", "label": "Y"}]}, duration_seconds=5.0),
+            BlueprintActSlotInput(act_id="act_4", props={"brand_name": "B", "tagline": "T"}, duration_seconds=4.0),
+        ],
+    )
+
+    with (
+        patch("app.models.database.AsyncSessionLocal", database),
+        patch("app.tools.video.sfx_synthesis.synthesize_project_sfx", side_effect=should_not_run_sfx),
+    ):
+        with pytest.raises(TurnStopped):
+            await instantiate_skill_blueprint(turn=turn, args=inst_args, call_id="call_stopped_1")
+
+    assert sfx_calls == []
+    async with database() as db:
+        assert await db.scalar(sa_select(Composition.id).where(Composition.origin_project_id == p_remake.id)) is None

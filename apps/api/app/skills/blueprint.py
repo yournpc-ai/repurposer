@@ -159,7 +159,7 @@ class BlueprintSfxCue(BaseModel):
 class SkillBlueprintV1(BaseModel):
     model_config = ConfigDict(extra="forbid")
     schema_version: Literal[1] = 1
-    source_composition_uri: str
+    source_composition_uri: str | None = None
     canvas: dict[str, Any]
     acts: list[BlueprintAct] = Field(min_length=1, max_length=12)
     audio_profile: BlueprintAudioProfile = Field(default_factory=BlueprintAudioProfile)
@@ -430,9 +430,9 @@ def extract_skill_draft_from_composition(
             offset_s=clamped_offset,
         ))
 
+    source_uri = f"composition://{composition_id}@v{version_number}"
     bp = SkillBlueprintV1(
         schema_version=1,
-        source_composition_uri=f"composition://{composition_id}@v{version_number}",
         canvas={
             "width": content.settings.width,
             "height": content.settings.height,
@@ -445,7 +445,12 @@ def extract_skill_draft_from_composition(
         sfx_cues=sfx_cues,
     )
 
-    bp_text = json.dumps(bp.model_dump(mode="json"), indent=2, ensure_ascii=False, sort_keys=True)
+    bp_text = json.dumps(
+        bp.model_dump(mode="json", exclude={"source_composition_uri"}),
+        indent=2,
+        ensure_ascii=False,
+        sort_keys=True,
+    )
     bp_digest = hashlib.sha256(bp_text.encode("utf-8")).hexdigest()
     skill_md = _render_skill_md(slug, desc, bp)
 
@@ -492,7 +497,7 @@ def extract_skill_draft_from_composition(
         ],
         media=[],
         source_hash=source_hash,
-        source_uri=bp.source_composition_uri,
+        source_uri=source_uri,
         source_revision=f"v{version_number}",
         capability_report=SkillCapabilityReport(
             supported=["native_motion_graphics", "sound_recipes", BLUEPRINT_CAPABILITY],
@@ -520,8 +525,23 @@ async def save_composition_as_skill(
     version_id: UUID,
     name: str,
     description: str,
+    opening_id: UUID | None = None,
+    conversation_id: UUID | None = None,
+    lock_on_session: bool = True,
 ) -> dict[str, Any]:
     """Persist a saved CompositionVersion as an owner-scoped immutable SkillVersion (0 new tables)."""
+    if opening_id is not None:
+        from app.chat.editor_recovery import editor_lock_key
+        from app.chat.service import TurnStopped, _lock_turn_for_transcript_write
+
+        if lock_on_session:
+            await db.execute(select(func.pg_advisory_xact_lock(editor_lock_key(opening_id))))
+        opening = await _lock_turn_for_transcript_write(db, opening_id)
+        if opening.role != "user" or (conversation_id is not None and opening.conversation_id != conversation_id):
+            raise ValueError("The opening message is unavailable.")
+        if opening.turn_state != "in_flight":
+            raise TurnStopped(str(opening_id))
+
     composition, version = await get_video_version(db, owner_id=owner_id, version_id=version_id)
     if composition.id != composition_id or composition.origin_project_id != project_id:
         raise ValueError("This composition version is outside the selected project.")
@@ -564,7 +584,7 @@ async def save_composition_as_skill(
         "version": skill_ver.version,
         "name": draft.name,
         "description": draft.description,
-        "source_uri": bp.source_composition_uri,
+        "source_uri": draft.source_uri,
         "acts_count": len(bp.acts),
         "sfx_cues_count": len(bp.sfx_cues),
         "has_bgm": bp.audio_profile.has_bgm,
@@ -626,6 +646,55 @@ def load_blueprint_from_skill_version(skill_ver: Any) -> SkillBlueprintV1:
     return SkillBlueprintV1.model_validate_json(bp_ref["text"])
 
 
+def _instantiate_result_from_version(
+    *,
+    turn: Any,
+    saved: CompositionVersion,
+    read: dict[str, Any],
+) -> dict[str, Any]:
+    saved_content = content_of(saved)
+    tb = saved_content.settings.timebase
+    main_clips = sorted(
+        (
+            c
+            for t in saved_content.timeline.tracks
+            if t.kind == "visual" and t.role == "main"
+            for c in t.clips
+        ),
+        key=lambda c: c.range.start,
+    )
+    total_ticks = max((c.range.end for c in main_clips), default=0)
+    sfx_count = sum(
+        len(t.clips)
+        for t in saved_content.timeline.tracks
+        if t.kind == "audio" and t.role == "effect"
+    )
+    turn._video_presentation_pending = read
+    from app.chat.editor import _remember_labels
+
+    _remember_labels(turn, [], saved.id, saved.content_digest, saved.version)
+    return {
+        "composition_id": str(saved.composition_id),
+        "version_id": str(saved.id),
+        "version": saved.version,
+        "content_digest": saved.content_digest,
+        "saved": True,
+        "duration_seconds": round(total_ticks / tb, 3),
+        "acts": [
+            {
+                "act_id": f"act_{i + 1}",
+                "clip_id": c.clip_id,
+                "block_id": c.object.block_id if isinstance(c.object, MotionBlockObject) else c.object.kind,
+                "start_seconds": round(c.range.start / tb, 3),
+                "end_seconds": round(c.range.end / tb, 3),
+            }
+            for i, c in enumerate(main_clips)
+        ],
+        "transitions_count": len(saved_content.timeline.transitions),
+        "sfx_clips_count": sfx_count,
+    }
+
+
 async def instantiate_skill_blueprint(
     *,
     turn: Any,
@@ -638,7 +707,7 @@ async def instantiate_skill_blueprint(
     adapts each act's duration to measured narration + breathing room, and re-anchors
     every SFX cue to the adapted act/cut timestamps.
     """
-    from app.chat.service import _lock_turn_for_transcript_write
+    from app.chat.service import TurnStopped, _lock_turn_for_transcript_write
     from app.editing.service import video_version_read
     from app.editing.sources import register_web_view_snapshot
     from app.models.database import AsyncSessionLocal
@@ -649,8 +718,32 @@ async def instantiate_skill_blueprint(
     identity = str(uuid5(turn.turn_id, call_id))
     fingerprint = canonical_json_hash({"tool": "instantiate_skill_blueprint", "args": args.model_dump(mode="json")})
 
-    # ── Phase 1: Read blueprint, resolve media & synthesize SFX OUTSIDE DB write lock ──
+    # ── Phase 1: Lightweight read-only precheck, then resolve media & synthesize SFX OUTSIDE write lock ──
     async with AsyncSessionLocal() as db:
+        opening = await db.get(Message, turn.turn_id)
+        if opening is None or opening.role != "user" or opening.conversation_id != turn.conversation_id:
+            raise ValueError("The opening message is unavailable.")
+        pre_markers = (opening.intent or {}).get("editor_commits", [])
+        pre_marker = next((item for item in pre_markers if item["request"] == identity), None)
+        if pre_marker is not None:
+            if pre_marker["fingerprint"] != fingerprint:
+                raise RequestMismatch("This call already saved different content.")
+            existing_saved = await db.scalar(
+                select(CompositionVersion)
+                .join(Composition, Composition.id == CompositionVersion.composition_id)
+                .where(
+                    CompositionVersion.request_id == identity,
+                    Composition.owner_id == owner,
+                    Composition.origin_project_id == project,
+                )
+            )
+            if existing_saved is None:
+                raise ValueError("The saved version is unavailable.")
+            read = await video_version_read(db, owner_id=owner, version_id=existing_saved.id)
+            return _instantiate_result_from_version(turn=turn, saved=existing_saved, read=read)
+        if opening.turn_state != "in_flight":
+            raise TurnStopped(str(turn.turn_id))
+
         skill_ver = await get_skill_version(db, owner_id=owner, skill_version_id=args.skill_version_id)
         bp = load_blueprint_from_skill_version(skill_ver)
         if len(args.acts) != len(bp.acts):
@@ -1030,7 +1123,7 @@ async def instantiate_skill_blueprint(
         "skill_reference": {"kind": "external", "skill_version_id": str(args.skill_version_id)},
         "slot_blueprint_v1": {
             "skill_version_id": str(args.skill_version_id),
-            "source_composition_uri": bp.source_composition_uri,
+            "source_composition_uri": bp.source_composition_uri or skill_ver.source_uri,
             "breathing_seconds": breathing_s,
         },
     }
@@ -1061,7 +1154,7 @@ async def instantiate_skill_blueprint(
                 raise ValueError("The saved version is unavailable.")
         else:
             if opening.turn_state != "in_flight":
-                raise ValueError("This turn has ended.")
+                raise TurnStopped(str(turn.turn_id))
             await db.execute(
                 select(Project.id).where(Project.id == project, Project.user_id == owner).with_for_update(key_share=True)
             )
@@ -1099,27 +1192,4 @@ async def instantiate_skill_blueprint(
             )
         read = await video_version_read(db, owner_id=owner, version_id=saved.id)
 
-    turn._video_presentation_pending = read
-    from app.chat.editor import _remember_labels
-
-    _remember_labels(turn, [], saved.id, saved.content_digest, saved.version)
-    return {
-        "composition_id": str(saved.composition_id),
-        "version_id": str(saved.id),
-        "version": saved.version,
-        "content_digest": saved.content_digest,
-        "saved": True,
-        "duration_seconds": round(total_ticks / tb, 3),
-        "acts": [
-            {
-                "act_id": bp.acts[i].act_id,
-                "clip_id": cid,
-                "block_id": bp.acts[i].block_id,
-                "start_seconds": round(st / tb, 3),
-                "end_seconds": round(en / tb, 3),
-            }
-            for i, (st, en, cid) in enumerate(act_windows)
-        ],
-        "transitions_count": len(transitions),
-        "sfx_clips_count": sum(len(t.clips) for t in effect_tracks),
-    }
+    return _instantiate_result_from_version(turn=turn, saved=saved, read=read)
