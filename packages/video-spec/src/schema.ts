@@ -174,6 +174,30 @@ const shapeObjectSchema = z
   })
   .strict();
 
+const motionBlockResourceSchema = z
+  .object({
+    path: z.string().min(1).max(120),
+    url: z.string().min(1),
+    digest: z.string().length(64),
+    content_type: z.enum(["image/png", "image/jpeg", "image/webp"]),
+  })
+  .strict();
+
+const motionBlockObjectSchema = z
+  .object({
+    kind: z.literal("motion_block"),
+    object_id: z.string().min(1),
+    block_id: z.enum(["kinetic_title", "product_showcase"]),
+    block_version: z.literal(1),
+    props: z.record(z.string(), z.unknown()),
+    resources: z.array(motionBlockResourceSchema).max(16),
+    layout: layoutBoxSchema,
+    fit: z.enum(["cover", "contain"]),
+    transform: transformSchema,
+    opacity: z.number().min(0).max(1),
+  })
+  .strict();
+
 const audioObjectSchema = z
   .object({
     kind: z.literal("audio"),
@@ -188,6 +212,7 @@ const objectSchema = z.discriminatedUnion("kind", [
   webObjectSchema,
   videoObjectSchema,
   shapeObjectSchema,
+  motionBlockObjectSchema,
   audioObjectSchema,
 ]);
 
@@ -336,7 +361,7 @@ const clipSchema = z
     if (["audio", "video"].includes(clip.object.kind) && !hasWindow) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: "time-based clips need a source window" });
     }
-    if (["image", "web"].includes(clip.object.kind) && hasWindow) {
+    if (["image", "web", "motion_block"].includes(clip.object.kind) && hasWindow) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: "static sources carry no source window" });
     }
     if (["text", "shape"].includes(clip.object.kind) && clip.source) {
@@ -408,3 +433,4 @@ export type VideoAnimation = VideoClip["animations"][number];
 export type VideoKeyframe = VideoAnimation["keyframes"][number];
 export type VideoTextObject = Extract<VideoClip["object"], { kind: "text" }>;
 export type VideoTextPart = VideoTextObject["parts"][number];
+export type VideoMotionBlockObject = Extract<VideoClip["object"], { kind: "motion_block" }>;

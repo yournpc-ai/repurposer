@@ -41,6 +41,11 @@ def absolutize_video(spec: dict[str, Any]) -> dict[str, Any]:
             source = clip.get("source")
             if isinstance(source, dict) and isinstance(source.get("url"), str):
                 source["url"] = _resolve_url(source["url"])
+            obj = clip.get("object")
+            if isinstance(obj, dict) and obj.get("kind") == "motion_block":
+                for resource in obj.get("resources") or []:
+                    if isinstance(resource, dict) and isinstance(resource.get("url"), str):
+                        resource["url"] = _resolve_url(resource["url"])
     return spec
 
 

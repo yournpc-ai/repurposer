@@ -283,7 +283,7 @@ export interface AudioPlaybackBlock {
   kind: "audio_playback"
   project_id: string
   items: {
-    role: "narration" | "music"
+    role: "narration" | "music" | "effect"
     snapshot_id: string
     digest: string
     scene_id?: string | null
@@ -292,6 +292,12 @@ export interface AudioPlaybackBlock {
     duration_seconds: number
     peaks: number[]
     analysis_digest: string
+    sound_recipe?: {
+      recipe_id: string
+      recipe_version: number
+      params: Record<string, number>
+      seed: number
+    }
   }[]
 }
 

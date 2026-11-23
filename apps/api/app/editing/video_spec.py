@@ -15,7 +15,7 @@ from typing import Any
 from uuid import UUID
 
 from app.editing.animation import derive_text_part_families, derive_text_parts
-from app.editing.fonts import font_resources
+from app.editing.fonts import FONT_ID, FONT_SET_DIGEST, font_resources
 from app.editing.schemas import (
     Animation,
     AudioObject,
@@ -25,6 +25,7 @@ from app.editing.schemas import (
     Easing,
     GeneratorObject,
     ImageObject,
+    MotionBlockObject,
     ShapeObject,
     SpeechObject,
     TextObject,
@@ -188,6 +189,19 @@ def _compile_object(clip: Clip) -> dict[str, Any]:
             "opacity": obj.opacity,
             "gain_db": obj.gain_db,
             "muted": obj.muted,
+        }
+    if isinstance(obj, MotionBlockObject):
+        return {
+            "kind": "motion_block",
+            "object_id": obj.object_id,
+            "block_id": obj.block_id,
+            "block_version": obj.block_version,
+            "props": obj.props,
+            "resources": [],
+            "layout": obj.layout.model_dump(mode="json"),
+            "fit": obj.fit,
+            "transform": obj.transform.model_dump(mode="json"),
+            "opacity": obj.opacity,
         }
     if isinstance(obj, GeneratorObject):
         common = {
@@ -415,7 +429,30 @@ def _compile_clip(
         "object": _compile_object(clip),
         "animations": _compile_animations(clip, content),
     }
-    if isinstance(clip.object, GeneratorObject):
+    if isinstance(clip.object, MotionBlockObject):
+        compiled_resources: list[dict[str, Any]] = []
+        for resource in clip.object.resources:
+            facts = snapshots.get(resource.snapshot_id)
+            if facts is None or facts["digest"] != resource.snapshot_digest:
+                raise CompileError(
+                    f"clip {clip.clip_id}: motion_block resource {resource.path!r} "
+                    f"snapshot {resource.snapshot_id} is unresolved"
+                )
+            compiled_resources.append({
+                "path": resource.path,
+                "url": facts["storage_key"],
+                "digest": facts["digest"],
+                "content_type": resource.content_type,
+            })
+        out["object"]["resources"] = compiled_resources
+        if compiled_resources:
+            # Mirror the primary resource onto static clip.source so render's
+            # existing proxy-aware staging cache serves it over loopback.
+            out["source"] = {
+                "url": compiled_resources[0]["url"],
+                "digest": compiled_resources[0]["digest"],
+            }
+    elif isinstance(clip.object, GeneratorObject):
         prepared = generator_media.get(clip.object.object_id)
         if prepared is None or prepared.get("program_digest") != clip.object.program_digest():
             raise CompileError(
@@ -477,8 +514,12 @@ def _compile_clip(
 
 def _compile_fonts(content: CompositionContent) -> list[dict[str, Any]]:
     resources: dict[tuple[str, str, str, int], dict[str, Any]] = {}
+    has_motion_block = False
     for track in content.timeline.tracks:
         for clip in track.clips:
+            if isinstance(clip.object, MotionBlockObject):
+                has_motion_block = True
+                continue
             if not isinstance(clip.object, TextObject):
                 continue
             font = clip.object.style.font
@@ -496,6 +537,13 @@ def _compile_fonts(content: CompositionContent) -> list[dict[str, Any]]:
                     resource["family"], resource["weight"],
                 )
                 resources[key] = resource
+    if has_motion_block:
+        for resource in font_resources(FONT_ID, FONT_SET_DIGEST, {400, 700}):
+            key = (
+                resource["font_id"], resource["font_set_digest"],
+                resource["family"], resource["weight"],
+            )
+            resources[key] = resource
     return [resources[key] for key in sorted(resources)]
 
 

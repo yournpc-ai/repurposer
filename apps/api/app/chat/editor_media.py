@@ -43,7 +43,8 @@ def _requests_paid_media(words, tool):
 
 async def _record_audio(db, project, receipt, result, request):
     music = "score_spec" in result
-    role = "music" if music else "narration"
+    effect = "sound_recipe" in result
+    role = "music" if music else ("effect" if effect else "narration")
     item = await playback_item(db, project, role, result, request)
     facts = {
         "status": "available", "project_id": str(project.id), "role": role, "snapshot_id": item["snapshot_id"],
@@ -54,13 +55,27 @@ async def _record_audio(db, project, receipt, result, request):
     if music:
         facts.update(music_id=result["music"]["music_id"],
                      score={"bpm": result["score_spec"]["bpm"], "style": request.get("style")})
+    elif effect:
+        sr = result["sound_recipe"]
+        facts.update(
+            recipe_id=sr["recipe_id"],
+            recipe_version=sr["recipe_version"],
+            params=sr["params"],
+            seed=sr["seed"],
+            spec_sha256=sr["spec_sha256"],
+            acoustics=result["acoustics"],
+        )
     else:
         facts.update(alignment_id=result["alignment_id"], text=request["text"],
                      language=request["language"], voice_id=request["voice_id"])
     receipt.intent = {**receipt.intent, "media_result": facts}
     zh = (project.language or "").startswith("zh")
-    receipt.content = (("配乐已生成，可以试听。" if music else "旁白已生成，可以试听。") if zh else
-                       ("The score is ready to play." if music else "The voice recording is ready to play."))
+    if music:
+        receipt.content = "配乐已生成，可以试听。" if zh else "The score is ready to play."
+    elif effect:
+        receipt.content = "音效已生成，可以试听。" if zh else "The sound effect is ready to play."
+    else:
+        receipt.content = "旁白已生成，可以试听。" if zh else "The voice recording is ready to play."
     receipt.blocks = [{"kind": "audio_playback", "project_id": str(project.id), "items": [item]}]
     return receipt
 
@@ -364,6 +379,161 @@ async def submit_editor_media(turn, name, args, composition, version, call_id):
                 await enqueue_media(db, project, receipt, params, estimate.total[1])
             await db.commit()
         return receipt
+
+
+async def execute_generate_sfx(turn, args, composition, version):
+    """Local zero-credit deterministic SFX synthesis fast path.
+
+    Skips paid confirmation dialog while preserving opening lock, Stop check,
+    native-call idempotency, single-flight dedupe, and durable Chat playback receipt.
+    """
+    from app.chat.editor_recovery import editor_lock_key
+    from app.chat.service import TurnStopped
+    from app.editing.catalog import SOUND_RECIPE_CATALOG, build_sound_spec, sound_spec_digest
+    from app.editing.store import content_of
+    from app.models.tables import SourceSnapshot
+    from app.tools.video.sfx_synthesis import SfxSynthesisError, synthesize_project_sfx
+
+    call_id = current_call_id()
+    if not turn.turn_id or not call_id or turn.project is None:
+        raise ValueError("A durable message, project, and native call identity are required.")
+
+    recipe_id = args.recipe_id
+    merged_params = dict(args.params or {})
+    seed = args.seed
+    if args.base_clip_id:
+        if version is None:
+            raise ValueError("Select a saved composition before revising an existing SFX clip.")
+        content = content_of(version)
+        target_clip = next(
+            (c for t in content.timeline.tracks for c in t.clips if c.clip_id == args.base_clip_id),
+            None,
+        )
+        if target_clip is None or target_clip.source is None or target_clip.object.kind != "audio":
+            raise ValueError("Select an existing sound-effect audio clip to revise.")
+        async with AsyncSessionLocal() as db:
+            base_snap = await db.get(SourceSnapshot, target_clip.source.snapshot_id)
+        origin = ((base_snap.meta or {}).get("origin") or {}) if base_snap else {}
+        if origin.get("kind") != "sound_recipe":
+            raise ValueError("The selected clip was not synthesized from a sound recipe.")
+        if recipe_id is None:
+            recipe_id = origin["recipe_id"]
+        if recipe_id == origin.get("recipe_id"):
+            base_params = dict(origin.get("params") or {})
+            base_params.update(merged_params)
+            merged_params = base_params
+            if seed is None:
+                seed = origin.get("seed")
+    if not recipe_id:
+        raise ValueError("Specify a sound recipe_id or a base_clip_id to revise.")
+
+    spec = build_sound_spec(recipe_id, params=merged_params, seed=seed)
+    spec_sha256 = sound_spec_digest(spec)
+    identity = str(uuid5(turn.turn_id, call_id))
+    composition_id = str(composition.id) if composition else None
+    version_id = str(version.id) if version else None
+    fingerprint = canonical_json_hash({"tool": "generate_sfx", "spec_sha256": spec_sha256})
+
+    admission = turn.__dict__.setdefault("_media_admission", asyncio.Lock())
+    async with admission:
+        await turn.db.execute(select(func.pg_advisory_xact_lock(editor_lock_key(turn.turn_id))))
+        async with AsyncSessionLocal() as db:
+            opening = await _lock_turn_for_transcript_write(db, turn.turn_id)
+            project = await db.scalar(select(Project).join(Conversation, Conversation.project_id == Project.id).where(
+                Conversation.id == opening.conversation_id, Conversation.id == turn.conversation_id,
+                Conversation.user_id == turn.user_id, Project.id == turn.project.id, Project.user_id == turn.user_id,
+            ))
+            if project is None or opening.role != "user":
+                raise ValueError("SFX request is outside the current project.")
+            if any(edit["request"] == identity for edit in (opening.intent or {}).get("editor_commits", [])):
+                raise ValueError("This call already belongs to a different operation.")
+            receipt = await db.scalar(select(Message).where(
+                Message.turn_id == opening.id, Message.intent["editor_media"].as_string() == identity,
+            ))
+            if receipt is not None:
+                if receipt.intent.get("fingerprint") != fingerprint:
+                    raise ValueError("This call already belongs to different SFX parameters.")
+                if receipt.intent.get("media_result"):
+                    facts = dict(receipt.intent["media_result"])
+                    facts["delivered_to_chat"] = facts.get("status") == "available"
+                    return ToolObservation(json.dumps(facts), ok=facts["status"] == "available")
+            if opening.turn_state != "in_flight":
+                raise TurnStopped(str(turn.turn_id))
+
+            activity_id = await db.scalar(select(Message.id).where(
+                Message.turn_id == opening.id, Message.intent["frame"]["status"].astext == "active",
+                Message.intent["frame"]["call_id"].astext == call_id,
+            ).order_by(Message.seq.desc()).limit(1))
+
+    synth_error: SfxSynthesisError | None = None
+    result = None
+    try:
+        result = await synthesize_project_sfx(
+            owner_id=turn.user_id,
+            project_id=turn.project.id,
+            recipe_id=spec["recipe_id"],
+            params=spec["params"],
+            seed=spec["seed"],
+        )
+    except SfxSynthesisError as exc:
+        synth_error = exc
+
+    recipe_meta = SOUND_RECIPE_CATALOG[spec["recipe_id"]]
+    # Secondary Stop fence under opening lock before writing Message or emitting SSE.
+    async with admission:
+        await turn.db.execute(select(func.pg_advisory_xact_lock(editor_lock_key(turn.turn_id))))
+        async with AsyncSessionLocal() as db:
+            opening = await _lock_turn_for_transcript_write(db, turn.turn_id)
+            if opening.turn_state != "in_flight":
+                raise TurnStopped(str(turn.turn_id))
+            existing = await db.scalar(select(Message).where(
+                Message.turn_id == opening.id, Message.intent["editor_media"].as_string() == identity,
+            ))
+            if existing is not None and existing.intent.get("media_result"):
+                facts = dict(existing.intent["media_result"])
+                facts["delivered_to_chat"] = facts.get("status") == "available"
+                return ToolObservation(json.dumps(facts), ok=facts["status"] == "available")
+            if existing is None:
+                existing = await _create_message(
+                    db, turn.conversation_id, "assistant", "", turn_id=opening.id,
+                    intent={
+                        "editor_media": identity,
+                        "native_call_id": call_id,
+                        "fingerprint": fingerprint,
+                        "composition_id": composition_id,
+                        "version_id": version_id,
+                        "tool": "generate_sfx",
+                        "operation": "generate_sfx",
+                        "activity_id": str(activity_id) if activity_id else None,
+                    },
+                )
+            if synth_error is not None:
+                existing.intent = {
+                    **existing.intent,
+                    "media_result": {"status": "failed", "role": "effect", "error": str(synth_error)},
+                }
+                await db.commit()
+                return ToolObservation(str(synth_error), ok=False, user_error=str(synth_error))
+            project = await db.get(Project, turn.project.id)
+            row = await _record_audio(
+                db, project, existing, result,
+                {"recipe_id": spec["recipe_id"], "title": f"{recipe_meta['name']} ({spec['recipe_id']})"},
+            )
+            await db.commit()
+            receipt = row
+
+    if turn.on_row_append:
+        await turn.on_row_append(receipt)
+    facts = dict(receipt.intent["media_result"])
+    facts["sync_cue"] = recipe_meta["sync_cue"]
+    facts["mix_hint"] = recipe_meta["mix_hint"]
+    facts["delivered_to_chat"] = True
+    labels = turn.__dict__.setdefault("_editor_labels", {})
+    for key in ("snapshot_id", "digest", "analysis_digest", "spec_sha256"):
+        if facts.get(key):
+            for token in (facts[key], facts[key][:8], facts[key][:12]):
+                labels[token] = ("这份音效", "this sound effect")
+    return ToolObservation(json.dumps(facts), ok=True)
 
 
 async def generate_media(turn, name, args, composition, version):

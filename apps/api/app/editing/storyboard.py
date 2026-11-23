@@ -26,6 +26,7 @@ from app.editing.schemas import (
     CompositionContent,
     GeneratorObject,
     ImageObject,
+    MotionBlockObject,
     ShapeObject,
     SpeechObject,
     TextObject,
@@ -132,6 +133,14 @@ def _clip_summary(
         summary["fit"] = obj.fit
         summary["gain_db"] = obj.gain_db
         summary["muted"] = obj.muted
+    elif isinstance(obj, MotionBlockObject):
+        summary["block_id"] = obj.block_id
+        summary["block_version"] = obj.block_version
+        summary["props"] = obj.props
+        summary["resources"] = [r.model_dump(mode="json") for r in obj.resources]
+        summary["layout"] = obj.layout.model_dump(mode="json")
+        summary["fit"] = obj.fit
+        summary["opacity"] = obj.opacity
     elif isinstance(obj, GeneratorObject):
         summary["producer"] = obj.producer
         summary["code"] = obj.code

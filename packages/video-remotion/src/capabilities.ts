@@ -6,7 +6,8 @@ import {
 
 /** Explicit capability court: schema-valid but unimplemented input fails. */
 export const VIDEO_CAPABILITIES = {
-  objects: ["text", "shape", "image", "web", "video", "audio"],
+  objects: ["text", "shape", "image", "web", "video", "motion_block", "audio"],
+  motion_blocks: ["kinetic_title", "product_showcase"] as readonly string[],
   text_parts: ["line", "word", "grapheme"],
   segmentation_versions: [SEGMENTATION_VERSION] as readonly string[],
   layout_versions: [LAYOUT_VERSION] as readonly string[],
@@ -48,6 +49,13 @@ export function assertVideoSupported(spec: VideoSpec): void {
       const object = clip.object;
       if (!(VIDEO_CAPABILITIES.objects as readonly string[]).includes(object.kind)) {
         throw new VideoCapabilityError(`object kind ${object.kind} unsupported`);
+      }
+      if (object.kind === "motion_block") {
+        if (!VIDEO_CAPABILITIES.motion_blocks.includes(object.block_id) || object.block_version !== 1) {
+          throw new VideoCapabilityError(
+            `motion_block ${object.block_id}@v${object.block_version} unsupported`,
+          );
+        }
       }
       if (object.kind === "text") {
         if (!VIDEO_CAPABILITIES.segmentation_versions.includes(object.segmentation_version)) {

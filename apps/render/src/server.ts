@@ -1,5 +1,11 @@
+import { createHash } from "node:crypto";
+import {
+  canonicalSoundSpecJson,
+  synthesizeWav,
+} from "@repurposer/sound-engine";
 import { videoSpecSchema, type VideoSpec } from "@repurposer/video-spec";
 import express from "express";
+import { z } from "zod";
 
 import { CACHE_DIR } from "./stage";
 import { renderArtifacts, cachedArtifacts, ArtifactCacheMiss } from "./artifacts";
@@ -112,6 +118,48 @@ app.post("/component-bake", express.json({ limit: "64mb" }), async (req, res) =>
 });
 
 app.use(express.json({ limit: "8mb" }));
+
+const synthesizeSfxRequestSchema = z.object({
+  recipe_id: z.string().min(1).max(64),
+  params: z.record(z.string(), z.number().finite()).optional(),
+  seed: z.number().int().min(0).max(0xffffffff).optional(),
+});
+
+// Pure-math deterministic SFX synthesis via shared @repurposer/sound-engine.
+// Zero Headless Chrome, zero OfflineAudioContext, byte-identical to Web preview.
+app.post("/synthesize-sfx", (req, res) => {
+  const parsed = synthesizeSfxRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({
+      error: parsed.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; "),
+      code: "INVALID_SFX_REQUEST",
+    });
+    return;
+  }
+  try {
+    const result = synthesizeWav({
+      recipeId: parsed.data.recipe_id,
+      params: parsed.data.params,
+      seed: parsed.data.seed,
+    });
+    const specSha256 = createHash("sha256")
+      .update(canonicalSoundSpecJson(result.spec))
+      .digest("hex");
+    const wavBuf = Buffer.from(result.wav);
+    const wavSha256 = createHash("sha256").update(wavBuf).digest("hex");
+    res.json({
+      content_type: "audio/wav",
+      wav_base64: wavBuf.toString("base64"),
+      spec: result.spec,
+      spec_sha256: specSha256,
+      wav_sha256: wavSha256,
+      acoustics: result.acoustics,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "SFX synthesis failed";
+    res.status(400).json({ error: message, code: "SFX_SYNTHESIS_FAILED" });
+  }
+});
 
 // Bounded working-draft evidence only: the API has already sliced and pinned
 // the spec. This path neither uploads nor creates an Output or saved version.

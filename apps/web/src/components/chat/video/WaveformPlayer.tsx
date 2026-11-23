@@ -51,6 +51,9 @@ export function deterministicWaveform(identity: string, count = PEAK_COUNT): num
 
 function stamp(seconds: number): string {
   const safe = Number.isFinite(seconds) ? Math.max(0, seconds) : 0
+  if (safe > 0 && safe < 1) {
+    return `${Math.round(safe * 1000)} ms`
+  }
   return `${Math.floor(safe / 60)}:${String(Math.floor(safe % 60)).padStart(2, "0")}`
 }
 
@@ -257,7 +260,7 @@ export function WaveformPlayer({
             className="absolute inset-0 z-10 size-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
           />
         </div>
-        <span className="w-9 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+        <span className="min-w-12 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
           {stamp(currentTime > 0 || playing ? currentTime : duration)}
         </span>
       </div>

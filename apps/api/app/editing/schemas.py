@@ -592,6 +592,98 @@ class RemotionProjectSource(BaseModel):
         return self
 
 
+class KineticTitleProps(BaseModel):
+    """Closed, pure-JSON props for native `kinetic_title` MotionBlockObject."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    headline: str = Field(min_length=1, max_length=140)
+    eyebrow: str | None = Field(default=None, max_length=60)
+    subheadline: str | None = Field(default=None, max_length=180)
+    align: Literal["left", "center", "right"] = "left"
+    position: Literal["top", "center", "bottom", "bottom_left", "top_left"] = "bottom_left"
+    entrance_duration_s: float = Field(default=0.75, ge=0.2, le=3.5, allow_inf_nan=False)
+    exit_duration_s: float = Field(default=0.4, ge=0.0, le=2.0, allow_inf_nan=False)
+    accent_color: str = _HEX_COLOR
+    text_color: str = _HEX_COLOR
+    surface_style: Literal["transparent", "scrim", "glass_card", "light_card"] = "glass_card"
+
+    @model_validator(mode="before")
+    @classmethod
+    def _defaults(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            out = dict(data)
+            out.setdefault("accent_color", "#14B8A6")
+            out.setdefault("text_color", "#F8FAFC")
+            return out
+        return data
+
+
+class ProductShowcaseProps(BaseModel):
+    """Closed, pure-JSON props for native `product_showcase` MotionBlockObject."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    url_bar: str | None = Field(default=None, max_length=80)
+    badge: str | None = Field(default=None, max_length=48)
+    theme: Literal["dark", "light"] = "light"
+    camera_motion: Literal["subtle_push", "settle_tilt", "drift_focus", "static"] = "settle_tilt"
+    entrance_duration_s: float = Field(default=0.9, ge=0.2, le=3.5, allow_inf_nan=False)
+    zoom_scale: float = Field(default=1.05, ge=1.0, le=1.35, allow_inf_nan=False)
+    focus_x: float = Field(default=0.5, ge=0.1, le=0.9, allow_inf_nan=False)
+    focus_y: float = Field(default=0.35, ge=0.1, le=0.9, allow_inf_nan=False)
+    accent_color: str = _HEX_COLOR
+    show_backdrop: bool = True
+
+    @model_validator(mode="before")
+    @classmethod
+    def _defaults(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            out = dict(data)
+            out.setdefault("accent_color", "#0D9488")
+            return out
+        return data
+
+
+MOTION_BLOCK_PROP_MODELS: dict[str, type[BaseModel]] = {
+    "kinetic_title": KineticTitleProps,
+    "product_showcase": ProductShowcaseProps,
+}
+
+
+class MotionBlockObject(BaseModel):
+    """Path β native declarative MG component (peer of TextObject/ShapeObject).
+
+    Pure serializable JSON props + explicit pinned image resources; zero
+    executable code in CompositionVersion or video-spec.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["motion_block"]
+    object_id: str = _ID
+    block_id: Literal["kinetic_title", "product_showcase"]
+    block_version: Literal[1] = 1
+    props: dict[str, JsonValue]
+    resources: list[RemotionResource] = Field(default_factory=list, max_length=16)
+    layout: LayoutBox
+    fit: Literal["cover", "contain"] = "contain"
+    transform: Transform = Transform()
+    opacity: float = _OPACITY
+
+    @model_validator(mode="after")
+    def _validate_block_props_and_resources(self) -> MotionBlockObject:
+        model = MOTION_BLOCK_PROP_MODELS[self.block_id]
+        validated = model.model_validate(self.props)
+        self.props = validated.model_dump(mode="json")
+        paths = [r.path for r in self.resources]
+        if len(paths) != len(set(paths)):
+            raise ValueError("motion_block resource paths must be unique")
+        if self.block_id == "product_showcase" and not self.resources:
+            raise ValueError("product_showcase requires at least one pinned image resource")
+        return self
+
+
 class GeneratorObject(BaseModel):
     """可审阅的程序或模型请求，制作时据此解析固定媒体。"""
 
@@ -730,7 +822,7 @@ class SpeechObject(BaseModel):
 
 Object = Annotated[
     TextObject | ShapeObject | ImageObject | WebObject | VideoObject
-    | GeneratorObject | AudioObject | SpeechObject,
+    | MotionBlockObject | GeneratorObject | AudioObject | SpeechObject,
     Field(discriminator="kind"),
 ]
 

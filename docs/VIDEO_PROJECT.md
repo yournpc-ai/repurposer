@@ -2,7 +2,7 @@
 
 > Agent 的模型可见工具、执行合同与验收状态见 [Agent Editor 主合同](tasks/new-agent.md)。本页记录作品结构、渲染边界及后续专业编辑目标。
 
-> 本页负责作品模型、可编辑边界与 video-spec。网页宣传片和 MG 是其中的具体消费者。ASR 选段、固定视口、字幕和配音沿用 Composition 对象，完整 Scrub Inspector 待验。当前阶段与验收见 [I8](tasks/i8.md)。旧 Film/Clip 内容沿用既定数据边界，定向清理须有明确授权，schema 变更走 Alembic。
+> 本页负责作品模型、可编辑边界与 video-spec。网页宣传片和 MG 是其中的具体消费者。ASR 选段、固定视口、字幕和配音沿用 Composition 对象，完整 Scrub Inspector 待验。当前主线施工与验收见 [OxValue MG + Sound 合同](tasks/oxvalue-mg-sound.md)（基础剪辑已封板，见 [I8](tasks/i8.md)）。旧 Film/Clip 内容沿用既定数据边界，定向清理须有明确授权，schema 变更走 Alembic。
 
 ## 0. 核心决策
 
@@ -261,7 +261,8 @@ Object 负责内容、布局和表现，Clip 负责时间与轨道。
 - WebObject：网页快照/视图引用及取景、相机所需的结构化参数。
 - VideoObject：真实视频快照的画面与原声共用 Clip 源窗，携带 layout/fit/transform/opacity/gain/muted；背景等静音层不复制第二条原声 Clip。
 - SpeechObject：`text` 是旁白原文唯一来源，另存声音绑定与合成 provenance；Scene 和分镜表引用该文本，制作后才解析成可渲染音频。
-- GeneratorObject：保留程序或模型媒体生产的可审阅来源及参数，准备后解析为图片/视频参与合成；当前已接受控 `draw-2d`、隔离部署下的 `remotion-project` 与 `image-generation` 单图请求。生命周期见 §4.3.2/§8.1.1。
+- MotionBlockObject（Path β 原生声明式组件）：第一方审计的参数化 MG 组件实例（`kind: "motion_block"`），携带 `object_id`、`block_id`、`block_version`、强类型闭集 `props`、固定图片 `resources`（复用 `RemotionResource`）、`layout`/`fit`/`transform`/`opacity`。与 `TextObject`/`ShapeObject` 同级，直接编译进 `video-spec`（仅声明式 JSON，零可执行代码上线），由共享 `@repurposer/video-remotion` 在服务端与 Web `@remotion/player` 同构渲染，原生支持透明叠层与 Linux 生产零沙箱部署；纯可序列化结构同时为后续 Skill/VideoTemplate 槽位化（制作同款）打底。
+- GeneratorObject：专用于需要上游烘焙或模型生成固定媒体的对象，保留可审阅来源及参数，准备后解析为图片/视频参与合成；当前承载受控 `draw-2d`、隔离部署下的 `remotion-project`（需生产 Linux 沙箱建成后开放）与 `image-generation` 单图请求。生命周期见 §4.3.2/§8.1.1。
 
 每个 Object 有稳定 `object_id` 和类型 `kind`。视觉属性明确 layout box、transform origin、相对 position/scale/rotation、opacity、style/effects；音频使用 gain/pan/effects，不强套视觉 transform。素材绑定由 Clip.source 与版本 sources 共同确定；WebObject 的 view/元素/取景选择必须属于该快照，不另存会独立漂移的素材身份。
 
@@ -279,7 +280,8 @@ Scene 只组织叙事范围，不限定为“文字幕/网页幕/视频幕”，
 | 实拍、已固定的生成/程序视频 | VideoObject + 源快照/源时间窗 | 作为媒体使用时共享布局、裁切、时间和外部动画；保留可再生产来源的创作对象另见 GeneratorObject，不承诺直接编辑烘焙视频内部元素 |
 | 上传图片、已固定的生成图片、装饰图 | ImageObject + 源快照 | 作为媒体使用时来源不决定新 Object 类型 |
 | 可编辑图形 MG | 原生图形/路径与 Animation | 按代表场景添加最小受支持图元，参数可编辑；不预建完整矢量设计系统 |
-| 受控 2D/3D 程序画面、模型生产画面 | GeneratorObject → 固定媒体 | 保留程序/请求与参数，显式生产后参与合成；内部修改需改来源并重新生产。当前实际 producer 为 draw-2d 的受限 2D 绘图命令、隔离部署下的 remotion-project 多文件 TSX 与 image-generation 的 MiniMax image-01 单图请求 |
+| 高频参数化 MG 组件（Path β） | `MotionBlockObject`（`kind: "motion_block"`） | 第一方审计组件直接随共享 `@repurposer/video-remotion` 同构渲染，天然支持透明叠层、单实例参数续改与 Web 实时预览；零沙箱依赖。首批原创实现不得冒充已集成 21st.dev 源码 |
+| 受控 2D/3D 程序画面、模型生产画面 | GeneratorObject → 固定媒体 | 保留程序/请求与参数，显式生产后参与合成；内部修改需改来源并重新生产。当前实际 producer 为 draw-2d 的受限 2D 绘图命令、隔离部署下的 remotion-project 多文件 TSX（现役仅 macOS Seatbelt，待 Linux 沙箱）与 image-generation 的 MiniMax image-01 单图请求 |
 
 **当前能力边界**：原生 Object 已接 text/image/web/video/audio/shape；ShapeObject 支持 rect/ellipse/path 几何，MG Director 当前按需创作 rect/ellipse，多个同幕图元分轨。VideoObject 支持真实视频源窗、布局/fit、外部 transform/opacity、原声 gain/muted，已与原生标题/字幕、动态背景和音乐经过同一 CompositionVersion 合成及 Chat 局部修订。GeneratorObject 已接 `draw-2d`：Agent 编写 `render(ctx)`，受限运行为固定 MP4/PNG，最终按普通 video 参与合成；已接 `remotion-project`：Agent 编写受控多文件 TSX，在部署同时开启 API 与真实隔离 runner 时烘焙为固定 MP4/PNG；也已接 `image-generation`：保存 MiniMax `image-01` 的 16:9 单图请求，经原生图片工具授权后生成并按普通 image 参与合成。局部换源窗当前保持输出时长。Speech 已接首个 MG 固定切点旁白消费者；已接首个固定媒体 split/trim、全画幅不透明媒体 crossfade 和冻结音乐节拍吸附消费者；通用 target × move/trim/delete/time_map × ripple/source policy 已落码，原生/Web 输出时间映射与固定 Audio 显式 1× 裁取复用同一写口，Speech、Generator、VideoObject 的时长映射失败闭，验证状态见施工合同。其他模型、生成视频、通用媒体 rate 和自由 NLE 仍按施工合同分批实现。“自由 MG”不承诺任意 2D/3D 画面。
 
@@ -292,11 +294,17 @@ Scene 只组织叙事范围，不限定为“文字幕/网页幕/视频幕”，
 
 视觉布局与时间编辑继续落到 Clip/Object；已有原声关联、字幕对齐等上游事实保留来源。原生对象可由后续 Inspector 编辑；生成或程序媒体只能编辑对外暴露的参数及布局/裁切等外部属性，不虚构内部元素可编辑性。
 
-### 4.3.2 GeneratorObject：可再次生产的画面（draw-2d / remotion-project / image-generation 已接）
+### 4.3.2 双层视觉创作：`MotionBlockObject`（现役主力）与 `GeneratorObject`（受控烘焙）
 
-原生 TextObject 的文字和属性可作为独立编辑目标。简单动效优先组合原生 Object 与 Animation。复杂画面优先复用许可允许且适合当前镜头的 Motion Block，已有组件无法表达时，Agent 可编写受控组件。需要程序画面时，实例作为 `GeneratorObject` 随作品版本保存，沿用同一 Clip 和对象身份。外层位置和时间、组件声明的参数、需要改源码再烘焙的内部细节，是三个不同的编辑范围。导入一段成片只保留固定媒体可编辑的范围。
+专业 MG 视觉采取**双层并存架构**，不把系统锁死为固定模板，也不为高频组件强行承担不可部署的沙箱与不透明烘焙成本：
 
-受控 React/TSX/CSS 是专业视觉创作的既定方向。自有薄渲染核心 C 保留为候选实现，在同一浏览器场景直接合成多个视频与 Motion Blocks。后续修改仍须定位版本中的实例、参数、层序和固定素材，视觉求值由作品帧驱动。21st.dev Video Blocks 的具名组件与参数、OpenMotion 的可寻址元素与时间定位可作设计参考。HyperFrames 仅作研究参考。现役写口、video-spec 和 Generator 隔离继续生效。候选的证据与替换条件见 [Rendering §7](RENDERING.md#7-渲染器替换)。
+1. **Layer 1 · 原生参数化 `MotionBlockObject`（Path β，现役主力）**：
+   - 高频高完成度 MG（动态排版标题、产品 UI 展示卡、数据指标卡等）作为第一方审计组件进入共享 `@repurposer/video-remotion`，通过 `MotionBlockObject` 随 `CompositionVersion` 保存。
+   - **统一二级分类 Catalog 元数据**（0 新 SQL 表，静态注册表承载）：每个 Block 声明 `domain`（`text` | `product` | `visuals`）、`category`（如 `titles_and_phrases`、`interfaces`、`charts_and_numbers`、`agents_and_flows`、`endings_and_cta`）、`name`、`desc`、`use_for`、`avoid`、`supports_alpha`、`suggested_duration_s`、`required_slots` / `optional_slots`。**这些发现与决策元数据绝不进入 `content_digest` 或缓存哈希**，优化文案不破坏历史缓存。
+   - 外部 21st.dev Video Blocks 仅作设计范式、动效曲线与分类体系参考；实际引入外部组件源码须逐件核对商业授权与依赖合规，不得将第一方原创组件冒充已集成 21st 源码。
+2. **Layer 2 · 可再生产 `GeneratorObject`（`draw-2d` / `image-generation` / 未来 Linux 沙箱下的 `remotion-project`）**：
+   - 复杂自由图形与模型生成画面仍使用 `GeneratorObject` 保留来源与参数，经上游固定为媒体参与合成。外层位置时间、已暴露参数、修改源码再烘焙属于三个独立编辑范围。
+   - 自有薄渲染核心 C 保留研究结论，暂不替换生产 Renderer；现役写口、`video-spec` 和 Generator 隔离继续生效。候选证据与替换条件见 [Rendering §7](RENDERING.md#7-渲染器替换)。
 
 `draw-2d` 已冻结以下最小语义；后续消费者按实际需求扩展，不预建函数注册平台：
 

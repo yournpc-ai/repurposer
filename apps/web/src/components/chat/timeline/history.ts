@@ -85,7 +85,12 @@ export function nativeJobReceipt(intent: unknown): NativeJobReceipt | undefined 
   if (typeof status !== "string") return
   return {
     callId: data.native_call_id,
-    operation: typeof data.operation === "string" ? data.operation : undefined,
+    operation:
+      typeof data.operation === "string"
+        ? data.operation
+        : typeof data.tool === "string"
+          ? data.tool
+          : undefined,
     status,
     role: typeof result?.role === "string" ? result.role : undefined,
     error: typeof result?.error === "string" ? result.error : undefined,

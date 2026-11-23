@@ -11,6 +11,7 @@
   "dependencies": {
     "@remotion/bundler": "^4.0.0",
     "@remotion/renderer": "^4.0.0",
+    "@repurposer/sound-engine": "workspace:*",
     "@repurposer/video-remotion": "workspace:*",
     "@repurposer/video-spec": "workspace:*",
     "css-loader": "^7.1.4",
