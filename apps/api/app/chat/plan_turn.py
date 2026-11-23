@@ -1246,8 +1246,7 @@ async def run_plan_turn(
     from app.pipeline.assets import urls_in_text
     turn.infer_kwargs["pending_question"] = None
 
-    # Compact project replies keep only the latest user dialogue row (the
-    # selected label). Carry its resolved request on the application-context wire.
+    # Carry the resolved request alongside the user's actual dock selection.
     answered_this_opening = turn_id is not None and authorized_media is None and any(
         m.turn_id == turn_id and m.question and m.answer and not (m.intent or {}).get("media_permission")
         for m in recent or ()

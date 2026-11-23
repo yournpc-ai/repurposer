@@ -1010,7 +1010,12 @@ async def test_final_video_provider_request_clears_pending_and_historical_media(
 
     result = await agent.call_loop(
         execute, refresh_context=lambda: _immediate(snapshot), restore_context=restore,
-        dialogue=[{"role": "user", "content": "Second title"}],
+        dialogue=[
+            {"role": "user", "content": "old context" * 1000},
+            {"role": "user", "content": "Keep the original audio."},
+            {"role": "assistant", "content": "Which of the two titles should I split?"},
+            {"role": "user", "content": "Second title"},
+        ],
         round_assembler=assemble, on_delta=(lambda _text: _immediate(None)) if streaming else None,
     )
     assert result.tool_name == "answer"
@@ -1019,7 +1024,11 @@ async def test_final_video_provider_request_clears_pending_and_historical_media(
     first_text = json.dumps(first["messages"], ensure_ascii=False)
     second_text = json.dumps(second["messages"], ensure_ascii=False)
     for wire in (first, second):
-        assert any(m["content"] == "Second title" for m in wire["messages"])
+        speech = [m for m in wire["messages"] if m.get("content") in (
+            "Keep the original audio.", "Which of the two titles should I split?", "Second title",
+        )]
+        assert [m["role"] for m in speech] == ["user", "assistant", "user"]
+        assert "old context" not in str(wire["messages"])
         assert any("clarified_request" in str(m["content"]) and
                    "Split the selected clip at one second." in str(m["content"])
                    for m in wire["messages"])

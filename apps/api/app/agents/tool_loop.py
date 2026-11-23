@@ -1095,7 +1095,16 @@ class ToolLoopAgent:
                 feedback = [{**message, "name": "tool_feedback"} for message in feedback]
             round_dialogue = dialogue
             if assembled.project_reply and dialogue is not None:
-                round_dialogue = next(([m] for m in reversed(dialogue) if m["role"] == "user"), [])
+                # Keep recent speech in its original roles. Always include the
+                # current user row in full, even when it alone exceeds the window.
+                end = next((i + 1 for i in reversed(range(len(dialogue)))
+                            if dialogue[i]["role"] == "user"), 0)
+                start = max(0, end - 1)
+                remaining = 8000
+                while start and len(dialogue[start - 1]["content"]) <= remaining:
+                    start -= 1
+                    remaining -= len(dialogue[start]["content"])
+                round_dialogue = dialogue[start:end]
             opening_index = 1 + len(history_messages)
             if dialogue is None:
                 messages = [base_messages[0], *history_messages, *opening, *tail, *feedback, *shared]

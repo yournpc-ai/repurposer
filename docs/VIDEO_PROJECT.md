@@ -671,7 +671,7 @@ Chat 内组件通过结构化 block 引用 `composition_id + composition_version
 - Clip/ObjectInspector：最小文字字号 Scrub 已接；完整 Inspector 后续扩展；
 
 
-[Scrub Input](https://uiarc.dev/components/scrub-input) 是 Chat 内的对象属性输入，支持位置、字号、旋转和透明度等值；它不要求时间线编辑器。完整 Scrub Inspector 后置；当前最小切片只编辑当前版本的一个 TextObject 字号。P10 形态是 **Chat 内局部编辑窗口**：默认编辑一个明确的 Clip/Object，或由 Output region 的帧时间与归一化空间事实解算当前候选；预览保持影片宽高比与准确位置，可显示场景背景或干净背景。连续调整与 `onValueCommit` 都只更新本地草稿——用户点击「应用」才提交当前目标所需的一批直接 Op，携带 base_ref 经 `apply_composition_edits` 原子产生一个新版本；取消与冲突处理保留。不为 mousemove/commit 调 LLM、建版本或触发付费渲染。region 不是万能像素编辑能力，烘焙内容仍按 Generator 边界处理。制作前整片预览永不提供，正式制作后的 Output 播放不受影响。
+[Scrub Input](https://uiarc.dev/components/scrub-input) 是 Chat 内的对象属性输入，支持位置、字号、旋转和透明度等值；它不要求时间线编辑器。完整 Scrub Inspector 后置；当前最小切片只编辑当前版本的一个 TextObject 字号。P10 形态是 **Chat 内局部编辑窗口**：默认编辑一个明确的 Clip/Object，或由 Output region 的帧时间与归一化空间事实解算当前候选；预览保持影片宽高比与准确位置，可显示场景背景或干净背景。连续调整与 `onValueCommit` 都只更新本地草稿——用户点击「应用」才提交当前目标所需的一批直接 Op，携带 base_ref 经 `apply_composition_edits` 原子产生一个新版本；取消与冲突处理保留。不为 mousemove/commit 调 LLM、建版本或触发付费渲染。region 不是万能像素编辑能力，烘焙内容仍按 Generator 边界处理。Scrub 提供局部编辑视图。Chat 的 preview_range 在时长上限内可按需播放整个短片；正式 Output 仍固定于导出时的版本。
 
 Inspector 的内容/来源、位置/尺寸、文字样式、Clip 时间与动画分组均读同一版本 DTO。局部 Apply 提交 base_ref 与直接 Op 批；只有整体替换才提交完整所属 Clip/Track。当前切片支持 Escape/取消、键盘步进、失败回滚与 base 冲突；双击复位和更多属性归完整 Inspector。旧消息卡片钉旧版本，只读历史不追随 current；继续修改旧版须走 §9.1 的显式选择与当前 head 条件提交，不静默用旧卡覆盖新版。
 

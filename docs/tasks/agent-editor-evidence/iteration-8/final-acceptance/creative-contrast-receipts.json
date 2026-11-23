@@ -1,0 +1,445 @@
+{
+  "base_commit": "19eafa88157b56dd1f3c23cdc2370915ad77b152",
+  "model": "MiniMax-M3.1-Flash",
+  "same_v3_start": "4682cc68-125e-4ee0-9471-45358b27f905",
+  "scenarios": {
+    "B": {
+      "user": "让主视频正常结束，最后品牌标题在黑色背景上再停留半秒，其他不变。",
+      "opening": "1817f041-d953-4874-9b16-863621404d82",
+      "terminal": "turn.completed",
+      "message": "961345c0-6924-4a4c-8537-caa031574503",
+      "reply": "已改好并预览了结尾 5.6–6.5 秒。\n\n- 主视频 0–6.0 秒完整播放到素材自然结尾（源视频本身正好 6 秒，无截断）。\n- 品牌标题字幕 \"STUDIO LAMP\" 延长 0.5 秒，现在 6.0–6.5 秒单独停留在黑色背景上（预览帧确认：6.0 / 6.23 / 6.47 秒处画面为纯黑，字幕在底部）。\n- 其余未动：2–4 秒右上角产品图片（左移 40px 后）、画面构图、字幕字体位置、原声音轨均保持原样，音频非静音、无削波。\n- 已保存为版本 4。\n\n注意：聊天里已交付的 MP4 仍是上一版（版本 3，6.0 秒）。如果要用这个 6.5 秒版本替换正式成片，我可以再导出一次（会按导出规则计费）。",
+      "sse_sha256": "04ee85ff9564cbe696e9349a0d0c579372a704e9950c55d9ae8f4c8885d18c56",
+      "trace_sha256": "c08b830e1b2449995166cfbb6adf60670a1cee8cd471c8c7fccc51701a6b5eac",
+      "request_columns": [
+        "model_call",
+        "tools",
+        "input_tokens",
+        "output_tokens"
+      ],
+      "requests": [
+        [
+          "913879b4-77d7-446f-a14a-23aa82ab368f",
+          [
+            "inspect_timeline"
+          ],
+          8804,
+          33
+        ],
+        [
+          "deb4d066-c964-4846-b3fa-b6fdffda7c94",
+          [
+            "get_asset"
+          ],
+          9781,
+          145
+        ],
+        [
+          "fb4d540f-db4a-4b4d-8af1-a15dd41af667",
+          [
+            "trim_clip"
+          ],
+          10000,
+          827
+        ],
+        [
+          "b859c3c4-7bed-4369-846e-433b96193771",
+          [
+            "extend_still"
+          ],
+          10879,
+          112
+        ],
+        [
+          "393dd938-0205-4f01-9744-c8fefa28ca24",
+          [
+            "inspect_timeline"
+          ],
+          9658,
+          109
+        ],
+        [
+          "f41356b7-3c72-42a7-aa27-1f413f4c580f",
+          [
+            "preview_range"
+          ],
+          10722,
+          154
+        ],
+        [
+          "bad65c36-5386-41a2-95e8-8ba0c4ea00d9",
+          [],
+          13028,
+          295
+        ]
+      ],
+      "received_media_sha256": {
+        "f6855d0970d9e3fa23ad71424a01f8fc37651be4f3e209a8c96b57781cbf7bd6": [
+          "image_url",
+          46627
+        ]
+      },
+      "preview_calls": 1,
+      "estimated_usd": 0.0119358,
+      "two_history_reads_match_sse": true
+    },
+    "C": {
+      "user": "最后一帧产品画面再停留半秒，不要变成黑底标题。",
+      "opening": "023c5603-25ac-4db0-be69-f94384b07ac2",
+      "terminal": "turn.completed",
+      "message": "c2c7a118-34a3-474b-ba2d-289b8494dde5",
+      "reply": "已达到本轮处理上限，后续工作未完成。\n已保存：插入图片（第 4 版）。\n已保存：平移画面（第 5 版）。\n已保存：插入图片（第 6 版）。\n已保存：插入图片（第 7 版）。\n已保存：插入图片（第 8 版）。\n已保存：图片延长了 0.5 秒，这次修改没有延长主画面（第 9 版）。\n之前交付的成片仍可从原消息打开。\n可以从当前稿继续修改。",
+      "sse_sha256": "f09370bab9ac330921b354f4943836709c4ced797cfe4230266437883224a0b2",
+      "trace_sha256": "7de05e6235441c36a121378454594d2273d21aad18d79b6ef2869fe16aa2d9ef",
+      "request_columns": [
+        "model_call",
+        "tools",
+        "input_tokens",
+        "output_tokens"
+      ],
+      "requests": [
+        [
+          "8c63ab95-cf3f-43f6-984f-3c290443c254",
+          [
+            "inspect_timeline"
+          ],
+          8799,
+          120
+        ],
+        [
+          "40c72c00-8fdb-41de-8371-a77d6c086b6d",
+          [
+            "prepare_video_materials"
+          ],
+          9863,
+          473
+        ],
+        [
+          "80b2a4b3-23b6-48ef-b0ac-594d0843b857",
+          [
+            "prepare_video_materials"
+          ],
+          10436,
+          179
+        ],
+        [
+          "6a5c96b1-4433-4a14-9b6a-cda3cfdc6d44",
+          [
+            "preview_range"
+          ],
+          12902,
+          369
+        ],
+        [
+          "3ef0e30c-3d9a-4050-835e-a5810cf1e485",
+          [
+            "extend_still"
+          ],
+          14567,
+          487
+        ],
+        [
+          "0d98c135-b9b7-45b5-b472-397a515b2cc2",
+          [
+            "insert_visual"
+          ],
+          15125,
+          536
+        ],
+        [
+          "6243660d-cd78-46d6-9e51-91a53113aa6d",
+          [
+            "inspect_timeline"
+          ],
+          11121,
+          250
+        ],
+        [
+          "e274308f-cad5-43cf-bf3d-2ef2308df802",
+          [
+            "preview_range"
+          ],
+          12640,
+          1060
+        ],
+        [
+          "dd05b266-72ab-41ce-82b6-54710726ba91",
+          [
+            "translate"
+          ],
+          18467,
+          881
+        ],
+        [
+          "1bd213b5-834b-489e-92f5-8a20160df5d1",
+          [
+            "insert_visual"
+          ],
+          11694,
+          99
+        ],
+        [
+          "e5923b5a-8a96-44c8-89d1-132653276500",
+          [
+            "inspect_timeline"
+          ],
+          11054,
+          401
+        ],
+        [
+          "d4c69a3b-7b04-4ef1-8a02-1ffa18e1abc8",
+          [
+            "preview_range"
+          ],
+          13056,
+          919
+        ],
+        [
+          "8d5d8c4b-11ae-4846-91f1-c690a0f837f2",
+          [
+            "insert_visual"
+          ],
+          17046,
+          1338
+        ],
+        [
+          "e2609c7f-5213-4438-9b62-c87cf8ca1053",
+          [
+            "inspect_timeline"
+          ],
+          12500,
+          262
+        ],
+        [
+          "9748ffef-5270-4092-a3b9-0615dd79e868",
+          [
+            "preview_range"
+          ],
+          14685,
+          565
+        ],
+        [
+          "78c5acd2-1f41-49eb-8076-11a496500b3e",
+          [
+            "insert_visual"
+          ],
+          18807,
+          1292
+        ],
+        [
+          "c7d7d4b5-f52c-4db2-8913-65ca364edd2f",
+          [
+            "inspect_timeline"
+          ],
+          12774,
+          841
+        ],
+        [
+          "3dfa9f86-2295-49ed-9c52-20908cb55710",
+          [
+            "preview_range"
+          ],
+          15860,
+          613
+        ],
+        [
+          "775fa8e6-78ec-4b5f-9c1f-eb6913431bd0",
+          [
+            "extend_still"
+          ],
+          18998,
+          1931
+        ],
+        [
+          "6a059c69-f946-418f-a2e3-e294149a1cec",
+          [
+            "inspect_timeline"
+          ],
+          13380,
+          192
+        ]
+      ],
+      "received_media_sha256": {
+        "2ef84595fc05779912027ab645204e437cfca2fbde04f2241b9c1444139d465b": [
+          "video_url",
+          649241
+        ],
+        "29acefb937f2a1a453095fc5d82a7d34b55d6bccda500658e843d90e1308d9b9": [
+          "video_url",
+          318062
+        ],
+        "9547591700be057363d85e037922365e662ffc5d48c2e4851793b728e6227704": [
+          "image_url",
+          95742
+        ],
+        "60be6fe42797a288e86ff6234470413475f4ac851bb6258289484e74d19dbc52": [
+          "video_url",
+          314709
+        ],
+        "00f6602cbcde1a9ac0eb4b4bb87ee0dfadbedc703deaed7d4c34bf34050640ce": [
+          "image_url",
+          83604
+        ],
+        "a0c377c984eb74ec4c00f27ec3cfcd695e641f0b2fcde6e64cd80a8344c6f84d": [
+          "video_url",
+          310794
+        ],
+        "0a6face28c44c7277b1f9d4076e889c9b7ce54523d1d6308d746e4ace6bd84a6": [
+          "image_url",
+          98404
+        ],
+        "9296ab749cb114d7182c105b5f72937cbda706b7a07fecd9c4343cf93489ae9d": [
+          "image_url",
+          97236
+        ]
+      },
+      "preview_calls": 5,
+      "estimated_usd": 0.0487509,
+      "two_history_reads_match_sse": true
+    },
+    "D": {
+      "user": "这个黑底品牌结尾可以，再留半秒。",
+      "opening": "24245ff9-2e8d-43f2-9875-a2d77058f567",
+      "terminal": "turn.completed",
+      "message": "d484b49e-e3f9-4f58-b643-6281f55ea8d7",
+      "reply": "黑底品牌结尾又延长了 0.5 秒，并已播放结尾 5.8–7.0 秒。\n\n- 改动：标题片段 0–7 秒的片段 从 6.5 秒延长到 7.0 秒，即黑底上单独停留 6.0–7.0 秒（共 1 秒）。\n- 预览确认：6.0 / 6.47 / 6.97 秒三帧画面均为纯黑，只有底部 \"STUDIO LAMP\" 字幕在位（5.8–6.0 秒仍是原彩条画面 + 字幕）。\n- 其余未动：主视频 0–6.0 秒、2–4 秒右上角产品图片（左移后）、字幕位置与字体、原声音轨均保持不变；音频非静音、无削波。\n- 已保存为版本 5（总时长 7.0 秒）。\n\n聊天里已交付的 MP4 仍是 6.0 秒的旧版；如需换成这个 7.0 秒版本正式导出，告诉我即可（会按导出规则计费）。",
+      "sse_sha256": "f3adb6c58ba9eec077aeeeaa88b669471fbdc8e12bffd0df02a5829b132edd49",
+      "trace_sha256": "c08b830e1b2449995166cfbb6adf60670a1cee8cd471c8c7fccc51701a6b5eac",
+      "request_columns": [
+        "model_call",
+        "tools",
+        "input_tokens",
+        "output_tokens"
+      ],
+      "requests": [
+        [
+          "6274a9b7-3ce3-42dc-a45e-5258e1168bf0",
+          [
+            "inspect_timeline"
+          ],
+          8920,
+          84
+        ],
+        [
+          "390ee064-dca5-49fb-a4a9-d738f4314166",
+          [
+            "extend_still"
+          ],
+          9959,
+          106
+        ],
+        [
+          "5d519ce6-9195-4260-8afd-22347f1dd14c",
+          [
+            "preview_range"
+          ],
+          9526,
+          52
+        ],
+        [
+          "d97a5c2f-3cda-4904-80bf-f0d7c07b8efd",
+          [],
+          12155,
+          226
+        ]
+      ],
+      "received_media_sha256": {
+        "5b691aaace30c983343428bdeca68b3a17da8de542452d0dbbf9310cff9cf465": [
+          "video_url",
+          53597
+        ],
+        "38070e9f2b25ce15fb8ec8755fa0469573eb548f7d206ba1463fe699e2f4a842": [
+          "image_url",
+          46984
+        ]
+      },
+      "preview_calls": 1,
+      "estimated_usd": 0.0063648,
+      "two_history_reads_match_sse": true
+    }
+  },
+  "database_versions": {
+    "i8_creative": [
+      {
+        "version": 3,
+        "content_digest": "55c9391860bf66cd7885211ce546717d01649d95a1b65d61cb3c4af9013002df",
+        "scene_end": "540000",
+        "main_end": "540000",
+        "caption_end": "540000"
+      },
+      {
+        "version": 4,
+        "content_digest": "d8a4bd9c8060434a651cfb0d3ff511b2ae5c1196a988f3a5d9bc2d5775dba0be",
+        "scene_end": "585000",
+        "main_end": "540000",
+        "caption_end": "585000"
+      },
+      {
+        "version": 5,
+        "content_digest": "a8404f211ded848078fcfc11688d159f4b1b7384aad33bd8f990b6ba6b6bdc7c",
+        "scene_end": "630000",
+        "main_end": "540000",
+        "caption_end": "630000"
+      }
+    ],
+    "i8_creative_c": [
+      {
+        "version": 3,
+        "content_digest": "55c9391860bf66cd7885211ce546717d01649d95a1b65d61cb3c4af9013002df",
+        "scene_end": "540000",
+        "main_end": "540000",
+        "caption_end": "540000"
+      },
+      {
+        "version": 4,
+        "content_digest": "ae82869f84b2ada6f18752463df396f4fac8be5abec9f7d829d25901bf2b081f",
+        "scene_end": "540000",
+        "main_end": "540000",
+        "caption_end": "540000"
+      },
+      {
+        "version": 5,
+        "content_digest": "b1673b69762109c392ad58d6450d4236bc66135b62cf88a6234888bba3acc40f",
+        "scene_end": "540000",
+        "main_end": "540000",
+        "caption_end": "540000"
+      },
+      {
+        "version": 6,
+        "content_digest": "06307e2d51a29d96f0d76571f005b7f635aa35bf21d7c9e162d28a0e86fb184a",
+        "scene_end": "540000",
+        "main_end": "540000",
+        "caption_end": "540000"
+      },
+      {
+        "version": 7,
+        "content_digest": "5b00a51f15dbefafcef8b26586720bd3f3b58209135c8f5dd292fa09cc60c320",
+        "scene_end": "540000",
+        "main_end": "540000",
+        "caption_end": "540000"
+      },
+      {
+        "version": 8,
+        "content_digest": "7b6808a8b6593e70dd435e24d2e8fb93c6cead564eb0a428f121d082ee9364aa",
+        "scene_end": "540000",
+        "main_end": "540000",
+        "caption_end": "540000"
+      },
+      {
+        "version": 9,
+        "content_digest": "1d728730f858102523223ec97a486bd9851087960391bf391139d8936af432ac",
+        "scene_end": "585000",
+        "main_end": "540000",
+        "caption_end": "540000"
+      }
+    ]
+  },
+  "rows_matched_v3_baseline": [
+    "export_jobs",
+    "media_jobs",
+    "outputs",
+    "credit_transactions",
+    "wallets"
+  ],
+  "old_output_sha256": "2b642ac8864dea3c537d34d1bfa15c50c7faae8b8ca07666cdf4e6d8229308fd"
+}
