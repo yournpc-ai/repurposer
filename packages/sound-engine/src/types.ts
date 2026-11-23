@@ -1,5 +1,5 @@
 export const SOUND_ENGINE_NAME = "repurposer-sound-engine" as const;
-export const SOUND_ENGINE_VERSION = 1 as const;
+export const SOUND_ENGINE_VERSION = 2 as const;
 export const SAMPLE_RATE = 48000 as const;
 export const CHANNELS = 2 as const;
 
@@ -11,6 +11,11 @@ export type SoundCategory =
   | "riser"
   | "stinger"
   | "transition"
+  | "drop"
+  | "title"
+  | "accent"
+  | "ambience"
+  | "tension"
   | "tap"
   | "select"
   | "toggle"
@@ -45,18 +50,26 @@ export interface SoundRecipeCatalogEntry extends CatalogMetadataHeader<SoundDoma
   params: Readonly<Record<string, SoundParamSpec>>;
 }
 
-export type FilterKind = "lowpass" | "highpass" | "bandpass";
+export type FilterKind = "lowpass" | "highpass" | "bandpass" | "peaking" | "notch";
 
 export interface FilterConfig {
   kind: FilterKind;
   freqStart: number;
   freqEnd?: number;
   q: number;
+  curve?: number;
+  gainDb?: number; // peaking EQ
 }
 
 export interface EnvelopeConfig {
   attackMs: number;
+  riseMs?: number;
+  holdMs?: number;
   decayMs?: number;
+  attackCurve?: number;
+  riseCurve?: number;
+  decayCurve?: number;
+  releaseCurve?: number;
   sustain?: number;
   releaseMs?: number;
   /** Optional symmetric or asymmetric bell curve exponent (e.g. whoosh) */
@@ -72,7 +85,10 @@ export interface PanConfig {
 
 export interface OscillatorLayer {
   kind: "oscillator";
-  waveform: "sine" | "triangle";
+  waveform: "sine" | "triangle" | "sawtooth" | "square";
+  voices?: number;
+  detune?: number; // cents from center to outermost voice
+  curve?: number;
   gain: number;
   startMs?: number;
   durationMs?: number;
@@ -87,6 +103,7 @@ export interface OscillatorLayer {
 
 export interface NoiseLayer {
   kind: "noise";
+  color?: "white" | "pink" | "brown";
   gain: number;
   startMs?: number;
   durationMs?: number;
@@ -110,6 +127,10 @@ export interface SoundGraph {
     amount: number; // 0..1
     taps: readonly ReflectionTap[];
   };
+  reverb?: { predelayMs: number; decaySec: number; dampHz: number; mix: number };
+  width?: number; // M/S side gain, unity preserves the stereo image
+  highpass?: number; // Hz, defaults to 24
+  lowpass?: number; // Hz
   tailFadeMs?: number;
 }
 
@@ -136,6 +157,7 @@ export interface AcousticMetrics {
   peak_offset_ms: number;
   peak_dbfs: number;
   rms_dbfs: number;
+  lufs: number;
   spectral_centroid_hz: number;
   waveform_peaks: number[];
 }

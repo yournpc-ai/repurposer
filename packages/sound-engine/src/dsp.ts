@@ -5,7 +5,7 @@ import {
   type EnvelopeConfig,
   type FilterConfig,
   type Layer,
-  type PanConfig,
+  type OscillatorLayer,
   type SoundGraph,
 } from "./types.js";
 
@@ -41,49 +41,72 @@ function createGaussianNoise(seed: number): () => number {
   };
 }
 
+/** Kellet's seven-state approximation and leaky integration both start from silence. */
+export function createNoise(color: "white" | "pink" | "brown", seed: number): () => number {
+  const white = createGaussianNoise(seed);
+  if (color === "white") return white;
+  if (color === "brown") {
+    let memory = 0;
+    const leak = Math.exp(-TWO_PI * 12 / SAMPLE_RATE);
+    return () => (memory = leak * memory + 0.065 * white());
+  }
+
+  // Poles and feed coefficients of the Kellet pinking filter.
+  const poles = [0.99886, 0.99332, 0.969, 0.8665, 0.55, -0.7616];
+  const feeds = [0.0555179, 0.0750759, 0.153852, 0.3104856, 0.5329522, -0.016898];
+  const memory = new Float64Array(poles.length);
+  let delayed = 0;
+  return () => {
+    const x = white();
+    let y = 0.5362 * x + delayed;
+    for (let j = 0; j < poles.length; j++) {
+      memory[j] = poles[j] * memory[j] + feeds[j] * x;
+      y += memory[j];
+    }
+    delayed = 0.115926 * x;
+    return y * 0.24;
+  };
+}
+
 class BiquadFilter {
   private z1 = 0;
   private z2 = 0;
-  private b0 = 1;
-  private b1 = 0;
-  private b2 = 0;
-  private a1 = 0;
-  private a2 = 0;
 
-  configure(kind: FilterConfig["kind"], freqHz: number, q: number): void {
-    const clampedFreq = Math.min(SAMPLE_RATE * 0.45, Math.max(20, freqHz));
-    const clampedQ = Math.max(0.2, Math.min(20, q));
-    const w0 = (TWO_PI * clampedFreq) / SAMPLE_RATE;
-    const cosW0 = Math.cos(w0);
-    const alpha = Math.sin(w0) / (2 * clampedQ);
+  constructor(
+    private b0 = 1, private b1 = 0, private b2 = 0,
+    private a1 = 0, private a2 = 0,
+  ) {}
 
-    let b0: number;
-    let b1: number;
-    let b2: number;
-    const a0 = 1 + alpha;
-    const a1 = -2 * cosW0;
-    const a2 = 1 - alpha;
-
-    if (kind === "lowpass") {
-      b0 = (1 - cosW0) / 2;
-      b1 = 1 - cosW0;
-      b2 = (1 - cosW0) / 2;
-    } else if (kind === "highpass") {
-      b0 = (1 + cosW0) / 2;
-      b1 = -(1 + cosW0);
-      b2 = (1 + cosW0) / 2;
-    } else {
-      // Constant-0-dB-peak bandpass (Audio EQ Cookbook)
-      b0 = alpha;
-      b1 = 0;
-      b2 = -alpha;
+  configure(kind: FilterConfig["kind"], frequency: number, q: number, gainDb = 0): void {
+    const omega = TWO_PI * Math.max(1, Math.min(SAMPLE_RATE * 0.48, frequency)) / SAMPLE_RATE;
+    const cosine = Math.cos(omega);
+    const alpha = Math.sin(omega) / (2 * Math.max(0.2, Math.min(20, q)));
+    const a = kind === "peaking" ? 10 ** (gainDb / 40) : 1;
+    const a0 = 1 + alpha / a;
+    this.a1 = -2 * cosine / a0;
+    this.a2 = (1 - alpha / a) / a0;
+    switch (kind) {
+      case "highpass":
+      case "lowpass": {
+        const sign = kind === "lowpass" ? 1 : -1;
+        this.b0 = this.b2 = (1 - sign * cosine) / (2 * a0);
+        this.b1 = sign * 2 * this.b0;
+        break;
+      }
+      case "bandpass":
+        this.b0 = alpha / a0;
+        this.b1 = 0;
+        this.b2 = -this.b0;
+        break;
+      case "notch":
+      case "peaking": {
+        const boost = kind === "peaking" ? alpha * a : 0;
+        this.b0 = (1 + boost) / a0;
+        this.b1 = this.a1;
+        this.b2 = (1 - boost) / a0;
+        break;
+      }
     }
-
-    this.b0 = b0 / a0;
-    this.b1 = b1 / a0;
-    this.b2 = b2 / a0;
-    this.a1 = a1 / a0;
-    this.a2 = a2 / a0;
   }
 
   process(x: number): number {
@@ -94,121 +117,220 @@ class BiquadFilter {
   }
 }
 
-function evalEnvelope(env: EnvelopeConfig, tSec: number, durSec: number): number {
-  if (durSec <= 0 || tSec < 0 || tSec > durSec) return 0;
-  const u = tSec / durSec;
+function evalEnvelope(env: EnvelopeConfig, t: number, duration: number): number {
+  if (t <= 0 || t >= duration) return 0;
+  const u = t / duration;
+  if (env.bellPower !== undefined) return Math.sin(Math.PI * u) ** env.bellPower;
+  const release = Math.min(1, (duration - t) / Math.max(0.4, env.releaseMs ?? 12));
+  const fade = Math.sin(Math.PI * release / 2) ** (env.releaseCurve ?? 2);
+  if (env.risePower !== undefined) return u ** env.risePower * fade;
 
-  if (env.bellPower !== undefined) {
-    return Math.pow(Math.sin(Math.PI * u), env.bellPower);
+  const attack = Math.max(0.4, env.attackMs);
+  const rise = env.riseMs ?? 0;
+  const shoulder = rise > 0 ? 0.65 : 1;
+  let level = 1;
+  if (t < attack) {
+    level = shoulder * (t / attack) ** (env.attackCurve ?? 1);
+  } else if (t < attack + rise) {
+    level = shoulder + (1 - shoulder) * ((t - attack) / rise) ** (env.riseCurve ?? 1);
+  } else {
+    const elapsed = Math.max(0, t - attack - rise - (env.holdMs ?? 0));
+    const sustain = env.sustain ?? 0;
+    level = sustain + (1 - sustain) * Math.exp(-((elapsed / Math.max(0.4, env.decayMs ?? duration)) ** (env.decayCurve ?? 1)));
   }
-  if (env.risePower !== undefined) {
-    const tailCut = durSec > 0.012 ? Math.min(1, (durSec - tSec) / 0.012) : 1;
-    const headFade = durSec > 0.015 ? Math.min(1, tSec / 0.015) : 1;
-    return Math.pow(u, env.risePower) * headFade * tailCut;
-  }
-
-  const attackSec = Math.max(0.0004, env.attackMs / 1000);
-  const attackGain = 1 - Math.exp(-tSec / attackSec);
-
-  const decaySec = Math.max(0.001, (env.decayMs ?? durSec * 1000) / 1000);
-  const sustain = env.sustain ?? 0;
-  const decayGain = sustain + (1 - sustain) * Math.exp(-tSec / decaySec);
-
-  let releaseGain = 1;
-  if (env.releaseMs && env.releaseMs > 0) {
-    const relSec = env.releaseMs / 1000;
-    const remaining = durSec - tSec;
-    if (remaining < relSec) {
-      const r = Math.max(0, remaining / relSec);
-      releaseGain = Math.sin((Math.PI / 2) * r) ** 2;
-    }
-  }
-  return attackGain * decayGain * releaseGain;
+  return level * fade;
 }
 
-function evalPan(pan: PanConfig | undefined, u: number): [number, number] {
-  const start = pan?.start ?? 0;
-  const end = pan?.end ?? start;
-  const p = Math.max(-1, Math.min(1, start + (end - start) * u));
-  // Equal-power stereo panning
-  const angle = ((p + 1) * Math.PI) / 4;
-  return [Math.cos(angle), Math.sin(angle)];
+function polyBlep(phase: number, step: number): number {
+  if (phase < step) return -((1 - phase / step) ** 2);
+  if (phase > 1 - step) return ((phase - 1) / step + 1) ** 2;
+  return 0;
+}
+
+export function oscillatorSample(wave: OscillatorLayer["waveform"], phase: number, step: number): number {
+  switch (wave) {
+    case "sine": return Math.sin(TWO_PI * phase);
+    case "triangle": return 1 - 4 * Math.abs(phase - 0.5);
+    case "sawtooth": return 2 * phase - 1 - polyBlep(phase, step);
+    case "square":
+      return (phase < 0.5 ? 1 : -1) + polyBlep(phase, step) - polyBlep((phase + 0.5) % 1, step);
+  }
 }
 
 function renderLayer(
-  layer: Layer,
-  totalSamples: number,
-  left: Float32Array,
-  right: Float32Array,
-  layerSeed: number,
+  layer: Layer, left: Float32Array, right: Float32Array, seed: number,
 ): void {
-  const startSample = Math.max(0, Math.round(((layer.startMs ?? 0) * SAMPLE_RATE) / 1000));
-  const layerSamples = Math.min(
-    totalSamples - startSample,
-    layer.durationMs !== undefined
-      ? Math.max(1, Math.round((layer.durationMs * SAMPLE_RATE) / 1000))
-      : totalSamples - startSample,
-  );
-  if (layerSamples <= 0) return;
-
-  const durSec = layerSamples / SAMPLE_RATE;
-  const filter = layer.filter ? new BiquadFilter() : null;
-  const noise = layer.kind === "noise" ? createGaussianNoise(layerSeed) : null;
-  let phase = 0;
-
-  // Configure filter once if static, otherwise update every 16 samples for smooth sweep.
-  const sweepFilter =
-    layer.filter !== undefined &&
-    layer.filter.freqEnd !== undefined &&
-    layer.filter.freqEnd !== layer.filter.freqStart;
-  if (filter && layer.filter && !sweepFilter) {
-    filter.configure(layer.filter.kind, layer.filter.freqStart, layer.filter.q);
-  }
-
-  for (let i = 0; i < layerSamples; i++) {
-    const tSec = i / SAMPLE_RATE;
-    const u = layerSamples > 1 ? i / (layerSamples - 1) : 0;
-
-    if (filter && layer.filter && sweepFilter && (i & 15) === 0) {
-      const f0 = layer.filter.freqStart;
-      const f1 = layer.filter.freqEnd!;
-      // Log-frequency interpolation sounds musically linear
-      const freq = f0 * Math.pow(f1 / f0, u);
-      filter.configure(layer.filter.kind, freq, layer.filter.q);
-    }
-
-    let sample = 0;
-    if (layer.kind === "oscillator") {
-      let freq = layer.freqStart;
-      if (layer.freqEnd !== undefined && layer.freqEnd !== layer.freqStart) {
-        if (layer.pitchDecayRate !== undefined) {
-          freq = layer.freqEnd + (layer.freqStart - layer.freqEnd) * Math.exp(-layer.pitchDecayRate * tSec);
-        } else {
-          freq = layer.freqStart * Math.pow(layer.freqEnd / layer.freqStart, u);
-        }
+  const start = Math.max(0, Math.round((layer.startMs ?? 0) * SAMPLE_RATE / 1000));
+  const count = Math.min(left.length - start, Math.round((layer.durationMs ?? Infinity) * SAMPLE_RATE / 1000));
+  if (count < 2) return;
+  const duration = (count - 1) * 1000 / SAMPLE_RATE;
+  const osc = layer.kind === "oscillator" ? layer : undefined;
+  const noise = layer.kind === "noise" ? createNoise(layer.color ?? "white", seed) : undefined;
+  const voices = Math.min(8, Math.max(1, Math.round(osc?.voices ?? 1)));
+  const cfg = layer.filter;
+  const panStart = layer.pan?.start ?? 0;
+  const panEnd = layer.pan?.end ?? panStart;
+  for (let voice = 0; voice < voices; voice++) {
+    const position = voices === 1 ? 0 : 2 * voice / (voices - 1) - 1;
+    const ratio = 2 ** (position * (osc?.detune ?? 0) / 1200);
+    let phase = 0;
+    const filter = cfg ? new BiquadFilter() : undefined;
+    for (let i = 0; i < count; i++) {
+      const u = i / (count - 1);
+      const t = i * 1000 / SAMPLE_RATE;
+      if (cfg && filter && (i === 0 || (cfg.freqEnd !== undefined && (i & 15) === 0))) {
+        const freq = cfg.freqStart * ((cfg.freqEnd ?? cfg.freqStart) / cfg.freqStart) ** (u ** (cfg.curve ?? 1));
+        filter.configure(cfg.kind, freq, cfg.q, cfg.gainDb);
       }
-      phase += (TWO_PI * freq) / SAMPLE_RATE;
-      if (phase > TWO_PI) phase -= TWO_PI * Math.floor(phase / TWO_PI);
-
-      if (layer.waveform === "triangle") {
-        sample = (2 / Math.PI) * Math.asin(Math.sin(phase));
+      let sample: number;
+      if (osc) {
+        const end = osc.freqEnd ?? osc.freqStart;
+        const hz = osc.pitchDecayRate === undefined
+          ? osc.freqStart * (end / osc.freqStart) ** (u ** (osc.curve ?? 1))
+          : end + (osc.freqStart - end) * Math.exp(-osc.pitchDecayRate * t / 1000);
+        const step = Math.min(0.48, Math.max(1e-9, hz * ratio / SAMPLE_RATE));
+        sample = oscillatorSample(osc.waveform, phase, step);
+        phase += step;
+        if (phase >= 1) phase--;
       } else {
-        sample = Math.sin(phase);
+        sample = noise!();
       }
-    } else if (noise) {
-      sample = noise();
+      if (filter) sample = filter.process(sample);
+      const value = sample * evalEnvelope(layer.envelope, t, duration) * layer.gain / voices;
+      const pan = Math.max(-1, Math.min(1, panStart + (panEnd - panStart) * u + position * 0.7));
+      const angle = (pan + 1) * Math.PI / 4;
+      left[start + i] += value * Math.cos(angle);
+      right[start + i] += value * Math.sin(angle);
     }
+  }
+}
 
-    if (filter) {
-      sample = filter.process(sample);
+// Delay lengths in samples at 48 kHz. Distinct primes disperse coincident echoes.
+const ROOM_DELAYS = [
+  { comb: [1217, 1559, 1877, 2203], diffuse: [347, 193] },
+  { comb: [1277, 1601, 1931, 2281], diffuse: [367, 211] },
+] as const;
+
+function reverberate(channel: Float32Array, side: 0 | 1, room: NonNullable<SoundGraph["reverb"]>): void {
+  const delay = Math.max(0, Math.round(room.predelayMs * SAMPLE_RATE / 1000));
+  const wet = new Float32Array(channel.length);
+  const damping = 1 - Math.exp(-TWO_PI * Math.max(1, room.dampHz) / SAMPLE_RATE);
+  for (const length of ROOM_DELAYS[side].comb) {
+    const line = new Float32Array(length);
+    const feedback = 0.001 ** (length / (SAMPLE_RATE * Math.max(0.01, room.decaySec)));
+    let low = 0;
+    for (let i = delay; i < wet.length; i++) {
+      const j = (i - delay) % length;
+      const echo = line[j];
+      low += damping * (echo - low);
+      line[j] = channel[i - delay] + feedback * low;
+      wet[i] += echo * 0.25;
     }
+  }
+  for (const length of ROOM_DELAYS[side].diffuse) {
+    const line = new Float32Array(length);
+    for (let i = 0; i < wet.length; i++) {
+      const j = i % length;
+      const output = line[j] - 0.57 * wet[i];
+      line[j] = wet[i] + 0.57 * output;
+      wet[i] = output;
+    }
+  }
+  const mix = Math.max(0, Math.min(1, room.mix));
+  for (let i = 0; i < channel.length; i++) channel[i] += mix * (wet[i] - channel[i]);
+}
 
-    const env = evalEnvelope(layer.envelope, tSec, durSec);
-    const value = sample * env * layer.gain;
-    const [gL, gR] = evalPan(layer.pan, u);
-    const outIndex = startSample + i;
-    left[outIndex] += value * gL;
-    right[outIndex] += value * gR;
+// Four reconstruction phases, including the original samples. Each fractional
+// phase has unit DC gain and a Blackman-windowed sinc interpolation kernel.
+const TP_RADIUS = 12;
+const TP_PHASES = [0.25, 0.5, 0.75].map(fraction => {
+  const taps = Array.from({ length: 2 * TP_RADIUS }, (_, j) => {
+    const x = j - TP_RADIUS + 1 - fraction;
+    const a = Math.PI * x / TP_RADIUS;
+    return Math.sin(Math.PI * x) / (Math.PI * x) * (0.42 + 0.5 * Math.cos(a) + 0.08 * Math.cos(2 * a));
+  });
+  const sum = taps.reduce((a, b) => a + b);
+  return taps.map(tap => tap / sum);
+});
+
+const LIMITER_BLOCK = 96; // 2 ms of lookahead at 48 kHz
+
+function measurePeaks(channel: Float32Array, blockPeaks?: Float64Array): number {
+  const padded = new Float32Array(channel.length + 2 * TP_RADIUS);
+  padded.set(channel, TP_RADIUS);
+  let peak = 0;
+  for (let i = 0; i <= channel.length; i++) {
+    let local = Math.abs(padded[i + TP_RADIUS - 1]);
+    for (const taps of TP_PHASES) {
+      let value = 0;
+      for (let j = 0; j < taps.length; j++) value += padded[i + j] * taps[j];
+      local = Math.max(local, Math.abs(value));
+    }
+    peak = Math.max(peak, local);
+    if (blockPeaks) {
+      const block = Math.floor(Math.max(0, i - 1) / LIMITER_BLOCK);
+      blockPeaks[block] = Math.max(blockPeaks[block], local);
+    }
+  }
+  return peak;
+}
+
+// A finite cut through a bass cycle can retain a small mean even after the
+// bus high-pass. Distribute that residual over a raised cosine whose endpoints
+// are silent. Preserve predelay and return the corrected sample peak for trim.
+function centerChannel(channel: Float32Array): number {
+  let first = channel.length;
+  let last = 0;
+  let sum = 0;
+  for (let i = 0; i < channel.length; i++) {
+    if (channel[i] === 0) continue;
+    first = Math.min(first, i);
+    last = i;
+    sum += channel[i];
+  }
+  const span = last - first;
+  const correction = span > 1 ? sum / span : 0;
+  let peak = 0;
+  for (let i = first; i <= last; i++) {
+    if (correction) channel[i] -= correction * (1 - Math.cos(TWO_PI * (i - first) / span));
+    peak = Math.max(peak, Math.abs(channel[i]));
+  }
+  return peak;
+}
+
+function master(left: Float32Array, right: Float32Array): void {
+  const peaks = new Float64Array(Math.ceil(left.length / LIMITER_BLOCK));
+  const peak = Math.max(measurePeaks(left, peaks), measurePeaks(right, peaks));
+  if (peak === 0) return;
+
+  // Link both channels. In the top 4 dB the quadratic knee gradually
+  // increases gain reduction; the loudest crest receives 2 dB of reduction.
+  const gains = peaks.map(p => {
+    const above = Math.max(0, 4 + 20 * Math.log10(p / peak));
+    return 10 ** (-above * above / 160);
+  });
+  const recovery = 1 - Math.exp(-LIMITER_BLOCK / (SAMPLE_RATE * 0.035));
+  let last = gains[0];
+  for (let block = 0; block < gains.length; block++) {
+    const goal = Math.min(gains[block], gains[block + 1] ?? 1);
+    const end = goal < last ? goal : last + recovery * (goal - last);
+    const start = block * LIMITER_BLOCK;
+    for (let i = start; i < Math.min(start + LIMITER_BLOCK, left.length); i++) {
+      const u = (i - start) / LIMITER_BLOCK;
+      const gain = last + (end - last) * u * u * (3 - 2 * u);
+      left[i] *= gain;
+      right[i] *= gain;
+    }
+    last = end;
+  }
+  // Meet the mixer's sample-peak target while reserving reconstructed
+  // headroom. Re-measure after time-varying gain, including between samples.
+  const samplePeak = Math.max(centerChannel(left), centerChannel(right));
+  const truePeak = Math.max(measurePeaks(left), measurePeaks(right));
+  const trim = Math.min(10 ** (-2 / 20) / samplePeak, 10 ** (-1.75 / 20) / truePeak);
+  for (let i = 0; i < left.length; i++) {
+    left[i] *= trim;
+    right[i] *= trim;
   }
 }
 
@@ -218,7 +340,7 @@ export function renderGraph(graph: SoundGraph, seed: number): { left: Float32Arr
   const right = new Float32Array(totalSamples);
 
   for (let idx = 0; idx < graph.layers.length; idx++) {
-    renderLayer(graph.layers[idx], totalSamples, left, right, (seed + Math.imul(idx + 1, 2654435761)) >>> 0);
+    renderLayer(graph.layers[idx], left, right, (seed + Math.imul(idx + 1, 2654435761)) >>> 0);
   }
 
   if (graph.reflections && graph.reflections.amount > 0 && graph.reflections.taps.length > 0) {
@@ -240,6 +362,25 @@ export function renderGraph(graph: SoundGraph, seed: number): { left: Float32Arr
     }
   }
 
+  for (const [side, channel] of [left, right].entries()) {
+    if (graph.reverb && graph.reverb.mix > 0) reverberate(channel, side === 0 ? 0 : 1, graph.reverb);
+    const highpass = new BiquadFilter();
+    highpass.configure("highpass", graph.highpass ?? 24, Math.SQRT1_2);
+    const lowpass = graph.lowpass ? new BiquadFilter() : undefined;
+    lowpass?.configure("lowpass", graph.lowpass!, Math.SQRT1_2);
+    for (let i = 0; i < totalSamples; i++) {
+      const high = highpass.process(channel[i]);
+      channel[i] = lowpass ? lowpass.process(high) : high;
+    }
+  }
+  const width = graph.width ?? 1;
+  for (let i = 0; i < totalSamples; i++) {
+    const mid = (left[i] + right[i]) * 0.5;
+    const side = (left[i] - right[i]) * 0.5 * width;
+    left[i] = mid + side;
+    right[i] = mid - side;
+  }
+
   // Smooth tail fade to prevent click at buffer end
   const fadeSamples = Math.min(totalSamples, Math.round(((graph.tailFadeMs ?? 6) * SAMPLE_RATE) / 1000));
   for (let i = 0; i < fadeSamples; i++) {
@@ -250,34 +391,7 @@ export function renderGraph(graph: SoundGraph, seed: number): { left: Float32Arr
     right[idx] *= gain;
   }
 
-  // Soft-knee peak ceiling (< 0.96, zero clipping, linear below 0.72)
-  const knee = 0.72;
-  const headroom = 0.24; // 0.72 + 0.24 = 0.96 max asymptote
-  const softLimit = (x: number): number => {
-    const ax = Math.abs(x);
-    if (ax <= knee) return x;
-    return Math.sign(x) * (knee + headroom * Math.tanh((ax - knee) / headroom));
-  };
-  let peak = 0;
-  for (let i = 0; i < totalSamples; i++) {
-    const l = softLimit(left[i]);
-    const r = softLimit(right[i]);
-    left[i] = l;
-    right[i] = r;
-    const m = Math.max(Math.abs(l), Math.abs(r));
-    if (m > peak) peak = m;
-  }
-
-  // Deterministic peak normalization to -2.0 dBFS (commercial SFX library standard, zero clipping)
-  const targetPeak = Math.pow(10, -2.0 / 20);
-  if (peak > 1e-6) {
-    const normGain = targetPeak / peak;
-    for (let i = 0; i < totalSamples; i++) {
-      left[i] *= normGain;
-      right[i] *= normGain;
-    }
-  }
-
+  master(left, right);
   return { left, right };
 }
 
@@ -339,6 +453,37 @@ function toDbfs(linear: number): number {
   return Math.round(20 * Math.log10(linear) * 100) / 100;
 }
 
+// BS.1770-4, Annex 1, Tables 1 and 2 (fixed 48 kHz). For SFX shorter
+// than a gating block, measure the clip followed by silence up to 400 ms.
+function integratedLufs(left: Float32Array, right: Float32Array): number {
+  const hop = SAMPLE_RATE / 10;
+  const hops = Math.max(4, Math.floor(left.length / hop));
+  const energy = new Float64Array(hops);
+  for (const channel of [left, right]) {
+    const shelf = new BiquadFilter(1.53512485958697, -2.69169618940638, 1.19839281085285,
+      -1.69065929318241, 0.73248077421585);
+    const rlb = new BiquadFilter(1, -2, 1, -1.99004745483398, 0.99007225036621);
+    for (let h = 0; h < hops; h++) {
+      let sum = 0;
+      for (let i = h * hop; i < (h + 1) * hop; i++) {
+        const y = rlb.process(shelf.process(channel[i] ?? 0));
+        sum += y * y;
+      }
+      energy[h] += sum / (4 * hop);
+    }
+  }
+  const absoluteGate = 10 ** ((-70 + 0.691) / 10);
+  const blocks: number[] = [];
+  for (let h = 3; h < hops; h++) {
+    const block = energy[h] + energy[h - 1] + energy[h - 2] + energy[h - 3];
+    if (block > absoluteGate) blocks.push(block);
+  }
+  if (!blocks.length) return MIN_DB;
+  const mean = (values: number[]) => values.reduce((a, b) => a + b, 0) / values.length;
+  const relativeGate = mean(blocks) * 0.1;
+  return Math.round(100 * (-0.691 + 10 * Math.log10(mean(blocks.filter(b => b > relativeGate))))) / 100;
+}
+
 export function analyzeAcoustics(left: Float32Array, right: Float32Array): AcousticMetrics {
   const totalSamples = left.length;
   const durationMs = Math.round((totalSamples * 1000) / SAMPLE_RATE);
@@ -365,8 +510,7 @@ export function analyzeAcoustics(left: Float32Array, right: Float32Array): Acous
     const end = Math.min(totalSamples, start + winSamples);
     let e = 0;
     for (let i = start; i < end; i++) {
-      const m = 0.5 * (left[i] + right[i]);
-      e += m * m;
+      e += 0.5 * (left[i] ** 2 + right[i] ** 2);
     }
     e /= Math.max(1, end - start);
     if (e > bestEnergy) {
@@ -426,6 +570,7 @@ export function analyzeAcoustics(left: Float32Array, right: Float32Array): Acous
     peak_offset_ms: peakOffsetMs,
     peak_dbfs: toDbfs(maxAbs),
     rms_dbfs: toDbfs(rms),
+    lufs: integratedLufs(left, right),
     spectral_centroid_hz: spectralCentroidHz,
     waveform_peaks: waveformPeaks,
   };

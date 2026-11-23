@@ -260,3 +260,4 @@ Thumbs.db
 
 # Local-only probes, evidence, and generated media
 /scratch/
+.claude/skills/

@@ -1,5 +1,9 @@
 """Focused Batch 1 core contract tests: MotionBlockObject, sound catalog, and audio editing."""
 
+import json
+import subprocess
+from pathlib import Path
+from typing import get_args
 from uuid import uuid4
 
 import pytest
@@ -9,6 +13,7 @@ from app.editing.catalog import (
     MOTION_BLOCK_CATALOG,
     SOUND_RECIPE_CATALOG,
     VERIFIED_VOICE_IDS,
+    SoundRecipeId,
     build_sound_spec,
     sound_spec_digest,
 )
@@ -37,6 +42,43 @@ def _base_content(with_caption: bool = True) -> CompositionContent:
         scenes=[Scene(scene_id="scene_1", range=TimeRange(start=0, end=540000), intent="Opening")],
         timeline={"tracks": tracks, "transitions": []},
     )
+
+
+def test_sound_catalog_and_cache_keys_match_typescript():
+    """Use the same TS entry point as POST /synthesize-sfx, once per catalog."""
+    engine = Path(__file__).resolve().parents[4] / "packages" / "sound-engine"
+    script = """
+        import { createHash } from 'node:crypto';
+        import { SOUND_RECIPES, buildSoundSpec, canonicalSoundSpecJson } from './src/index.ts';
+        const rows = SOUND_RECIPES.map(recipe => {
+          const variants = [{}, ...['min', 'max'].map(bound =>
+            Object.fromEntries(Object.entries(recipe.params).map(([k,p]) => [k,p[bound]]))),
+            {pitch: recipe.params.pitch.min + 0.5, length: recipe.params.length.max + 10}];
+          const cases = variants.map((params, i) => {
+            const seed = [undefined, 0, 0xffffffff, 17][i];
+            const canonical = canonicalSoundSpecJson(buildSoundSpec({recipeId: recipe.id, params, seed}));
+            return {params, seed, canonical, sha: createHash('sha256').update(canonical).digest('hex')};
+          });
+          return {recipe, cases};
+        });
+        console.log(JSON.stringify(rows));
+    """
+    result = subprocess.run(
+        ["node", "--import", "tsx", "--input-type=module", "-e", script],
+        cwd=engine, check=True, capture_output=True, text=True,
+    )
+    rows = json.loads(result.stdout)
+    assert len(rows) == len(SOUND_RECIPE_CATALOG) == 22
+    assert {row["recipe"]["id"] for row in rows} == set(get_args(SoundRecipeId)) == set(SOUND_RECIPE_CATALOG)
+    for row in rows:
+        recipe = row["recipe"]
+        recipe_id = recipe["id"]
+        assert recipe == SOUND_RECIPE_CATALOG[recipe_id]
+        for case in row["cases"]:
+            spec = build_sound_spec(recipe_id, case["params"], case.get("seed"))
+            assert spec["engine_version"] == 2
+            assert json.dumps(spec, sort_keys=True, separators=(",", ":")).encode() == case["canonical"].encode()
+            assert sound_spec_digest(spec) == case["sha"]
 
 
 def test_sound_spec_digest_excludes_discovery_metadata():
