@@ -6,9 +6,10 @@ import pytest_asyncio
 from app.chat.editor import InsertAudioArgs, InsertMotionBlockArgs, edit_clip
 from app.editing.edits import apply_ops
 from app.editing.revisions import motion_block_ops
-from app.editing.store import content_of
+from app.editing.store import apply_composition_edits, content_of
 from app.editing.video_spec import compile_video_spec
-from app.models.tables import CompositionVersion, Conversation, Message, Project, SourceSnapshot
+from app.models.tables import CompositionVersion, Conversation, Message, Project, SkillVersion, SourceSnapshot
+from app.skills.blueprint import load_blueprint_from_skill_version, music_clips_for_window, save_composition_as_skill
 from app.tools.video.preparation import canonical_resource
 from test.core.test_batch2_multiscene import _base_content
 from test.core.test_compositions import _create, _project, _snapshots, _user
@@ -82,6 +83,27 @@ async def test_insert_short_music_covers_requested_window_and_fades_at_ends(edit
         animation, = clip.animations
         assert animation.property == "audio.gain"
         assert (animation.keyframes[0].value, animation.keyframes[-1].value) == endpoints
+
+
+@pytest.mark.asyncio
+async def test_saved_skill_keeps_fades_from_first_and_last_music_clips(editor):
+    db, owner, pid, insert = editor
+    content = await insert("insert_motion_block", InsertMotionBlockArgs(
+        block_id="statement_hook", props={"headline": "Opening"}, start_seconds=0, end_seconds=4,
+    ))
+    track = next(t for t in content.timeline.tracks if t.role == "music")
+    original, = track.clips
+    track.clips = music_clips_for_window(
+        settings=content.settings, start=0, end=original.range.end, source_ticks=90000,
+        source_id=original.source.snapshot_id, digest=original.source.snapshot_digest,
+        id_stem="loop", gain_db=-25, fade_in_seconds=0.2, fade_out_seconds=0.3,
+    )[::-1]  # Storage order need not match playback order.
+    comp, ver, _ = await apply_composition_edits(db, owner_id=owner, origin_project_id=pid, content=content)
+    saved = await save_composition_as_skill(db, owner_id=owner, project_id=pid, composition_id=comp.id,
+                                            version_id=ver.id, name="loop", description="Opening with looped music.")
+    skill = await db.get(SkillVersion, UUID(saved["skill_version_id"]))
+    profile = load_blueprint_from_skill_version(skill).audio_profile
+    assert (profile.bgm_fade_in_s, profile.bgm_fade_out_s) == (0.2, 0.3)
 
 
 @pytest.mark.parametrize("detail", [None, "Published valuation methods"])

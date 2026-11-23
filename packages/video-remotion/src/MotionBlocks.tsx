@@ -206,7 +206,9 @@ const ProductShowcaseBlock: React.FC<{
   const cropY = Math.round(clamp01((focusY - 0.35) / 0.55) * 100);
   const sizeCapture = React.useCallback((image: HTMLImageElement) => {
     // Remotion calls this after decode, before releasing the frame for capture.
-    image.parentElement!.style.setProperty("--capture-ratio", String(image.naturalWidth / image.naturalHeight));
+    if (image.parentElement && image.naturalWidth > 0 && image.naturalHeight > 0) {
+      image.parentElement.style.setProperty("--capture-ratio", String(image.naturalWidth / image.naturalHeight));
+    }
   }, []);
 
   const callout = props.callout ?? null;
@@ -376,7 +378,7 @@ const ProductShowcaseBlock: React.FC<{
                   left: `${cropX}%`,
                   top: `${cropY}%`,
                   transform: `translate(-${cropX}%, -${cropY}%)`,
-                  width: "max(100%, calc(100cqh * var(--capture-ratio)))",
+                  width: "max(100%, calc(100cqh * var(--capture-ratio, 1.7778)))",
                 }}
               >
                 {imageUrl ? (

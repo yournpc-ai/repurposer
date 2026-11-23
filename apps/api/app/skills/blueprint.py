@@ -269,7 +269,7 @@ def _render_skill_md(name: str, description: str, bp: SkillBlueprintV1) -> str:
         f"- Narration pacing: adapt each act duration to measured narration + `{bp.audio_profile.breathing_s:g}s` breathing room.",
         f"- BGM: {'included' if bp.audio_profile.has_bgm else 'optional'} at `{bp.audio_profile.bgm_gain_db:g} dB`"
         + (
-            f" (fade-in `{bp.audio_profile.bgm_fade_in_s:g}s`, fade-out `{bp.audio_profile.bgm_fade_out_s:g}s`)"
+            f" (fade-in `{bp.audio_profile.bgm_fade_in_s or 0:g}s`, fade-out `{bp.audio_profile.bgm_fade_out_s or 0:g}s`)"
             if bp.audio_profile.bgm_fade_in_s or bp.audio_profile.bgm_fade_out_s
             else ""
         )
@@ -419,10 +419,12 @@ def extract_skill_draft_from_composition(
     fade_in_s = None
     fade_out_s = None
     if music_clips:
+        music_clips.sort(key=lambda clip: clip.range.start)
         bgm = music_clips[0]
         if isinstance(bgm.object, AudioObject):
             bgm_gain = float(bgm.object.gain_db)
-        fade_in_s, fade_out_s = _extract_bgm_fades(bgm, tb)
+        fade_in_s, _ = _extract_bgm_fades(bgm, tb)
+        _, fade_out_s = _extract_bgm_fades(music_clips[-1], tb)
     audio_profile = BlueprintAudioProfile(
         breathing_s=0.5,
         narration_gain_db=0.0,
