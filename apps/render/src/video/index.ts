@@ -25,6 +25,64 @@ export interface VideoRenderResult {
   videoPath: string;
 }
 
+export type StageSourceFn = (
+  url: string,
+  cacheKey?: string,
+  expectedSha256?: string,
+) => Promise<string>;
+
+/**
+ * Stage all remote fonts, clip sources, and MotionBlock resources into the
+ * shared local loopback cache so Chromium/Remotion never hits external URLs
+ * directly inside delayRender.
+ */
+export async function stageVideoSpecSources(
+  spec: VideoSpec,
+  stageFn: StageSourceFn = stageRemoteSource,
+): Promise<VideoSpec> {
+  return {
+    ...spec,
+    fonts: await Promise.all(
+      spec.fonts.map(async (font) => ({
+        ...font,
+        url: await stageFn(font.url, undefined, font.digest),
+      })),
+    ),
+    tracks: await Promise.all(
+      spec.tracks.map(async (track) => ({
+        ...track,
+        clips: await Promise.all(
+          track.clips.map(async (clip) => {
+            const stagedSource = clip.source
+              ? {
+                  ...clip.source,
+                  url: await stageFn(clip.source.url, undefined, clip.source.digest),
+                }
+              : clip.source;
+            if (clip.object.kind === "motion_block" && clip.object.resources.length > 0) {
+              const stagedResources = await Promise.all(
+                clip.object.resources.map(async (resource) => ({
+                  ...resource,
+                  url: await stageFn(resource.url, undefined, resource.digest),
+                })),
+              );
+              return {
+                ...clip,
+                source: stagedSource,
+                object: {
+                  ...clip.object,
+                  resources: stagedResources,
+                },
+              };
+            }
+            return stagedSource !== clip.source ? { ...clip, source: stagedSource } : clip;
+          }),
+        ),
+      })),
+    ),
+  };
+}
+
 /**
  * Render one video-spec to MP4. Every source URL must already be absolute
  * (the API dispatch seam absolutizes storage keys) — the renderer never
@@ -41,33 +99,7 @@ export async function renderVideo(
   // Stage remote sources into the shared local cache first (the renderer's
   // law: Remotion's internal asset fetch ignores HTTPS_PROXY and downloads
   // inside the delayRender budget). Dedup per URL is stageRemoteSource's.
-  const stagedSpec: VideoSpec = {
-    ...spec,
-    fonts: await Promise.all(
-      spec.fonts.map(async (font) => ({
-        ...font,
-        url: await stageRemoteSource(font.url, undefined, font.digest),
-      })),
-    ),
-    tracks: await Promise.all(
-      spec.tracks.map(async (track) => ({
-        ...track,
-        clips: await Promise.all(
-          track.clips.map(async (clip) =>
-            clip.source
-              ? {
-                  ...clip,
-                  source: {
-                    ...clip.source,
-                    url: await stageRemoteSource(clip.source.url, undefined, clip.source.digest),
-                  },
-                }
-              : clip,
-          ),
-        ),
-      })),
-    ),
-  };
+  const stagedSpec = await stageVideoSpecSources(spec);
 
   const serveUrl = await getVideoBundle();
   const inputProps = { spec: stagedSpec };

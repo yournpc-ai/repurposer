@@ -614,9 +614,9 @@ def compile_video_spec(
         before = cut - transition["start_frame"]
         outgoing["end_frame"] += after
         incoming["start_frame"] -= before
-        if outgoing["source"].get("end_frame") is not None:
+        if outgoing.get("source") and outgoing["source"].get("end_frame") is not None:
             outgoing["source"]["end_frame"] += after
-        if incoming["source"].get("start_frame") is not None:
+        if incoming.get("source") and incoming["source"].get("start_frame") is not None:
             incoming["source"]["start_frame"] -= before
         for animation in incoming["animations"]:
             for keyframe in animation["keyframes"]:

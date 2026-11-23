@@ -726,7 +726,7 @@ def _loop_incomplete_text(text: str, result) -> str:
     rejections = getattr(result, "rejections", [])
     from app.chat.editor import WRITE_TOOLS
 
-    video_tools = {"create_video", *WRITE_TOOLS}
+    video_tools = {"create_video", "instantiate_skill_blueprint", *WRITE_TOOLS}
     saved = bool(getattr(result, "version_saved", False))
     prepared = any(name in {"prepare_video_materials", "capture_web"} and ok for name, ok in observations)
     rejected = any(r.tool_name in video_tools for r in rejections) or any(name in video_tools and not ok for name, ok in observations)

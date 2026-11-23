@@ -606,7 +606,7 @@ class KineticTitleProps(BaseModel):
     exit_duration_s: float = Field(default=0.4, ge=0.0, le=2.0, allow_inf_nan=False)
     accent_color: str = _HEX_COLOR
     text_color: str = _HEX_COLOR
-    surface_style: Literal["transparent", "scrim", "glass_card", "light_card"] = "glass_card"
+    surface_style: Literal["transparent", "scrim", "glass_card", "light_card", "pill_caption"] = "glass_card"
 
     @model_validator(mode="before")
     @classmethod
@@ -619,6 +619,24 @@ class KineticTitleProps(BaseModel):
         return data
 
 
+class ProductShowcaseCallout(BaseModel):
+    """Normalized [0..1] viewport highlight region for `product_showcase`."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    x: float = Field(ge=0.0, le=0.95, allow_inf_nan=False)
+    y: float = Field(ge=0.0, le=0.95, allow_inf_nan=False)
+    width: float = Field(gt=0.04, le=1.0, allow_inf_nan=False)
+    height: float = Field(gt=0.04, le=1.0, allow_inf_nan=False)
+    label: str | None = Field(default=None, max_length=64)
+
+    @model_validator(mode="after")
+    def _in_viewport(self) -> ProductShowcaseCallout:
+        if self.x + self.width > 1.001 or self.y + self.height > 1.001:
+            raise ValueError("callout box must stay inside [0, 1] viewport coordinates")
+        return self
+
+
 class ProductShowcaseProps(BaseModel):
     """Closed, pure-JSON props for native `product_showcase` MotionBlockObject."""
 
@@ -627,11 +645,13 @@ class ProductShowcaseProps(BaseModel):
     url_bar: str | None = Field(default=None, max_length=80)
     badge: str | None = Field(default=None, max_length=48)
     theme: Literal["dark", "light"] = "light"
+    chrome_mode: Literal["browser", "frameless"] = "browser"
     camera_motion: Literal["subtle_push", "settle_tilt", "drift_focus", "static"] = "settle_tilt"
     entrance_duration_s: float = Field(default=0.9, ge=0.2, le=3.5, allow_inf_nan=False)
     zoom_scale: float = Field(default=1.05, ge=1.0, le=1.35, allow_inf_nan=False)
     focus_x: float = Field(default=0.5, ge=0.1, le=0.9, allow_inf_nan=False)
     focus_y: float = Field(default=0.35, ge=0.1, le=0.9, allow_inf_nan=False)
+    callout: ProductShowcaseCallout | None = None
     accent_color: str = _HEX_COLOR
     show_backdrop: bool = True
 
@@ -641,6 +661,102 @@ class ProductShowcaseProps(BaseModel):
         if isinstance(data, dict):
             out = dict(data)
             out.setdefault("accent_color", "#0D9488")
+            raw_callout = out.get("callout")
+            if raw_callout in ("", "null", "none", "None", {}):
+                out["callout"] = None
+            return out
+        return data
+
+
+class StatementHookProps(BaseModel):
+    """Closed, pure-JSON props for native `statement_hook` MotionBlockObject."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    headline: str = Field(min_length=1, max_length=160)
+    eyebrow: str | None = Field(default=None, max_length=60)
+    highlight_phrase: str | None = Field(default=None, max_length=80)
+    subheadline: str | None = Field(default=None, max_length=200)
+    theme: Literal["light", "dark"] = "light"
+    layout_variant: Literal["centered", "editorial_left"] = "centered"
+    accent_color: str = _HEX_COLOR
+    entrance_duration_s: float = Field(default=0.9, ge=0.25, le=3.0, allow_inf_nan=False)
+    exit_duration_s: float = Field(default=0.35, ge=0.0, le=1.5, allow_inf_nan=False)
+    show_backdrop: bool = True
+
+    @model_validator(mode="before")
+    @classmethod
+    def _defaults(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            out = dict(data)
+            out.setdefault("accent_color", "#0D9488")
+            for k in ("eyebrow", "highlight_phrase", "subheadline"):
+                if out.get(k) in ("", "null", "none", "None"):
+                    out[k] = None
+            return out
+        return data
+
+
+class MetricGridItem(BaseModel):
+    """One KPI/capability card in `metric_grid`."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    value: str = Field(min_length=1, max_length=24)
+    label: str = Field(min_length=1, max_length=48)
+    detail: str | None = Field(default=None, max_length=110)
+    badge: str | None = Field(default=None, max_length=32)
+
+
+class MetricGridProps(BaseModel):
+    """Closed, pure-JSON props for native `metric_grid` MotionBlockObject."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    eyebrow: str | None = Field(default=None, max_length=60)
+    title: str | None = Field(default=None, max_length=120)
+    items: list[MetricGridItem] = Field(min_length=2, max_length=4)
+    columns: Literal[2, 3] = 3
+    theme: Literal["light", "dark"] = "light"
+    accent_color: str = _HEX_COLOR
+    stagger_s: float = Field(default=0.14, ge=0.04, le=0.6, allow_inf_nan=False)
+    count_up: bool = True
+    show_backdrop: bool = True
+
+    @model_validator(mode="before")
+    @classmethod
+    def _defaults(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            out = dict(data)
+            out.setdefault("accent_color", "#0D9488")
+            for k in ("eyebrow", "title"):
+                if out.get(k) in ("", "null", "none", "None"):
+                    out[k] = None
+            return out
+        return data
+
+
+class ClosingCtaProps(BaseModel):
+    """Closed, pure-JSON props for native `closing_cta` MotionBlockObject."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    brand_name: str = Field(min_length=1, max_length=80)
+    tagline: str = Field(min_length=1, max_length=160)
+    cta_label: str | None = Field(default=None, max_length=48)
+    url_text: str | None = Field(default=None, max_length=80)
+    theme: Literal["light", "dark"] = "dark"
+    accent_color: str = _HEX_COLOR
+    entrance_duration_s: float = Field(default=0.9, ge=0.25, le=3.0, allow_inf_nan=False)
+    logo_surface: Literal["light_pill", "raw"] = "light_pill"
+    show_backdrop: bool = True
+
+    @model_validator(mode="before")
+    @classmethod
+    def _defaults(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            out = dict(data)
+            out.setdefault("accent_color", "#14B8A6")
             return out
         return data
 
@@ -648,6 +764,9 @@ class ProductShowcaseProps(BaseModel):
 MOTION_BLOCK_PROP_MODELS: dict[str, type[BaseModel]] = {
     "kinetic_title": KineticTitleProps,
     "product_showcase": ProductShowcaseProps,
+    "statement_hook": StatementHookProps,
+    "metric_grid": MetricGridProps,
+    "closing_cta": ClosingCtaProps,
 }
 
 
@@ -662,7 +781,7 @@ class MotionBlockObject(BaseModel):
 
     kind: Literal["motion_block"]
     object_id: str = _ID
-    block_id: Literal["kinetic_title", "product_showcase"]
+    block_id: Literal["kinetic_title", "product_showcase", "statement_hook", "metric_grid", "closing_cta"]
     block_version: Literal[1] = 1
     props: dict[str, JsonValue]
     resources: list[RemotionResource] = Field(default_factory=list, max_length=16)

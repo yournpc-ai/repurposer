@@ -56,7 +56,7 @@ def test_sound_spec_digest_excludes_discovery_metadata():
     spec_c = build_sound_spec("impact", params={"pitch": 68, "tone": 38}, seed=1248)
     assert sound_spec_digest(spec_c) != digest_a
     assert len(VERIFIED_VOICE_IDS) >= 8
-    assert set(MOTION_BLOCK_CATALOG) == {"kinetic_title", "product_showcase"}
+    assert {"kinetic_title", "product_showcase"} <= set(MOTION_BLOCK_CATALOG)
 
 
 def test_motion_block_z_order_below_captions_and_compiles_video_spec():

@@ -187,7 +187,13 @@ const motionBlockObjectSchema = z
   .object({
     kind: z.literal("motion_block"),
     object_id: z.string().min(1),
-    block_id: z.enum(["kinetic_title", "product_showcase"]),
+    block_id: z.enum([
+      "kinetic_title",
+      "product_showcase",
+      "statement_hook",
+      "metric_grid",
+      "closing_cta",
+    ]),
     block_version: z.literal(1),
     props: z.record(z.string(), z.unknown()),
     resources: z.array(motionBlockResourceSchema).max(16),

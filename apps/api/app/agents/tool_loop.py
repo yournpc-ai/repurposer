@@ -1094,6 +1094,7 @@ class ToolLoopAgent:
                 shared = [{**message, "name": "project_evidence"} for message in shared]
                 feedback = [{**message, "name": "tool_feedback"} for message in feedback]
             round_dialogue = dialogue
+            dialogue_window_audit: dict[str, int] | None = None
             if assembled.project_reply and dialogue is not None:
                 # Keep recent speech in its original roles. Always include the
                 # current user row in full, even when it alone exceeds the window.
@@ -1105,6 +1106,14 @@ class ToolLoopAgent:
                     start -= 1
                     remaining -= len(dialogue[start]["content"])
                 round_dialogue = dialogue[start:end]
+                dialogue_window_audit = {
+                    "window_limit_chars": 8000,
+                    "total_messages": end,
+                    "retained_messages": len(round_dialogue),
+                    "dropped_messages": start,
+                    "total_chars": sum(len(m["content"]) for m in dialogue[:end]),
+                    "retained_chars": sum(len(m["content"]) for m in round_dialogue),
+                }
             opening_index = 1 + len(history_messages)
             if dialogue is None:
                 messages = [base_messages[0], *history_messages, *opening, *tail, *feedback, *shared]
@@ -1134,6 +1143,7 @@ class ToolLoopAgent:
                 "declared_packs": self.packs,
                 "pack_text": template_kwargs.get("packs"),
                 "conversation_context": history.audit,
+                "dialogue_window": dialogue_window_audit,
                 "rejections": [{"iteration": r.iteration, "tool_name": r.tool_name,
                                 "kind": r.kind, "detail": r.detail} for r in rejections],
                 "accepted_reads": list(accepted_reads),

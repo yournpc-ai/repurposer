@@ -908,7 +908,7 @@ def test_saved_and_ambiguous_work_use_editor_without_legacy_draft_review():
         for pos, id_ in [(1, "second"), (3, "first")]
     ]
     assert edited.caller_state["video_target"] == saved
-    assert (EDITOR_NAMES - {"create_video"}) <= {tool.name for tool in edited.tools}
+    assert (EDITOR_NAMES - {"create_video", "instantiate_skill_blueprint"}) <= {tool.name for tool in edited.tools}
     assert not {"design_video", "review_working_draft"} & {tool.name for tool in edited.tools}
     assert "complete project and an unrelated asset" not in edited.context
     assert "title-second" not in edited.context
@@ -916,7 +916,7 @@ def test_saved_and_ambiguous_work_use_editor_without_legacy_draft_review():
     presenting = _video_round(intent_router.tools, snapshot=snapshot, version_saved=True,
                               user_text="Review the draft and deliver the MP4")
     assert presenting.caller_state["video_target"] == saved
-    assert (EDITOR_NAMES - {"create_video"}) <= {tool.name for tool in presenting.tools}
+    assert (EDITOR_NAMES - {"create_video", "instantiate_skill_blueprint"}) <= {tool.name for tool in presenting.tools}
     draft_only = _video_round(intent_router.tools, snapshot=snapshot, version_saved=True,
                              user_text="请保存初稿给我看。")
     assert {t.name for t in draft_only.tools} == {"answer"}
@@ -927,7 +927,7 @@ def test_saved_and_ambiguous_work_use_editor_without_legacy_draft_review():
         snapshot=ContextSnapshot("two", resources=(("one", saved), ("two", other))),
     )
     assert ambiguous.caller_state["video_target"] is None
-    assert (EDITOR_NAMES - {"create_video"}) <= {tool.name for tool in ambiguous.tools}
+    assert (EDITOR_NAMES - {"create_video", "instantiate_skill_blueprint", "save_composition_as_skill"}) <= {tool.name for tool in ambiguous.tools}
     assert "ask_user" in {tool.name for tool in ambiguous.tools}
 
 
@@ -1058,7 +1058,7 @@ def test_editor_tools_do_not_depend_on_requested_action():
     first = _video_round(intent_router.tools, snapshot=snapshot, user_text="Split the second clip")
     second = _video_round(intent_router.tools, snapshot=snapshot, user_text="Change the title")
     assert {t.name for t in first.tools} == {t.name for t in second.tools}
-    assert (EDITOR_NAMES - {"create_video"}) <= {t.name for t in second.tools}
+    assert (EDITOR_NAMES - {"create_video", "instantiate_skill_blueprint"}) <= {t.name for t in second.tools}
     assert not {"start_run", "revise_video", "design_video"} & {t.name for t in second.tools}
     assert "clip_targets" not in second.context and "title-second" not in second.context
 
