@@ -2,7 +2,7 @@
 
 import secrets
 from datetime import UTC, datetime, timedelta
-from uuid import UUID
+from uuid import NAMESPACE_URL, UUID, uuid5
 
 import jwt
 import structlog
@@ -158,7 +158,7 @@ async def get_or_create_user(db: AsyncSession, email: str) -> User:
     return user
 
 
-def create_access_token(user_id: UUID) -> str:
+def create_access_token(user_id: UUID, session_id: UUID | None = None) -> str:
     """Create a JWT access token for the given user."""
     expires_delta = timedelta(days=settings.jwt_expire_days)
     expire = datetime.now(UTC) + expires_delta
@@ -167,16 +167,23 @@ def create_access_token(user_id: UUID) -> str:
         "exp": expire,
         "iat": datetime.now(UTC),
     }
+    if session_id is not None:
+        payload["jti"] = str(session_id)
     return jwt.encode(payload, settings.jwt_secret_key, algorithm=JWT_ALGORITHM)
 
 
-def decode_access_token(token: str) -> UUID | None:
-    """Decode a JWT access token; returns the user id or ``None`` if invalid."""
+def session_claims(token: str) -> tuple[UUID, UUID, datetime, bool] | None:
+    """Older signed tokens acquire a stable session on their first request."""
     try:
-        payload = jwt.decode(
-            token, settings.jwt_secret_key, algorithms=[JWT_ALGORITHM]
+        claims = jwt.decode(
+            token,
+            settings.jwt_secret_key,
+            algorithms=[JWT_ALGORITHM],
+            options={"require": ["exp", "sub"]},
         )
-        return UUID(payload["sub"])
-    except (jwt.PyJWTError, KeyError, ValueError) as e:
-        logger.warning("jwt_decode_failed", error=str(e))
+        legacy = "jti" not in claims
+        session_id = uuid5(NAMESPACE_URL, token) if legacy else UUID(claims["jti"])
+        expires = datetime.fromtimestamp(claims["exp"], UTC)
+        return UUID(claims["sub"]), session_id, expires, legacy
+    except (jwt.PyJWTError, TypeError, ValueError, OverflowError):
         return None

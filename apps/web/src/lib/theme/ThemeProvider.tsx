@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from "react"
+import { createContext, useCallback, useContext, useEffect, useState } from "react"
 
 export type Theme = "light" | "dark" | "system"
 export type ResolvedTheme = "light" | "dark"
@@ -12,7 +12,7 @@ type ThemeContextValue = {
   resolved: ResolvedTheme
   setTheme: (theme: Theme) => void
   /** Toggle light/dark with a circular View Transition reveal from the event origin. */
-  toggleTheme: (e?: { clientX: number; clientY: number }) => void
+  toggleTheme: (e?: { clientX: number; clientY: number }, applyTheme?: (value: Theme) => void) => void
 }
 
 const ThemeContext = createContext<ThemeContextValue | null>(null)
@@ -78,17 +78,17 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     return () => mql.removeEventListener("change", onChange)
   }, [theme])
 
-  const setTheme = (next: Theme) => {
+  const setTheme = useCallback((next: Theme) => {
     setThemeState(next)
     localStorage.setItem(THEME_STORAGE_KEY, next)
     const r = resolveTheme(next)
     setResolved(r)
     applyResolved(r)
-  }
+  }, [])
 
-  const toggleTheme = (e?: { clientX: number; clientY: number }) => {
+  const toggleTheme = (e?: { clientX: number; clientY: number }, applyTheme = setTheme) => {
     const nextResolved: ResolvedTheme = resolved === "dark" ? "light" : "dark"
-    const apply = () => setTheme(nextResolved)
+    const apply = () => applyTheme(nextResolved)
 
     const doc = document as ViewTransitionDocument
     if (!doc.startViewTransition || prefersReducedMotion()) {

@@ -3,7 +3,7 @@
 import { createContext, useContext } from "react"
 import type { CreditTopupRequest } from "@/lib/credits"
 
-export type SettingsSectionId = "channels" | "assistant" | "credits"
+export type SettingsSectionId = "personal" | "profile" | "channels" | "credits" | "notifications" | "security"
 
 export interface CheckoutReturn {
   orderId: string

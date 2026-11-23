@@ -36,11 +36,7 @@ export function CreditTopupDialog({
         })
       }
     >
-      {open && (
-        <div className="mt-6">
-          <CreditPackagePicker onCancel={onClose} />
-        </div>
-      )}
+      {open && <CreditPackagePicker onCancel={onClose} />}
     </Dialog>
   )
 }

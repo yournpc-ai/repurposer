@@ -27,6 +27,17 @@ POST /api/v1/auth/verify-code  { "email": "you@example.com", "code": "123456" }
 - Projects, personas, brand templates and all other product data are private to their owner — anonymous requests see nothing. `/personas` returns only the caller's own personas: project creation rejects persona_ids the caller does not own, so default-user (shared) personas are never offered as selectable options.
 - Invalid/expired tokens receive 401; the frontend clears the stored token and opens the login dialog on any 401.
 
+### Account settings
+
+| Endpoint (under `/api/v1/auth`) | Behavior |
+| --- | --- |
+| `GET /profile`, `PUT /profile` | Return the caller’s ID, sign-in email and display name. PUT accepts only `name` (1–80 trimmed characters). |
+| `GET /settings`, `PUT /settings` | Partial updates merge under a user row lock. Alongside the confirmation and layout preferences, the response carries `theme` (system/light/dark), `locale` (en/zh), `publish_alerts` and read-only `email_available`. An unset theme or locale uses the device’s existing preference. |
+| `GET /sessions` | List the caller’s unexpired, active sessions, with user agent, recent activity and a flag for the current session. Existing signed tokens register on first use. |
+| `DELETE /sessions/{id}`, `POST /logout` | Revoke the selected session or the current bearer session. Subsequent requests using that credential receive 401. |
+
+Publication issue emails are opt-in. Failed, uncertain and expired-channel events enqueue delivery when the bell notification commits. The worker checks the current preference before sending and retries with the notification ID as the provider idempotency key.
+
 ## 2. Agent Editor request sequence
 
 Create a project with POST /api/v1/projects and attach completed staging uploads through POST /api/v1/projects/{project_id}/assets/from-staging. Submit the user's instruction and attachment IDs to POST /api/v1/chat. The server persists the opening and streams the Agent's native tool activity. Immediate edits save a CompositionVersion. Authorized media generation and formal export enqueue MediaJob and ExportJob respectively.
@@ -235,6 +246,7 @@ The response includes a representative clip thumbnail for each project:
 ```
 
 - `thumbnail_url` points to the earliest rendered clip for the project.
+- The project library uses `include_thumbnail=false` to skip the thumbnail lookup. `skip` and `limit` paginate the response.
 
 ```http
 GET /api/v1/projects/{project_id}

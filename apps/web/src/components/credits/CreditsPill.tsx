@@ -79,77 +79,73 @@ export function CreditsPill({ refreshKey }: { refreshKey: string }) {
         {wallet ? formatCredits(wallet.balance, i18n.language) : "—"}
       </Button>
       <Popover open={open} onClose={() => setOpen(false)} aria-label={t("common.credits")} align="end" width={320} focusOnOpen>
-        <div>
-          <div className="flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-xs text-muted-foreground">
-                {t("credits.available")}
-              </p>
-              <p className="mt-1 text-2xl font-semibold tabular-nums">
-                {wallet ? formatCredits(wallet.balance, i18n.language) : "—"}
-              </p>
-            </div>
-            <Button
-              type="button"
-              size="sm"
-              className="flex-none"
-              onClick={() => {
-                setOpen(false)
-                openCreditTopup()
-              }}
-            >
-              {t("credits.buyTitle")}
-            </Button>
-          </div>
-          {wallet != null && (wallet.held > 0 || wallet.balance < 0) && (
-            <div className="mt-2 space-y-1">
-              {wallet.held > 0 && (
-                <p className="text-[11px] text-muted-foreground">
-                  {t("credits.heldInline", {
-                    count: formatCredits(wallet.held, i18n.language),
-                  })}
+        <div className="grid gap-3">
+          <div>
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-xs text-muted-foreground">
+                  {t("credits.available")}
                 </p>
-              )}
-              {wallet.balance < 0 && (
-                <p className="text-[11px] leading-snug text-muted-foreground">
-                  {t("credits.negativeNote")}
+                <p className="mt-1 break-words text-2xl leading-7 font-semibold tabular-nums">
+                  {wallet ? formatCredits(wallet.balance, i18n.language) : "—"}
                 </p>
-              )}
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                className="flex-none"
+                onClick={() => {
+                  setOpen(false)
+                  openCreditTopup()
+                }}
+              >
+                {t("credits.buyTitle")}
+              </Button>
             </div>
-          )}
-        </div>
-
-        <div className="border-t border-subtle px-4 py-3">
-          <p className="text-xs text-muted-foreground">
-            {t("credits.recent")}
-          </p>
-          <div className="mt-1">
-            {items === null ? (
-              <p className="py-2 text-xs text-muted-foreground">…</p>
-            ) : items.length === 0 ? (
-              <p className="py-2 text-xs text-muted-foreground">
-                {t("credits.tx.empty")}
-              </p>
-            ) : (
-              items.map((item) => (
-                <TransactionRow key={item.id} item={item} />
-              ))
+            {wallet != null && (wallet.held > 0 || wallet.balance < 0) && (
+              <div className="mt-2 space-y-1">
+                {wallet.held > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {t("credits.heldInline", {
+                      count: formatCredits(wallet.held, i18n.language),
+                    })}
+                  </p>
+                )}
+                {wallet.balance < 0 && (
+                  <p className="text-xs leading-snug text-muted-foreground">
+                    {t("credits.negativeNote")}
+                  </p>
+                )}
+              </div>
             )}
           </div>
-        </div>
 
-        <div className="border-t border-subtle p-1.5">
-          <button
-            type="button"
-            className="flex h-8 w-full items-center justify-between rounded-md px-2.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-            onClick={() => {
-              setOpen(false)
-              openSettings("credits")
-            }}
-          >
-            <span>{t("credits.viewAll")}</span>
-            <ArrowRight className="size-3.5" />
-          </button>
+          <section className="grid gap-1 border-t border-subtle pt-3">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-xs font-medium text-muted-foreground">{t("credits.recent")}</h3>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                iconRight={<ArrowRight size={14} />}
+                onClick={() => {
+                  setOpen(false)
+                  openSettings("credits")
+                }}
+              >
+                {t("credits.viewAll")}
+              </Button>
+            </div>
+            <div>
+              {items === null || items.length === 0 ? (
+                <p className="py-1.5 text-sm text-muted-foreground">
+                  {items === null ? "…" : t("credits.tx.empty")}
+                </p>
+              ) : (
+                items.map((item) => <TransactionRow key={item.id} item={item} />)
+              )}
+            </div>
+          </section>
         </div>
       </Popover>
     </div>

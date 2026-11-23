@@ -5,7 +5,8 @@ import {
   type ReactNode,
 } from "react"
 import { useNavigate, useRouterState } from "@tanstack/react-router"
-import { isAuthenticated } from "@/lib/auth"
+import { getUser, getToken, setAuth, isAuthenticated, type AuthUser } from "@/lib/auth"
+import { AccountSettingsProvider } from "./settings/AccountSettingsProvider"
 import { UNAUTHORIZED_EVENT } from "@/lib/api"
 import { AuthContext } from "@/lib/auth-context"
 import { LoginDialog } from "@/components/LoginDialog"
@@ -13,7 +14,9 @@ import { LoginDialog } from "@/components/LoginDialog"
 const PUBLIC_PATHS = new Set(["/"])
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [authed, setAuthed] = useState(false)
+  const [token, setToken] = useState<string | null>(null)
+  const [user, setUser] = useState<AuthUser | null>(null)
+  const authed = !!token
   const [loginOpen, setLoginOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
   const routerState = useRouterState()
@@ -21,7 +24,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate()
 
   const refreshAuth = useCallback(() => {
-    setAuthed(isAuthenticated())
+    setToken(getToken())
+    setUser(getUser())
   }, [])
 
   useEffect(() => {
@@ -87,19 +91,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <AuthContext.Provider
       value={{
         isAuthenticated: authed,
+        user,
+        updateUser: (updated) => {
+          if (!token || getToken() !== token || getUser()?.id !== updated.id) return
+          setAuth(token, updated)
+          setUser(updated)
+        },
         loginOpen,
         setLoginOpen,
         requireAuth,
         refreshAuth,
       }}
     >
-      {children}
+      <AccountSettingsProvider token={token}>{children}</AccountSettingsProvider>
       <LoginDialog
         open={loginOpen}
         onOpenChange={handleLoginOpenChange}
         onSuccess={handleLoginSuccess}
       />
-      {shouldBlock && (
+      {shouldBlock && !loginOpen && (
         <div className="fixed inset-0 z-40 bg-background/80 backdrop-blur-sm" />
       )}
     </AuthContext.Provider>

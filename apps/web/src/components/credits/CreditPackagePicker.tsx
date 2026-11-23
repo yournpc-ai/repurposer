@@ -132,28 +132,26 @@ export function CreditPackagePicker({ onCancel }: { onCancel?: () => void }) {
   const showAmountError = amountInput.length > 0 && !amountValid
 
   return (
-    <div className="space-y-5">
-      <div>
-        <div className="relative">
-          <TextField
-            prefix={formatCurrencySymbol(inputCurrency, i18n.language)}
-            type="text"
-            inputMode="decimal"
-            autoComplete="off"
-            value={amountInput}
-            disabled={purchasing}
-            aria-label={t("credits.amount")}
-            aria-invalid={showAmountError}
-            aria-describedby="credit-topup-amount-hint"
-            onChange={(event) => {
-              setAmountInput(event.target.value)
-              setSelectedKey(null)
-            }}
-            size="lg"
-            placeholder="0.00"
-          />
-        </div>
-        <div className="mt-2 flex min-h-5 items-center gap-1">
+    <div className="grid gap-4">
+      <div className="grid gap-2">
+        <TextField
+          prefix={formatCurrencySymbol(inputCurrency, i18n.language)}
+          type="text"
+          inputMode="decimal"
+          autoComplete="off"
+          value={amountInput}
+          disabled={purchasing}
+          label={t("credits.amount")}
+          aria-invalid={showAmountError}
+          aria-describedby="credit-topup-amount-hint"
+          onChange={(event) => {
+            setAmountInput(event.target.value)
+            setSelectedKey(null)
+          }}
+          size="lg"
+          placeholder="0.00"
+        />
+        <div className="flex min-h-5 items-center gap-1">
           <p
             id="credit-topup-amount-hint"
             className={cn(
@@ -191,7 +189,7 @@ export function CreditPackagePicker({ onCancel }: { onCancel?: () => void }) {
                 size="lg"
                 aria-pressed={checked}
                 disabled={purchasing}
-                className="min-w-0 text-base"
+                className="min-w-0"
                 onClick={() => {
                   setSelectedKey(item.key)
                   setAmountInput(formatAmountInput(item.amount_minor))
@@ -204,7 +202,7 @@ export function CreditPackagePicker({ onCancel }: { onCancel?: () => void }) {
         </div>
       )}
 
-      <div className="flex justify-end gap-2 pt-2">
+      <div className="flex justify-end gap-2 border-t border-subtle pt-4">
         {onCancel && (
           <Button
             type="button"

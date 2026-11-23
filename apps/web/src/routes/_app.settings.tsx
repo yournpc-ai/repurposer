@@ -56,7 +56,7 @@ function SettingsCallbackReturn() {
     } else if (error) {
       toast.error(t("channels.connectFailed", { platform: error }))
     }
-    openSettings("channels")
+    openSettings(connected || error ? "channels" : "personal")
     navigate({ to: "/home", replace: true })
   }, [checkout, orderId, connected, error, navigate, openSettings, refresh, t])
 

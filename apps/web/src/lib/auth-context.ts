@@ -6,7 +6,11 @@
 
 import { createContext, useContext } from "react"
 
+import type { AuthUser } from "./auth"
+
 export interface AuthContextValue {
+  user: AuthUser | null
+  updateUser: (user: AuthUser) => void
   isAuthenticated: boolean
   loginOpen: boolean
   setLoginOpen: (open: boolean) => void

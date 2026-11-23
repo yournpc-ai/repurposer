@@ -6,10 +6,9 @@ import type { ChatMention } from "@/lib/mentions"
 import { fetchChatSkills, skillOptionForReference, type SkillOption } from "@/lib/skills"
 import { consumeLandingCreate } from "@/lib/landingCreate"
 
-import { Button } from "@/components/ui/button-clean"
+import { DemoGallery } from "@/components/home/DemoGallery"
 import { HomeComposer } from "@/components/home/HomeComposer"
 import type { MentionEditorHandle } from "@/components/mentions/MentionEditor"
-
 
 export const Route = createFileRoute("/_app/home")({
   component: Home,
@@ -17,6 +16,7 @@ export const Route = createFileRoute("/_app/home")({
 
 function Home() {
   const { t } = useTranslation()
+  const scrollRef = useRef<HTMLDivElement>(null)
   // The draft (prompt + mentions) is the editor's reported mirror — the DOM
   // owns the text; Home keeps it as the send payload and acts on the editor
   // through `editorRef`.
@@ -26,7 +26,9 @@ function Home() {
   const [selectedSkill, setSelectedSkill] = useState<SkillOption | null>(null)
   const editorRef = useRef<MentionEditorHandle>(null)
   useEffect(() => {
-    fetchChatSkills().then(({ items }) => setSkillOptions(items)).catch(() => {})
+    fetchChatSkills()
+      .then(({ items }) => setSkillOptions(items))
+      .catch(() => {})
   }, [])
 
   const lastPrefillRef = useRef<string | null>(null)
@@ -36,8 +38,7 @@ function Home() {
       const text = t(prefillKey, { placeholder })
       const draft = prompt.trim()
       const replaceable =
-        replaceDraft ||
-        (mentions.length === 0 && (draft === "" || draft === lastPrefillRef.current))
+        replaceDraft || (mentions.length === 0 && (draft === "" || draft === lastPrefillRef.current))
       if (replaceable) {
         editorRef.current?.clear({ preserveSkill: true })
         editorRef.current?.insertText(text)
@@ -46,8 +47,9 @@ function Home() {
       }
       lastPrefillRef.current = text.trim()
       setSelectedSkill(skill)
-      editorRef.current?.selectText(placeholder)
-      editorRef.current?.focus()
+      if (!text.includes(placeholder) || !editorRef.current?.selectText(placeholder, "last")) {
+        editorRef.current?.focus()
+      }
     },
     [t, prompt, mentions],
   )
@@ -65,23 +67,28 @@ function Home() {
   }, [handlePrefill, skillOptions])
 
   return (
-    <section className="ui-as-start">
-      <h1 className="ui-as-start__title">{t("home.heroQuestion")}</h1>
-      <div className="ui-as-start__composer">
-        <HomeComposer prompt={prompt} mentions={mentions}
-          onPromptChange={setPrompt} onMentionsChange={setMentions}
-          selectedSkill={selectedSkill} onSkillChange={setSelectedSkill} editorRef={editorRef} />
-      </div>
-      <div className="mt-5 flex flex-wrap justify-center gap-2" data-tour="home-recipes">
-        {examples.map((example) => (
-          <Button key={example} variant="secondary"
-            onClick={() => handlePrefill(`home.examples.${example}.prompt`, selectedSkill)}>
-            {t(`home.examples.${example}.label`)}
-          </Button>
-        ))}
-      </div>
-    </section>
+    <div ref={scrollRef} className="h-full overflow-y-auto">
+      <section className="ui-as-start">
+        <h1 className="ui-as-start__title">{t("home.heroQuestion")}</h1>
+        <div className="ui-as-start__composer">
+          <HomeComposer
+            prompt={prompt}
+            mentions={mentions}
+            onPromptChange={setPrompt}
+            onMentionsChange={setMentions}
+            selectedSkill={selectedSkill}
+            onSkillChange={setSelectedSkill}
+            editorRef={editorRef}
+          />
+        </div>
+      </section>
+      <DemoGallery
+        scrollRef={scrollRef}
+        onPrefill={(key, reference) => {
+          handlePrefill(key, reference ? skillOptionForReference(reference, skillOptions) : null)
+          scrollRef.current?.scrollTo({ top: 0, behavior: "instant" })
+        }}
+      />
+    </div>
   )
 }
-
-const examples = ["overlay", "framing", "trim"] as const

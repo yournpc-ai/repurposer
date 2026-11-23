@@ -66,12 +66,6 @@ const COMPOSER_TOUR_STEPS: TourStepDef[] = [
     descKey: "tour.composer.promptDesc",
     side: "bottom",
   },
-  {
-    target: "[data-tour='home-recipes']",
-    titleKey: "tour.composer.recipesTitle",
-    descKey: "tour.composer.recipesDesc",
-    side: "top",
-  },
 ]
 
 const TOUR_VERSION = tourVersionOf(COMPOSER_TOUR_STEPS, tourCopy.composer)
@@ -99,8 +93,7 @@ export function HomeComposer({
   // Batch A (2026-09-18): picked files upload IMMEDIATELY into a pre-project
   // staging session (useStagingUploads) — Generate never waits on the wire;
   // the chips carry the upload lifecycle (spinner+% / retry / ×).
-  const { staged, addFiles, removeStaged, retryStaged, clearStaged } =
-    useStagingUploads()
+  const { staged, addFiles, removeStaged, retryStaged, clearStaged } = useStagingUploads()
   const [assetsOpen, setAssetsOpen] = useState(false)
   const [tourOpen, setTourOpen] = useState(false)
 
@@ -126,10 +119,7 @@ export function HomeComposer({
     if (!tourAllowed) return
     try {
       const seenVersion = window.localStorage.getItem(TOUR_SEEN_KEY)
-      if (
-        shouldAutoOpenTour(seenVersion, TOUR_VERSION, isAuthenticated, loginOpen)
-      )
-        setTourOpen(true)
+      if (shouldAutoOpenTour(seenVersion, TOUR_VERSION, isAuthenticated, loginOpen)) setTourOpen(true)
     } catch {
       // storage unavailable (private mode) — tour simply never auto-opens
     }
@@ -259,7 +249,11 @@ export function HomeComposer({
   }
   return (
     <>
-    <Card role="group" className={dragging ? "relative w-full outline-2 outline-dashed outline-ring" : "relative w-full"} {...dropProps}>
+      <Card
+        role="group"
+        className={dragging ? "relative w-full outline-2 outline-dashed outline-ring" : "relative w-full"}
+        {...dropProps}
+      >
         {/* Drop affordance — the floating pill (screenshot parity): centered
             over the card, pointer-events-none so the drop always lands on
             the shell. Frosted floating layer (overlay-surface family) with
@@ -272,112 +266,77 @@ export function HomeComposer({
             </div>
           </div>
         )}
-        <div role="group"
-          className="min-h-0 overflow-hidden px-5 py-0 font-normal"
-          style={{ display: staged.length && !assetsOpen ? undefined : "none", paddingTop: 16 }}
-          onClick={focusEditor}
-        >
+        {staged.length > 0 && !assetsOpen && (
           <AssetChips items={staged} onRemove={removeStaged} onRetry={retryStaged} />
-        </div>
-
-        {/* The input row: the bar's attach button (zero width when expanded)
-            + the editor band. A plain row, not an addon — the inline-start
-            addon only fits single-line shells. */}
-        <div className="flex w-full items-center">
-          <div
-            className="relative flex min-w-0 flex-1 cursor-text flex-col"
-            style={{ minHeight: 80, padding: 20 }}
-            data-tour="composer-prompt"
-            onClick={focusEditor}
-          >
-                {promptEmpty && (
-              <div
-                aria-hidden
-                className="pointer-events-none absolute inset-0 overflow-hidden whitespace-nowrap text-base text-meta-foreground"
-                style={{ padding: 20 }}
-              >
-                <span className="relative inline-block whitespace-nowrap">
-                  {placeholderRoll.prev !== null && (
-                    <span
-                      key={`out-${placeholderRoll.prev}`}
-                      className="placeholder-roll-out absolute left-0 top-0"
-                    >
-                      {placeholderPrompts[placeholderRoll.prev]}
-                    </span>
-                  )}
-                  <span
-                    key={`in-${placeholderRoll.idx}`}
-                    className="placeholder-roll-in inline-block"
-                  >
-                    {placeholderPrompts[placeholderRoll.idx]}
-                  </span>
-                </span>
-              </div>
-            )}
-            <MentionEditor
-              ref={editorRef}
-              disabled={isGenerating}
-              mentionContext={mentionContext}
-              selectedSkill={selectedSkill}
-              onSkillChange={onSkillChange}
-              className="p-0"
-              onChange={(text, ms) => {
-                onPromptChange(text)
-                onMentionsChange(ms)
-              }}
-              onSubmit={handleGenerate}
-            />
-          </div>
-        </div>
-
-        <div role="group"
-          className="min-h-0 items-center gap-2 overflow-hidden px-5 py-0 pr-12 font-normal"
-          style={{ marginTop: 8, paddingBottom: 12 }}
+        )}
+        <div
+          className="relative flex min-h-10 min-w-0 cursor-text flex-col"
+          data-tour="composer-prompt"
           onClick={focusEditor}
         >
-          <div className="flex w-full items-center justify-between">
-            <div className="-ml-[9px] flex items-center gap-1">
-              <ComposerPanelButton
-                icon={Plus}
-                label={t("composer.assets")}
-                open={assetsOpen}
-                onOpenChange={setAssetsOpen}
-                popoverSide="bottom"
-                align="start"
-                data-tour="composer-assets"
-              >
-                <AssetsPanel
-                  items={staged}
-                  onAdd={addFiles}
-                  onRemove={removeStaged}
-                  onRetry={retryStaged}
-                />
-              </ComposerPanelButton>
-
-
+          {promptEmpty && (
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-0 overflow-hidden text-sm text-meta-foreground"
+            >
+              <span className="relative block truncate">
+                {placeholderRoll.prev !== null && (
+                  <span
+                    key={`out-${placeholderRoll.prev}`}
+                    className="placeholder-roll-out absolute left-0 top-0"
+                  >
+                    {placeholderPrompts[placeholderRoll.prev]}
+                  </span>
+                )}
+                <span key={`in-${placeholderRoll.idx}`} className="placeholder-roll-in inline-block">
+                  {placeholderPrompts[placeholderRoll.idx]}
+                </span>
+              </span>
             </div>
-
-          </div>
-
+          )}
+          <MentionEditor
+            ref={editorRef}
+            disabled={isGenerating}
+            mentionContext={mentionContext}
+            selectedSkill={selectedSkill}
+            onSkillChange={onSkillChange}
+            className="max-h-36 p-0 text-sm"
+            onChange={(text, ms) => {
+              onPromptChange(text)
+              onMentionsChange(ms)
+            }}
+            onSubmit={handleGenerate}
+          />
         </div>
+        <div className="flex items-center justify-between" onClick={focusEditor}>
+          <ComposerPanelButton
+            icon={Plus}
+            label={t("composer.assets")}
+            open={assetsOpen}
+            onOpenChange={setAssetsOpen}
+            popoverSide="bottom"
+            align="start"
+            data-tour="composer-assets"
+          >
+            <AssetsPanel items={staged} onAdd={addFiles} onRemove={removeStaged} onRetry={retryStaged} />
+          </ComposerPanelButton>
+          <ComposerSendButton
+            data-tour="composer-send"
+            disabled={isGenerating}
+            generating={isGenerating}
+            onClick={handleGenerate}
+            label={t("chat.send")}
+          />
+        </div>
+      </Card>
 
-        <ComposerSendButton
-          style={{ position: "absolute", bottom: 12, right: 12 }}
-          data-tour="composer-send"
-          disabled={isGenerating}
-          generating={isGenerating}
-          onClick={handleGenerate}
-          label={t("chat.send")}
-        />
-    </Card>
-
-    <Tour
-      steps={tourSteps}
-      open={tourOpen && tourAllowed}
-      onOpenChange={setTourOpen}
-      onComplete={markTourSeen}
-      onSkip={markTourSeen}
-    />
+      <Tour
+        steps={tourSteps}
+        open={tourOpen && tourAllowed}
+        onOpenChange={setTourOpen}
+        onComplete={markTourSeen}
+        onSkip={markTourSeen}
+      />
     </>
   )
 }

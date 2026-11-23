@@ -60,9 +60,9 @@ export interface MentionEditorHandle {
   insertMention: (mention: ChatMention) => void
   /** Insert plain text at the end ("\n" becomes a line break). */
   insertText: (text: string) => void
-  /** Select the first occurrence of plain text (recipe prefill placeholders).
+  /** Select an occurrence of plain text (recipe prefill placeholders).
    * Returns whether the text was found. */
-  selectText: (text: string) => boolean
+  selectText: (text: string, occurrence?: "first" | "last") => boolean
   clear: (options?: { preserveSkill?: boolean }) => void
   focus: () => void
   /** The content's intrinsic height (the editable's scrollHeight) — for
@@ -479,27 +479,29 @@ export function MentionEditor({
   /** Select a literal text run inside the editable (the recipe prefill's
    * visible blank). The DOM walker keeps this honest for the plain-text
    * prefill while never reaching into mention chips. */
-  const selectText = useCallback((needle: string) => {
+  const selectText = useCallback((needle: string, occurrence: "first" | "last" = "first") => {
     const el = editorRef.current
     if (!el || !needle) return false
     const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+    let match: Range | undefined
     let node = walker.nextNode()
     while (node) {
       const text = node.textContent ?? ""
-      const start = text.indexOf(needle)
-      if (start >= 0) {
-        el.focus()
-        const range = document.createRange()
-        range.setStart(node, start)
-        range.setEnd(node, start + needle.length)
-        const sel = window.getSelection()
-        sel?.removeAllRanges()
-        sel?.addRange(range)
-        return true
+      const start = occurrence === "last" ? text.lastIndexOf(needle) : text.indexOf(needle)
+      if (start >= 0 && !node.parentElement?.closest(`[${SKILL_ATTR}],[${MENTION_ATTR}]`)) {
+        match = document.createRange()
+        match.setStart(node, start)
+        match.setEnd(node, start + needle.length)
+        if (occurrence === "first") break
       }
       node = walker.nextNode()
     }
-    return false
+    if (!match) return false
+    el.focus()
+    const sel = window.getSelection()
+    sel?.removeAllRanges()
+    sel?.addRange(match)
+    return true
   }, [])
 
   const focus = useCallback(() => {
@@ -612,9 +614,15 @@ export function MentionEditor({
         data-slot="input-group-control"
         data-placeholder={placeholder}
         data-tour={dataTour}
-        onInput={syncNow}
+        onInput={() => {
+          syncNow()
+          updatePicker()
+        }}
         onKeyDown={handleKeyDown}
-        onKeyUp={updatePicker}
+        onKeyUp={(event) => {
+          if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) updatePicker()
+        }}
+        onBlur={() => setPicker(null)}
         onMouseUp={updatePicker}
         onPaste={handlePaste}
         className={cn(

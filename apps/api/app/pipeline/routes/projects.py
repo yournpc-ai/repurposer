@@ -83,6 +83,7 @@ async def list_projects(
     persona_id: UUID | None = None,
     skip: int = 0,
     limit: int = 100,
+    include_thumbnail: bool = True,
 ) -> list[ProjectResponse]:
     """List projects for the current user, with a representative clip thumbnail.
 
@@ -90,22 +91,6 @@ async def list_projects(
     the home page can show a real video thumbnail + duration/aspect badge
     without a second round trip per card.
     """
-    thumb = (
-        select(
-            Output.project_id.label("project_id"),
-            Output.id.label("output_id"),
-            Output.files["video"].as_string().label("video_url"),
-            cast(
-                func.floor(cast(Output.payload["duration"].as_string(), Float)), Integer
-            ).label("duration"),
-            Output.render_spec.label("render_spec"),
-        )
-        .distinct(Output.project_id)
-        .where(Output.type == "video")
-        .where(Output.files.has_key("video"))
-        .order_by(Output.project_id, Output.created_at.asc())
-        .subquery()
-    )
     # Projects are private to their owner; anonymous users see nothing.
     if not current_user:
         return []
@@ -115,24 +100,40 @@ async def list_projects(
         .where(Conversation.project_id == Project.id)
         .exists()
     )
-    query = (
-        select(Project, thumb.c.output_id, thumb.c.video_url, thumb.c.duration, thumb.c.render_spec)
-        .outerjoin(thumb, thumb.c.project_id == Project.id)
-        .where(Project.user_id == current_user.id)
-        .where(has_messages)
-    )
+    query = select(Project).where(Project.user_id == current_user.id, has_messages)
+    if include_thumbnail:
+        thumb = (
+            select(
+                Output.project_id.label("project_id"),
+                Output.id.label("output_id"),
+                Output.files["video"].as_string().label("video_url"),
+                cast(
+                    func.floor(cast(Output.payload["duration"].as_string(), Float)), Integer
+                ).label("duration"),
+                Output.render_spec.label("render_spec"),
+            )
+            .distinct(Output.project_id)
+            .where(Output.type == "video")
+            .where(Output.files.has_key("video"))
+            .order_by(Output.project_id, Output.created_at.asc())
+            .subquery()
+        )
+        query = query.outerjoin(thumb, thumb.c.project_id == Project.id).add_columns(
+            thumb.c.output_id, thumb.c.video_url, thumb.c.duration, thumb.c.render_spec
+        )
     if persona_id:
         query = query.where(Project.persona_id == persona_id)
     query = (
-        query.order_by(Project.updated_at.desc().nulls_last())
+        query.order_by(Project.updated_at.desc().nulls_last(), Project.id)
         .offset(skip)
         .limit(limit)
     )
     result = await db.execute(query)
-    rows = result.all()
+    if not include_thumbnail:
+        return [ProjectResponse.model_validate(project) for project in result.scalars()]
 
     responses = []
-    for project, output_id, video_url, duration, render_spec in rows:
+    for project, output_id, video_url, duration, render_spec in result:
         resp = ProjectResponse.model_validate(project)
         if is_export_location(video_url):
             if matches_export_location(video_url, current_user.id, project.id, output_id):

@@ -1,29 +1,22 @@
 import { Link } from "@tanstack/react-router"
-import { FolderKanban, MoreHorizontal, Pencil, Trash2 } from "lucide-react"
+import { MoreHorizontal, Pencil, Trash2 } from "lucide-react"
 import { useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
-import { BrandLoader } from "@/components/BrandLoader"
-import { ProcessingTile } from "@/components/ProcessingTile"
+import { Spinner } from "@/components/ui/spinner-clean"
 import { DeleteProjectDialog, RenameProjectDialog } from "@/components/project/project-dialogs"
 import { Checkbox } from "@/components/ui/checkbox-clean"
-import { Badge } from "@/components/ui/badge-clean"
 import { IconButton } from "@/components/ui/icon-button-clean"
 import { DropdownMenu } from "@/components/ui/dropdown-menu-clean"
 import { Card, CardHeader } from "@/components/ui/card-clean"
-import { formatDuration, formatRelativeTime } from "@/lib/utils"
+import { formatRelativeTime } from "@/lib/utils"
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000"
-
-interface Project {
+export interface Project {
   id: string
   title: string
   status: string
   created_at?: string | null
   updated_at?: string | null
-  thumbnail_url?: string | null
-  thumbnail_duration?: number | null
-  thumbnail_aspect?: string | null
 }
 
 interface ProjectCardProps {
@@ -33,37 +26,19 @@ interface ProjectCardProps {
   /** Bulk-selection state (page-owned). Selected cards keep the accent seat;
    * the circle itself hides on live-run projects (delete is refused mid-run,
    * same law as the ⋯ menu). */
+  selectionDisabled?: boolean
   selected?: boolean
   onToggleSelect?: () => void
 }
 
-export function ProjectCard({ project, onChanged, selected, onToggleSelect }: ProjectCardProps) {
+export function ProjectCard({ project, onChanged, selected, selectionDisabled, onToggleSelect }: ProjectCardProps) {
   const { t, i18n } = useTranslation()
-  // Fall back to the placeholder icon until the video decodes; if it never
-  // does (404, corrupt file), stay on the fallback rather than show a blank box.
-  const [videoReady, setVideoReady] = useState(false)
-  const [videoFailed, setVideoFailed] = useState(false)
-
   const menuTrigger = useRef<HTMLButtonElement>(null)
   const [renameOpen, setRenameOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
 
-  const thumbnailSrc = project.thumbnail_url
-    ? project.thumbnail_url.startsWith("/")
-      ? API_URL + project.thumbnail_url
-      : project.thumbnail_url
-    : null
-  const showVideo = thumbnailSrc && !videoFailed
-
-  // Bottom line: one slot, two facts — the stage label (while a run is live)
-  // and the relative time. The list is sorted by time, so the time must always
-  // be readable; a bare status without its timestamp hides the sort's readout.
   const active = project.status === "processing" || project.status === "uploading"
-  // Only a live run gets the mist tile + stage label. Draft carries no status
-  // readout (auto 档默认下它不再意味着 "awaiting confirmation" — ADR-117)：
-  // 草稿卡渲染同 settled 卡，底行只剩时间。
-  const live = active
   const stageLabel = active ? t(`projects.status.${project.status}`) : null
   const when = project.updated_at ?? project.created_at
   const timeLabel = when ? formatRelativeTime(when, i18n.language) : null
@@ -71,107 +46,69 @@ export function ProjectCard({ project, onChanged, selected, onToggleSelect }: Pr
 
   return (
     <>
-      <div className="group relative">
+      <div className="project-entry group relative">
         {!active && onToggleSelect && (
-          <div className="absolute left-4 top-4 z-10 opacity-100 md:opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 has-[:checked]:opacity-100">
+          <span className="project-checkbox" data-selected={selected || undefined}>
             <Checkbox
-              aria-label={t("projects.selection.toggle")}
+              aria-label={t("projects.selection.toggleNamed", { title: project.title })}
+              disabled={selectionDisabled}
               checked={!!selected}
               onChange={onToggleSelect}
             />
-          </div>
+          </span>
         )}
         <Card interactive selected={selected}>
-          <div
-            className={`relative flex aspect-video items-center justify-center overflow-hidden rounded-lg ${
-              selected
-                ? "outline-2 outline-foreground/60"
-                : "group-hover:outline-1 group-hover:outline-foreground/30"
-            } ${
-              // Neutral base for the live mist — bg-primary/10 would leak hue
-              // through it; the tinted base is only for the settled thumbnail.
-              live ? "bg-muted" : "bg-primary/10"
-            }`}
-          >
-            {live ? (
-              // Live run — the layered processing tile is the life signal
-              // (matte base, light shaft, mist, grain, halo), so the
-              // stage label below stays plain text.
-              <ProcessingTile>
-                <BrandLoader className="relative h-8 w-8" />
-              </ProcessingTile>
-            ) : (
-              <>
-                {showVideo ? (
-                  <video
-                    src={thumbnailSrc}
-                    muted
-                    playsInline
-                    preload="metadata"
-                    onLoadedData={() => setVideoReady(true)}
-                    onError={() => setVideoFailed(true)}
-                    className={`h-full w-full object-cover transition-transform duration-300 group-hover:scale-105 ${
-                      videoReady ? "opacity-100" : "opacity-0"
-                    }`}
-                  />
-                ) : null}
-                {!showVideo || !videoReady ? (
-                  <FolderKanban className="absolute h-7 w-7 text-primary" />
-                ) : null}
-                {showVideo && videoReady && project.thumbnail_duration != null && (
-                  <div className="absolute bottom-1.5 right-1.5 flex items-center gap-1">
-                    <Badge tone="neutral" className="rounded-md tabular-nums">
-                      {formatDuration(project.thumbnail_duration)}
-                    </Badge>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
           <CardHeader
+            icon={
+              <span className="grid size-8 place-items-center" aria-hidden="true">
+                {active ? <Spinner size={20} /> : <FolderMark />}
+              </span>
+            }
             title={
               <Link to="/projects/$id" params={{ id: project.id }}>
-                {project.title}
+                <span className="block truncate" title={project.title}>{project.title}</span>
               </Link>
             }
             description={bottomLine}
             action={
-              <DropdownMenu
-                open={menuOpen}
-                onOpenChange={setMenuOpen}
-                align="end"
-                trigger={({ triggerProps }) => (
-                  <IconButton
-                    ref={menuTrigger}
-                    {...triggerProps}
-                    label={t("projects.menuMore")}
-                    icon={<MoreHorizontal />}
-                  />
-                )}
-                items={[
-                  {
-                    label: t("projects.rename"),
-                    icon: <Pencil />,
-                    onSelect: () => {
-                      menuTrigger.current?.focus()
-                      setRenameOpen(true)
+              <div className={active || !onToggleSelect ? undefined : "ps-7"}>
+                <DropdownMenu
+                  open={menuOpen}
+                  onOpenChange={setMenuOpen}
+                  align="end"
+                  trigger={({ triggerProps }) => (
+                    <IconButton
+                      ref={menuTrigger}
+                      {...triggerProps}
+                      label={t("projects.menuMore")}
+                      icon={<MoreHorizontal />}
+                    />
+                  )}
+                  items={[
+                    {
+                      label: t("projects.rename"),
+                      icon: <Pencil />,
+                      onSelect: () => {
+                        menuTrigger.current?.focus()
+                        setRenameOpen(true)
+                      },
                     },
-                  },
-                  ...(active
-                    ? []
-                    : [
-                        {
-                          label: t("common.delete"),
-                          danger: true,
-                          icon: <Trash2 />,
-                          onSelect: () => {
-                            menuTrigger.current?.focus()
-                            setDeleteOpen(true)
+                    ...(active
+                      ? []
+                      : [
+                          {
+                            label: t("common.delete"),
+                            danger: true,
+                            icon: <Trash2 />,
+                            onSelect: () => {
+                              menuTrigger.current?.focus()
+                              setDeleteOpen(true)
+                            },
                           },
-                        },
-                      ]),
-                ]}
-              />
+                        ]),
+                  ]}
+                />
+              </div>
             }
           />
         </Card>
@@ -194,3 +131,11 @@ export function ProjectCard({ project, onChanged, selected, onToggleSelect }: Pr
     </>
   )
 }
+
+const FolderMark = () => (
+  <svg className="size-8" viewBox="0 0 67 67" fill="none" aria-hidden="true">
+    <path d="M11.17 15.35v15.36h44.67v-6.98c0-3.86-3.13-6.98-6.98-6.98H33.5l-3.93-5.89a5.58 5.58 0 0 0-4.64-2.49h-6.78c-3.86 0-6.98 3.13-6.98 6.98Z" fill="#00A1FF" />
+    <path d="M33.5 16.75l-3.93-5.89a5.58 5.58 0 0 0-4.64-2.49h-6.78c-3.86 0-6.98 3.13-6.98 6.98v15.36h44.67v-6.98c0-3.86-3.13-6.98-6.98-6.98H33.5Zm0 0h-9.77" stroke="#00A1FF" strokeWidth="4.19" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M6.59 42.38c-1.05-5.26-1.57-7.89-.08-9.67l.31-.34c1.66-1.66 4.59-1.66 10.45-1.66h32.46c5.86 0 8.79 0 10.45 1.66l.31.34c1.49 1.78.97 4.41-.08 9.67-1.51 7.56-2.26 11.34-5.1 13.66l-.6.46c-3.01 2.13-7.23 2.13-15.66 2.13h-11.1c-8.43 0-12.64 0-15.66-2.13l-.6-.46c-2.84-2.32-3.6-6.1-5.1-13.66Z" fill="#3CC7FF" stroke="#3CC7FF" strokeWidth="4.19" />
+  </svg>
+);

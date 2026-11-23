@@ -30,6 +30,9 @@ async def test_project_list_accepts_fractional_output_duration(database):
         await db.commit()
 
         rows = await list_projects(db=db, current_user=user)
+        compact = await list_projects(db=db, current_user=user, include_thumbnail=False)
+        assert [row.id for row in compact] == [project.id]
+        assert compact[0].thumbnail_url is None
 
     assert len(rows) == 1
     assert rows[0].id == project.id

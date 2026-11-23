@@ -6,13 +6,15 @@ default-user data explicitly in the router. There is no local-development
 bypass: login always requires a verification code.
 """
 
-from fastapi import Depends, Header, HTTPException, status
-from sqlalchemy import select
+from datetime import timedelta
+
+from fastapi import Depends, Header, HTTPException, Request, status
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.database import AsyncSessionLocal
-from app.models.tables import User
-from app.platform.auth import decode_access_token
+from app.models.tables import LoginSession, User, now_utc
+from app.platform.auth import session_claims
 
 DEFAULT_USER_EMAIL = "default@repurposer.local"
 DEFAULT_USER_ID = "00000000-0000-0000-0000-000000000001"
@@ -28,16 +30,38 @@ def _header_token(authorization: str | None = Header(None)) -> str | None:
     return None
 
 
-async def _get_user_from_token(db: AsyncSession, token: str) -> User | None:
-    """Resolve a user from a JWT bearer token."""
-    user_id = decode_access_token(token)
-    if user_id is None:
+async def _get_user_from_token(db: AsyncSession, token: str, agent: str) -> User | None:
+    claims = session_claims(token)
+    if claims is None:
         return None
-    result = await db.execute(select(User).where(User.id == user_id))
-    return result.scalar_one_or_none()
+    user_id, session_id, expires, legacy = claims
+    session = await db.get(LoginSession, session_id)
+    user = await db.get(User, user_id)
+    if user is None:
+        return None
+    if session is None and legacy:
+        await db.execute(
+            insert(LoginSession)
+            .values(
+                id=session_id,
+                user_id=user_id,
+                user_agent=agent[:512],
+                expires_at=expires,
+            )
+            .on_conflict_do_nothing(index_elements=["id"])
+        )
+        await db.commit()
+        session = await db.get(LoginSession, session_id)
+    if session is None or session.user_id != user_id or session.revoked_at is not None:
+        return None
+    if now_utc() - session.last_seen_at > timedelta(minutes=5):
+        session.last_seen_at = now_utc()
+        await db.commit()
+    return user
 
 
 async def get_current_user(
+    request: Request,
     authorization: str | None = Depends(_header_token),
 ) -> User | None:
     """Resolve the current user from a JWT bearer token.
@@ -52,7 +76,7 @@ async def get_current_user(
     async with AsyncSessionLocal() as db:
         if not authorization:
             return None
-        user = await _get_user_from_token(db, authorization)
+        user = await _get_user_from_token(db, authorization, request.headers.get("user-agent", ""))
         if user is None:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -63,6 +87,7 @@ async def get_current_user(
 
 
 async def get_current_user_required(
+    request: Request,
     authorization: str | None = Depends(_header_token),
 ) -> User:
     """Require a valid JWT bearer token; no anonymous or default-user fallback."""
@@ -73,7 +98,7 @@ async def get_current_user_required(
                 detail="Not authenticated",
                 headers={"WWW-Authenticate": "Bearer"},
             )
-        user = await _get_user_from_token(db, authorization)
+        user = await _get_user_from_token(db, authorization, request.headers.get("user-agent", ""))
         if user is None:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -84,7 +109,8 @@ async def get_current_user_required(
 
 
 async def get_current_user_optional(
+    request: Request,
     authorization: str | None = Depends(_header_token),
 ) -> User | None:
     """Alias for ``get_current_user``."""
-    return await get_current_user(authorization)
+    return await get_current_user(request, authorization)

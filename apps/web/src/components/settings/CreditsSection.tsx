@@ -304,7 +304,7 @@ export function CreditsSection() {
 
         <section
           ref={transactionTable}
-          className="min-w-0 scroll-mt-4 border-t border-subtle px-4 pt-6"
+          className="min-w-0 scroll-mt-4 border-t border-subtle pt-5"
         >
           <h4 className="text-sm font-semibold">{t("credits.topups")}</h4>
           <div
@@ -399,7 +399,7 @@ export function CreditsSection() {
           />
         </section>
 
-        <section className="min-w-0 border-t border-subtle px-4 pt-6">
+        <section className="min-w-0 border-t border-subtle pt-5">
           <h4 className="text-sm font-semibold">{t("credits.spending")}</h4>
           <div
             role="region"

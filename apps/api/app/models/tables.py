@@ -844,6 +844,17 @@ class Publication(Base):
     )
 
 
+class LoginSession(Base):
+    __tablename__ = "login_sessions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_agent = Column(String(512), nullable=False)
+    last_seen_at = Column(DateTime(timezone=True), nullable=False, default=now_utc)
+    expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    revoked_at = Column(DateTime(timezone=True))
+
+
 class Notification(Base):
     """User-facing notification (platform-layer table, MODULE_ARCHITECTURE §4).
 
@@ -863,7 +874,11 @@ class Notification(Base):
     read_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=now_utc)
 
+    email_due_at = Column(DateTime(timezone=True))
+    email_attempts = Column(Integer, nullable=False, server_default="0")
+
     __table_args__ = (
+        Index("ix_notifications_email_due", "email_due_at", postgresql_where=text("email_due_at IS NOT NULL")),
         Index("ix_notifications_user_created", "user_id", "created_at"),
         Index(
             "ix_notifications_user_unread",

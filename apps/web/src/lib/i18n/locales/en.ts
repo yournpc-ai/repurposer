@@ -184,11 +184,6 @@ const en = {
     myProjects: "My projects",
   },
   home: {
-    examples: {
-      overlay: { label: "Add a product image", prompt: "Place the attached product image over the video from 2 to 4 seconds. Keep the subtitles and original audio, then play this part." },
-      framing: { label: "Adjust framing", prompt: "Adjust the framing to keep the speaker and captions visible. Play the changed section." },
-      trim: { label: "Trim the opening", prompt: "Trim the pause at the beginning and play the new opening." },
-    },
     newChat: "New chat",
     // Studio hero: one question line above the composer — the rotating
     // placeholder below answers it with three example prompts.
@@ -498,7 +493,7 @@ const en = {
       nextPage: "More",
       previousPage: "Previous",
       upgrading: "Content is being upgraded",
-      usePrompt: "Start creating",
+      usePrompt: "Use prompt",
       playSound: "Play sound",
       mute: "Mute",
       emptyDemo: "No sample for this application yet.",
@@ -543,18 +538,22 @@ const en = {
             "Use this Skill to make a short promotional video from this website, showing viewers the product’s value: {{placeholder}}",
         },
         "product-promo-oxvalue-product-evidence": {
+          title: "Product evidence",
           prompt:
             "Use this Skill to make a short promotional video from this website, showing viewers the product’s value: {{placeholder}}",
         },
         "product-promo-oxvalue-energy-arc": {
+          title: "Energy arc",
           prompt:
             "Use this Skill to make a short promotional video from this website, showing viewers the product’s value: {{placeholder}}",
         },
         "text-short-clear-rhythm": {
+          title: "Clear rhythm",
           prompt:
             "Animate this copy:\n\nWe often assume that the more we say, the more people understand.\nSo we add context, pile on details, and try to cover every point.\nBut as the information grows, the idea we wanted to share can get lost.\n\nClear communication starts with a clear question.\nExplain the problem, then use a concrete example to show why it matters.\nGive each idea room to breathe, and your audience time to understand.\n\nMaking complex ideas clear takes more than cutting words.\nIt takes a thread people want to follow—and can follow.\nHelp great content move from being seen to being understood.",
         },
         "knowledge-explainer-clear-expression": {
+          title: "Clear expression",
           prompt:
             "Use this Skill to help me make an animation explaining why focusing on one point at a time makes an idea easier to understand, for someone new to the topic.",
         },
@@ -683,6 +682,7 @@ const en = {
     "title-lockup": { name: "Title lockup" },
   },
   mentions: {
+    addMaterialFirst: "Add material with the plus button to mention it here.",
     pickerEmpty: "No matches",
     remove: "Remove mention",
     regionChip: "{{time}} · {{width}}×{{height}}px",
@@ -700,6 +700,17 @@ const en = {
     },
   },
   projects: {
+    subtitle: "Open a project to review your video or continue editing in chat.",
+    resetFilters: "Clear filters",
+    library: "Project library",
+    filterLabel: "Project status",
+    all: "All",
+    drafts: "Drafts",
+    inProgress: "In progress",
+    view: "View",
+    grid: "Grid view",
+    list: "List view",
+    noFilterResults: "No projects with this status.",
     title: "Projects",
     search: "Search",
     searchPlaceholder: "Search projects...",
@@ -725,7 +736,7 @@ const en = {
     langZh: "Chinese",
     langEn: "English",
     emptyTitle: "No projects yet",
-    emptyDesc: "Create your first project and turn your material into social posts, quote cards, articles, and more.",
+    emptyDesc: "Start a project with your footage or an editing request.",
     noSearchResults: "No projects match your search.",
     noEvent: "No event set",
     deleteConfirm: "Delete this project?",
@@ -739,6 +750,7 @@ const en = {
     renamePlaceholder: "Project name",
     deleteDesc: "\"{{title}}\" and all its clips, posts and conversations will be permanently deleted.",
     selection: {
+      toggleNamed: "Select {{title}}",
       count: "{{count}} selected",
       delete: "Delete",
       clear: "Clear selection",
@@ -1873,7 +1885,7 @@ const en = {
     codeTitle: "Check your email",
     codeSubtitle:
       "Enter the 6-digit code we sent to <b>{{email}}</b>. It's valid for 10 minutes.",
-    digitLabel: "Digit {{index}} of {{total}}",
+    codeLabel: "6-digit verification code",
     enterAllDigits: "Enter all 6 digits",
     verifyAndLogin: "Verify & sign in",
     verifying: "Verifying...",
@@ -1897,9 +1909,6 @@ const en = {
       promptTitle: "Say what to make",
       promptDesc:
         "Write the result you want. Use @ to point to an uploaded asset, then send it.",
-      recipesTitle: "Try an editing request",
-      recipesDesc:
-        "Choose an example to fill the composer, then edit it for your footage.",
     },
   },
   notifications: {
@@ -1949,10 +1958,38 @@ const en = {
     disconnectedToast: "{{platform}} disconnected",
   },
   settings: {
+    profile: "Profile",
+    profileDescription: "Manage your personal details.",
+    profileNote: "Changes to your profile apply across your devices.",
+    avatar: "Profile picture",
+    preferencesDescription: "Choose how RookieCut looks and when your assistant asks for confirmation.",
+    appearanceGroup: "Language and appearance",
+    languageHint: "For menus and assistant replies",
+    themeHint: "System follows your device",
+    personalGroup: "Personal",
+    studioGroup: "Studio",
+    searchSections: "Search settings",
+    searchEmpty: "No matching settings",
+    navigateHint: "to navigate",
+    openHint: "to open",
+    resizeSidebar: "Resize sidebar",
+    name: "Display name",
+    email: "Sign-in email",
+    notifications: "Notifications",
+    notificationDescription: "Choose how to hear about publishing issues.",
+    emailAlerts: "Email me about publishing issues",
+    emailDetails: "Get an email when a post fails, its status is uncertain, or a channel needs reconnecting.",
+    inboxOnly: "Publishing updates are available in your notification inbox. Email delivery is currently unavailable.",
+    security: "Account security",
+    securityDescription: "See recently active devices and sign out a session.",
+    device: "Device",
+    currentDevice: "This device",
+    channelsUnavailable: "LinkedIn and TikTok publishing are currently unavailable.",
     title: "Settings",
   },
   a11y: {
     toggleSidebar: "Toggle Sidebar",
+    closeSidebar: "Close sidebar",
     openSidebar: "Open sidebar",
   },
   // 质检环 (产物质量线期 3): human labels for the verify node's check ids —

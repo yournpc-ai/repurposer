@@ -10,19 +10,15 @@ import { Dialog } from "@/components/ui/dialog-clean"
 import { IconButton } from "@/components/ui/icon-button-clean"
 import { Popover } from "@/components/ui/popover-clean"
 import { useIsMobile } from "@/hooks/use-mobile"
-import { getUser } from "@/lib/auth"
 import { useAuth } from "@/lib/auth-context"
 
 export const SIDEBAR_COOKIE_NAME = "sidebar_state"
 
 export function AccountMenu({ expanded = false }: { expanded?: boolean }) {
   const { t } = useTranslation()
-  const { isAuthenticated } = useAuth()
+  const { user } = useAuth()
   const trigger = useRef<HTMLButtonElement>(null)
   const [open, setOpen] = useState(false)
-  const [mounted, setMounted] = useState(false)
-  useEffect(() => setMounted(true), [])
-  const user = mounted && isAuthenticated ? getUser() : null
   const name = user?.name || user?.email || t("common.guest")
   return (
     <div className="relative min-w-0">
@@ -36,13 +32,15 @@ export function AccountMenu({ expanded = false }: { expanded?: boolean }) {
         aria-haspopup="dialog"
         onClick={() => setOpen(!open)}
       >
-        {user ? <Avatar name={name} size={24} /> : <User size={18} />}
-        {expanded && <span className="truncate">{name}</span>}
+        <span className="grid size-6 shrink-0 place-items-center">
+          {user ? <Avatar name={name} size={24} /> : <User size={18} />}
+        </span>
+        {expanded && <span className="ui-as-side__label truncate">{name}</span>}
       </button>
       <Popover
         open={open}
         onClose={() => setOpen(false)}
-        width={256}
+        width={user ? 296 : 160}
         align="start"
         aria-label={name}
         focusOnOpen
@@ -97,8 +95,8 @@ export function AppSidebar({ defaultOpen }: { defaultOpen: boolean }) {
           activeProps={{ "aria-current": "page" }}
           onClick={() => setMobileOpen(false)}
         >
-          <Icon size={18} />
-          {(expanded || mobile) && label}
+          <Icon size={16} />
+          <span className="ui-as-side__label truncate">{label}</span>
         </Link>
       ))}
     </nav>
@@ -117,14 +115,14 @@ export function AppSidebar({ defaultOpen }: { defaultOpen: boolean }) {
     )
   return (
     <aside className="ui-as-side" data-expanded={expanded}>
-      <div className="flex items-center gap-2">
-        {expanded && (
-          <>
-            <LogoMark className="size-6" />
-            <span className="flex-1 text-sm font-medium">RookieCut</span>
-          </>
-        )}
+      <div className="flex items-center">
+        <div aria-hidden={!expanded} className="ui-as-side__label flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
+          <LogoMark className="size-6" />
+          <span className="text-sm font-medium">RookieCut</span>
+        </div>
         <IconButton
+          className="ui-as-side__toggle"
+          aria-expanded={expanded}
           icon={<PanelLeft />}
           label={t(expanded ? "a11y.toggleSidebar" : "a11y.openSidebar")}
           onClick={toggle}
@@ -132,7 +130,7 @@ export function AppSidebar({ defaultOpen }: { defaultOpen: boolean }) {
       </div>
       {nav}
       <div className="mt-auto">
-        <AccountMenu expanded={expanded} />
+        <AccountMenu expanded />
       </div>
     </aside>
   )

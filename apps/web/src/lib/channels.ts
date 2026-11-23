@@ -30,13 +30,23 @@ export function useChannels(enabled = true) {
   const [channels, setChannels] = useState<ChannelAccount[]>([])
   const [availability, setAvailability] = useState<PlatformAvailability[]>([])
 
+  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading")
   const refresh = useCallback(async () => {
-    const [channelsRes, platformsRes] = await Promise.all([
-      apiFetch("/api/v1/channels", { toast: false }),
-      apiFetch("/api/v1/channels/platforms", { toast: false }),
-    ])
-    if (channelsRes.ok) setChannels(await channelsRes.json())
-    if (platformsRes.ok) setAvailability(await platformsRes.json())
+    setStatus("loading")
+    try {
+      const [accounts, platforms] = await Promise.all(
+        ["/api/v1/channels", "/api/v1/channels/platforms"].map(async path => {
+          const res = await apiFetch(path, { toast: false })
+          if (!res.ok) throw new Error("Channels unavailable")
+          return res.json()
+        })
+      )
+      setChannels(accounts)
+      setAvailability(platforms)
+      setStatus("ready")
+    } catch {
+      setStatus("error")
+    }
   }, [])
 
   useEffect(() => {
@@ -58,9 +68,9 @@ export function useChannels(enabled = true) {
   /** Presence-gating (§4.1): unconfigured platforms render "coming soon". */
   const isConfigured = useCallback(
     (platform: ChannelPlatform) =>
-      availability.find((a) => a.platform === platform)?.configured ?? true,
+      availability.find((a) => a.platform === platform)?.configured ?? false,
     [availability]
   )
 
-  return { channels, availability, refresh, accountFor, activeAccountFor, isConfigured }
+  return { channels, availability, status, refresh, accountFor, activeAccountFor, isConfigured }
 }

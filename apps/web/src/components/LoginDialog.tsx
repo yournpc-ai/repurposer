@@ -1,21 +1,21 @@
-import { useEffect, useRef, useState } from "react"
-import type { ChangeEvent, ClipboardEvent, KeyboardEvent } from "react"
+import { useEffect, useId, useRef, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
-import { ArrowLeft, ArrowRight } from "lucide-react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
-import type { Variants } from "motion/react"
+import { toast } from "sonner"
+import { ArrowLeft, ArrowRight, X } from "lucide-react"
 
+import { LogoMark } from "@/components/LogoMark"
+import { IconButton } from "@/components/ui/icon-button-clean"
 import { Button } from "@/components/ui/button-clean"
 import { Dialog } from "@/components/ui/dialog-clean"
+import { OtpInput } from "@/components/ui/otp-input-clean"
 import { TextField } from "@/components/ui/text-field-clean"
 
 import { apiPost, errorDetail } from "@/lib/api"
 import { setAuth } from "@/lib/auth"
-import { cn } from "@/lib/utils"
 
-const RESEND_COOLDOWN_SECONDS = 60
 const CODE_LENGTH = 6
-const EASE: [number, number, number, number] = [0.22, 1, 0.36, 1]
+const RESEND_COOLDOWN_SECONDS = 60
 
 interface LoginDialogProps {
   open: boolean
@@ -23,350 +23,247 @@ interface LoginDialogProps {
   onSuccess?: () => void
 }
 
-/** Two-step passwordless login inside one dialog: email → 6-digit code.
- * Steps swap via AnimatePresence; the code step auto-submits on the 6th
- * digit and clears itself on a failed verify. */
 export function LoginDialog({ open, onOpenChange, onSuccess }: LoginDialogProps) {
   const { t } = useTranslation()
   const [email, setEmail] = useState("")
-  const [digits, setDigits] = useState<string[]>(Array(CODE_LENGTH).fill(""))
   const [step, setStep] = useState<"email" | "code">("email")
   const [sentTo, setSentTo] = useState<string | null>(null)
   const [loading, setLoading] = useState<"send" | "verify" | null>(null)
-  const [error, setError] = useState("")
-  const [countdown, setCountdown] = useState(0)
-  const inputsRef = useRef<Array<HTMLInputElement | null>>([])
-  const reduce = useReducedMotion()
-
-  useEffect(() => {
-    if (step === "code" && error && !loading) inputsRef.current[0]?.focus()
-  }, [step, error, loading])
-
-  const isComplete = digits.every(Boolean)
-  // A code is "in flight" for the address currently in the input. Editing the
-  // email reverts the page to the fresh "Email me a code" state on its own.
+  const [code, setCode] = useState("")
+  const descriptionId = useId()
+  const reduceMotion = useReducedMotion()
+  const [resendAt, setResendAt] = useState(0)
+  const [now, setNow] = useState(0)
+  const countdown = Math.max(0, Math.ceil((resendAt - now) / 1000))
+  const [attempt, setAttempt] = useState(0)
+  const pending = useRef<AbortController | null>(null)
   const sentToThisEmail = sentTo !== null && sentTo === email.trim()
 
+  useEffect(() => () => pending.current?.abort(), [])
   useEffect(() => {
-    if (countdown <= 0) return
-    const timer = setInterval(() => setCountdown((c) => c - 1), 1000)
+    if (!resendAt) return
+    const timer = setInterval(() => {
+      const time = Date.now()
+      setNow(time)
+      if (time >= resendAt) setResendAt(0)
+    }, 1000)
     return () => clearInterval(timer)
-  }, [countdown > 0])
-
-  const reset = () => {
-    setError("")
-    setEmail("")
-    setDigits(Array(CODE_LENGTH).fill(""))
-    setStep("email")
-    setSentTo(null)
-    setCountdown(0)
-    setLoading(null)
-  }
+  }, [resendAt])
 
   const handleOpenChange = (next: boolean) => {
-    if (!next) reset()
+    if (!next) {
+      pending.current?.abort()
+      pending.current = null
+      setEmail("")
+      setStep("email")
+      setSentTo(null)
+      setCode("")
+      setResendAt(0)
+      setLoading(null)
+    }
     onOpenChange(next)
   }
 
-  const focusInput = (index: number) => {
-    inputsRef.current[index]?.focus()
-  }
-
   const sendCode = async () => {
-    if (!email.trim() || loading) return
-    setError("")
+    const address = email.trim()
+    if (!address || pending.current) return
+    const request = new AbortController()
+    pending.current = request
     setLoading("send")
     try {
       const res = await apiPost(
         "/api/v1/auth/send-code",
-        {
-          email: email.trim(),
-        },
-        { toast: false },
+        { email: address },
+        { toast: false, signal: request.signal },
       )
       if (!res.ok) {
-        setError(errorDetail(await res.json().catch(() => null), t("common.requestFailed")))
+        const message = errorDetail(await res.json().catch(() => null), t("login.sendFailed"))
+        if (!request.signal.aborted) toast.error(message)
         return
       }
-      setDigits(Array(CODE_LENGTH).fill(""))
-      setSentTo(email.trim())
+      if (request.signal.aborted) return
+      setSentTo(address)
       setStep("code")
-      setCountdown(RESEND_COOLDOWN_SECONDS)
+      setCode("")
+      setAttempt((n) => n + 1)
+      const time = Date.now()
+      setNow(time)
+      setResendAt(time + RESEND_COOLDOWN_SECONDS * 1000)
     } catch {
-      setError(t("common.networkError"))
+      if (!request.signal.aborted) toast.error(t("common.networkError"))
     } finally {
-      setLoading(null)
+      if (pending.current === request) {
+        pending.current = null
+        setLoading(null)
+      }
     }
   }
 
-  const verify = async (value: string) => {
-    if (value.length !== CODE_LENGTH || loading) return
-    setError("")
+  const verify = async (code: string) => {
+    if (code.length !== CODE_LENGTH || !sentTo || pending.current) return
+    const request = new AbortController()
+    pending.current = request
     setLoading("verify")
     try {
       const res = await apiPost(
         "/api/v1/auth/verify-code",
-        {
-          email: email.trim(),
-          code: value,
-        },
-        { toast: false },
+        { email: sentTo, code },
+        { toast: false, signal: request.signal },
       )
       if (!res.ok) {
-        setError(errorDetail(await res.json().catch(() => null), t("common.requestFailed")))
-        setDigits(Array(CODE_LENGTH).fill(""))
+        const message = errorDetail(await res.json().catch(() => null), t("login.verifyFailed"))
+        if (!request.signal.aborted) {
+          toast.error(message)
+          setCode("")
+          setAttempt((n) => n + 1)
+        }
         return
       }
       const data = await res.json()
+      if (request.signal.aborted) return
       setAuth(data.token, data.user)
       handleOpenChange(false)
       onSuccess?.()
     } catch {
-      setError(t("common.networkError"))
+      if (!request.signal.aborted) toast.error(t("common.networkError"))
     } finally {
-      setLoading(null)
+      if (pending.current === request) {
+        pending.current = null
+        setLoading(null)
+      }
     }
   }
 
-  const handleDigitChange = (index: number, event: ChangeEvent<HTMLInputElement>) => {
-    const value = event.target.value.replace(/\D/g, "").slice(-1)
-    const next = [...digits]
-    next[index] = value
-    setDigits(next)
-    if (value && index < CODE_LENGTH - 1) focusInput(index + 1)
-    if (next.every(Boolean)) verify(next.join(""))
-  }
-
-  const handleDigitKeyDown = (index: number, event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === "Backspace" && !digits[index] && index > 0) {
-      focusInput(index - 1)
-    }
-    if (event.key === "ArrowLeft" && index > 0) {
-      event.preventDefault()
-      focusInput(index - 1)
-    }
-    if (event.key === "ArrowRight" && index < CODE_LENGTH - 1) {
-      event.preventDefault()
-      focusInput(index + 1)
-    }
-  }
-
-  const handlePaste = (event: ClipboardEvent<HTMLInputElement>) => {
-    event.preventDefault()
-    const pasted = event.clipboardData.getData("text").replace(/\D/g, "").slice(0, CODE_LENGTH)
-    if (!pasted) return
-    const next = Array(CODE_LENGTH)
-      .fill("")
-      .map((_, index) => pasted[index] ?? "")
-    setDigits(next)
-    if (next.every(Boolean)) verify(next.join(""))
-    else focusInput(Math.min(pasted.length, CODE_LENGTH - 1))
-  }
-
-  const handleResend = async () => {
-    await sendCode()
-    focusInput(0)
-  }
-
-  const goBackToEmail = () => {
-    setStep("email")
-    setDigits(Array(CODE_LENGTH).fill(""))
-  }
-
-  const swap: Variants = {
-    initial: { opacity: 0, y: reduce ? 0 : 10 },
-    animate: { opacity: 1, y: 0, transition: { duration: 0.35, ease: EASE } },
-    exit: { opacity: 0, y: reduce ? 0 : -10, transition: { duration: 0.2, ease: EASE } },
-  }
-
-  const digitContainer: Variants = {
-    animate: { transition: { staggerChildren: 0.05, delayChildren: 0.15 } },
-  }
-
-  const digitItem: Variants = {
-    initial: { opacity: 0, y: reduce ? 0 : 8 },
-    animate: { opacity: 1, y: 0, transition: { duration: 0.4, ease: EASE } },
-  }
-
-  const renderDigit = (index: number) => (
-    <motion.div key={index} variants={digitItem}>
-      <input
-        ref={(el) => {
-          inputsRef.current[index] = el
-        }}
-        type="text"
-        inputMode="numeric"
-        pattern="[0-9]*"
-        maxLength={1}
-        autoComplete={index === 0 ? "one-time-code" : "off"}
-        autoFocus={index === 0}
-        value={digits[index]}
-        onChange={(e) => handleDigitChange(index, e)}
-        onKeyDown={(e) => handleDigitKeyDown(index, e)}
-        onPaste={handlePaste}
-        onFocus={(e) => e.target.select()}
-        disabled={loading !== null}
-        aria-label={t("login.digitLabel", { index: index + 1, total: CODE_LENGTH })}
-        className={cn(
-          "h-12 w-10 rounded-md border bg-background text-center text-lg font-semibold tabular-nums text-foreground outline-none transition-colors focus:border-foreground focus:outline-4 focus:outline-foreground/10 sm:w-11",
-          digits[index] ? "border-foreground" : "border-input hover:border-muted-foreground/50",
-        )}
-      />
-    </motion.div>
+  const resend = sentToThisEmail && (
+    <p className="text-center text-sm text-muted-foreground">
+      {t("login.didntReceive")}{" "}
+      {countdown > 0 ? (
+        <span className="tabular-nums">{t("login.resendIn", { count: countdown })}</span>
+      ) : (
+        <button type="button" className="rounded-md font-medium text-foreground" disabled={loading !== null} onClick={sendCode}>
+          {t(loading === "send" ? "login.sending" : "login.resendCode")}
+        </button>
+      )}
+    </p>
   )
+
+  const isEmail = step === "email"
+  const title = t(isEmail ? "login.title" : "login.codeTitle")
+  const complete = code.length === CODE_LENGTH
 
   return (
     <Dialog
       open={open}
       onOpenChange={handleOpenChange}
-      size="sm"
-      closeLabel={t("common.close")}
-      title={t(step === "email" ? "login.title" : "login.codeTitle")}
-      description={step === "email" ? t("login.subtitle") : undefined}
+      fullscreen
+      className="login-modal"
+      title={title}
+      aria-describedby={descriptionId}
     >
-      <AnimatePresence mode="wait" initial={false}>
-        {step === "email" ? (
+      <div className="overlay-surface relative max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-sm overflow-y-auto rounded-xl border border-subtle p-4 text-foreground">
+        <AnimatePresence mode="wait" initial={false}>
           <motion.div
-            key="email"
-            variants={swap}
-            initial="initial"
-            animate="animate"
-            exit="exit"
-            className="flex flex-col justify-center"
+            key={step}
+            initial={{ opacity: 0, y: reduceMotion ? 0 : 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: reduceMotion ? 0 : -10 }}
+            transition={{ duration: reduceMotion ? 0 : 0.2 }}
+            className={isEmail ? "flex flex-col items-start" : "flex flex-col items-center text-center"}
           >
-            <form
-              onSubmit={(e) => {
-                e.preventDefault()
-                if (sentToThisEmail) setStep("code")
-                else sendCode()
-              }}
-              className="mt-6"
-            >
-              <TextField
-                label={t("login.emailLabel")}
-                id="login-email"
-                type="email"
-                autoComplete="email"
-                required
-                autoFocus
-                placeholder={t("login.emailPlaceholder")}
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                disabled={loading !== null}
-              />
-              <Button
-                type="submit"
-                loading={loading === "send"}
-                size="lg"
-                className="mt-4 w-full"
-                disabled={!email.trim() || loading !== null}
-              >
-                {loading === "send" ? (
-                  t("login.sending")
-                ) : sentToThisEmail ? (
-                  <>
-                    {t("login.enterCode")}
-                    <ArrowRight className="h-4 w-4" />
-                  </>
-                ) : (
-                  t("login.sendCode")
-                )}
-              </Button>
-              {sentToThisEmail && (
-                <p className="mt-4 text-center text-sm text-muted-foreground" aria-live="polite">
-                  {t("login.didntReceive")}{" "}
-                  {countdown > 0 ? (
-                    <span className="tabular-nums">{t("login.resendIn", { count: countdown })}</span>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={handleResend}
-                      className="rounded-md font-medium text-foreground transition-colors hover:text-muted-foreground"
-                    >
-                      {t("login.resendCode")}
-                    </button>
-                  )}
-                </p>
+            <LogoMark className="size-10" />
+            <h2 className="mt-5 text-xl font-semibold tracking-tight">{title}</h2>
+            <p id={descriptionId} className="mt-2 text-sm leading-relaxed wrap-anywhere text-muted-foreground">
+              {isEmail ? t("login.subtitle") : (
+                <Trans
+                  i18nKey="login.codeSubtitle"
+                  values={{ email: sentTo }}
+                  components={{ b: <span className="font-medium text-foreground" /> }}
+                />
               )}
-            </form>
-          </motion.div>
-        ) : (
-          <motion.div
-            key="code"
-            variants={swap}
-            initial="initial"
-            animate="animate"
-            exit="exit"
-            className="flex flex-col items-center justify-center text-center"
-          >
-            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-              <Trans
-                i18nKey="login.codeSubtitle"
-                values={{ email }}
-                components={{
-                  b: <span className="font-medium text-foreground" />,
+            </p>
+            {isEmail ? (
+              <form
+                className="mt-6 grid w-full gap-4"
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  if (sentToThisEmail) setStep("code")
+                  else void sendCode()
                 }}
-              />
-            </p>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault()
-                verify(digits.join(""))
-              }}
-              className="mt-7 w-full"
-            >
-              <motion.div
-                variants={digitContainer}
-                className="flex items-center justify-center gap-1.5 sm:gap-2"
               >
-                {[0, 1, 2].map(renderDigit)}
-                <span className="h-px w-3 shrink-0 bg-border" aria-hidden="true" />
-                {[3, 4, 5].map(renderDigit)}
-              </motion.div>
-              <Button
-                type="submit"
-                loading={loading === "verify"}
-                size="lg"
-                className="mt-7 w-full"
-                disabled={!isComplete || loading !== null}
-              >
-                {loading === "verify"
-                  ? t("login.verifying")
-                  : isComplete
-                    ? t("login.verifyAndLogin")
-                    : t("login.enterAllDigits")}
-              </Button>
-            </form>
-            <p className="mt-5 text-sm text-muted-foreground" aria-live="polite">
-              {t("login.didntReceive")}{" "}
-              {countdown > 0 ? (
-                <span className="tabular-nums">{t("login.resendIn", { count: countdown })}</span>
-              ) : (
-                <button
-                  type="button"
-                  onClick={handleResend}
-                  className="rounded-md font-medium text-foreground transition-colors hover:text-muted-foreground"
+                <TextField
+                  label={t("login.emailLabel")}
+                  id="login-email"
+                  type="email"
+                  autoComplete="email"
+                  required
+                  autoFocus
+                  data-autofocus
+                  placeholder={t("login.emailPlaceholder")}
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  disabled={loading !== null}
+                />
+                <Button
+                  type="submit"
+                  size="lg"
+                  loading={loading === "send"}
+                  iconRight={sentToThisEmail ? <ArrowRight size={16} /> : undefined}
+                  disabled={!email.trim() || loading !== null}
                 >
-                  {t("login.resendCode")}
-                </button>
-              )}
-            </p>
-            <button
-              type="button"
-              onClick={goBackToEmail}
-              className="mt-8 inline-flex items-center gap-1.5 rounded-md text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              {t("login.backToSignIn")}
-            </button>
+                  {t(loading === "send" ? "login.sending" : sentToThisEmail ? "login.enterCode" : "login.sendCode")}
+                </Button>
+                {resend}
+              </form>
+            ) : (
+              <>
+                <form
+                  className="mt-7 grid w-full gap-7"
+                  onSubmit={(e) => {
+                    e.preventDefault()
+                    void verify(code)
+                  }}
+                >
+                  <OtpInput
+                    key={attempt}
+                    value={code}
+                    onChange={setCode}
+                    onComplete={verify}
+                    length={CODE_LENGTH}
+                    inputLabel={t("login.codeLabel")}
+                    verifyingLabel={t("login.verifying")}
+                    separator
+                    align="center"
+                    autoFocus
+                    resendIn={0}
+                    disabled={loading === "send"}
+                    status={loading === "verify" ? "verifying" : "idle"}
+                  />
+                  <Button type="submit" size="lg" loading={loading === "verify"} disabled={!complete || loading !== null}>
+                    {t(loading === "verify" ? "login.verifying" : complete ? "login.verifyAndLogin" : "login.enterAllDigits")}
+                  </Button>
+                </form>
+                <div className="mt-5">{resend}</div>
+                <div className="mt-8">
+                  <Button
+                    variant="ghost"
+                    icon={<ArrowLeft size={16} />}
+                    disabled={loading !== null}
+                    onClick={() => {
+                      setCode("")
+                      setStep("email")
+                    }}
+                  >
+                    {t("login.backToSignIn")}
+                  </Button>
+                </div>
+              </>
+            )}
           </motion.div>
-        )}
-      </AnimatePresence>
-      {error && (
-        <p role="alert" className="mt-3 text-sm text-destructive">
-          {error}
-        </p>
-      )}
+        </AnimatePresence>
+        <div className="absolute end-2 top-2">
+          <IconButton label={t("common.close")} icon={<X size={16} />} onClick={() => handleOpenChange(false)} />
+        </div>
+      </div>
     </Dialog>
   )
 }

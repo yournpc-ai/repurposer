@@ -1,7 +1,7 @@
-import { createFileRoute, Link } from "@tanstack/react-router"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { createFileRoute, useNavigate } from "@tanstack/react-router"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { ArrowUpDown, FolderKanban, Search, Trash2, X } from "lucide-react"
+import { ArrowUpDown, Folder, LayoutGrid, List, Plus, Search, Trash2, X } from "lucide-react"
 
 import { apiFetch } from "@/lib/api"
 import { Button } from "@/components/ui/button-clean"
@@ -10,19 +10,12 @@ import { EmptyState } from "@/components/ui/empty-state-clean"
 import { TextField } from "@/components/ui/text-field-clean"
 import { IconButton } from "@/components/ui/icon-button-clean"
 import { Loading, Skeleton } from "@/components/ui/skeleton-clean"
-import { ProjectCard } from "@/components/project/ProjectCard"
+import { SegmentedControl } from "@/components/ui/segmented-control-clean"
+import { ProjectCard, type Project } from "@/components/project/ProjectCard"
 import { DeleteProjectsDialog } from "@/components/project/project-dialogs"
 
-interface Project {
-  id: string
-  title: string
-  status: string
-  created_at?: string | null
-  updated_at?: string | null
-  thumbnail_url?: string | null
-  thumbnail_duration?: number | null
-  thumbnail_aspect?: string | null
-}
+type ProjectFilter = "all" | "draft" | "active"
+type ProjectView = "grid" | "list"
 
 type SortField = "updated" | "created"
 type SortDir = "desc" | "asc"
@@ -33,6 +26,13 @@ export const Route = createFileRoute("/_app/projects/")({
 
 function ProjectsPage() {
   const { t } = useTranslation()
+  const navigate = useNavigate()
+  const [filter, setFilter] = useState<ProjectFilter>("all")
+  const [view, setView] = useState<ProjectView>("grid")
+  const request = useRef<AbortController | null>(null)
+  useEffect(() => {
+    try { if (localStorage.getItem("projects-view") === "list") setView("list") } catch { /* Storage may be unavailable. */ }
+  }, [])
   const [projects, setProjects] = useState<Project[]>([])
   const [query, setQuery] = useState("")
   const [sortField, setSortField] = useState<SortField>("updated")
@@ -57,25 +57,47 @@ function ProjectsPage() {
 
   // Lifted so cards can refetch after a rename/delete (onChanged).
   const fetchProjects = useCallback(async () => {
+    request.current?.abort()
+    const controller = new AbortController()
+    request.current = controller
     setFailed(false)
     try {
-      const res = await apiFetch("/api/v1/projects", { toast: false })
-      if (!res.ok) throw new Error("Failed to load projects")
-      setProjects((await res.json()) as Project[])
+      const items: Project[] = []
+      const pageSize = 100
+      for (let offset = 0; ; offset += pageSize) {
+        const res = await apiFetch(`/api/v1/projects?skip=${offset}&limit=${pageSize}&include_thumbnail=false`, { signal: controller.signal, toast: false })
+        if (!res.ok) throw new Error("Failed to load projects")
+        const page: Project[] = await res.json()
+        items.push(...page)
+        if (page.length < pageSize) break
+      }
+      if (controller.signal.aborted) return
+      setProjects(items)
+      const selectable = new Set(items.filter(p => p.status !== "uploading" && p.status !== "processing").map(p => p.id))
+      setSelectedIds(previous => new Set([...previous].filter(id => selectable.has(id))))
     } catch {
-      setFailed(true)
+      if (!controller.signal.aborted) setFailed(true)
     } finally {
-      setLoading(false)
+      if (!controller.signal.aborted) setLoading(false)
     }
   }, [])
 
   useEffect(() => {
-    fetchProjects()
+    void fetchProjects()
+    return () => request.current?.abort()
   }, [fetchProjects])
+
+  function createProject() {
+    void navigate({ to: "/home" })
+  }
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase()
-    const list = q ? projects.filter((p) => p.title.toLowerCase().includes(q)) : [...projects]
+    const list = projects.filter(p => {
+      if (filter === "draft" && p.status !== "draft") return false
+      if (filter === "active" && p.status !== "uploading" && p.status !== "processing") return false
+      return p.title.toLowerCase().includes(q)
+    })
     // "Last modified" falls back to creation when a project was never
     // touched after birth (and vice versa); id keeps a stable order for
     // rows with no timestamps at all.
@@ -87,28 +109,37 @@ function ProjectsPage() {
       (a, b) =>
         (sortDir === "desc" ? stamp(b) - stamp(a) : stamp(a) - stamp(b)) || a.id.localeCompare(b.id),
     )
-  }, [projects, query, sortField, sortDir])
+  }, [projects, query, filter, sortField, sortDir])
 
   return (
-    <div className="flex flex-1 flex-col p-6 md:p-8">
-      <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col">
-        <div className="mb-4 mt-2 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-2xl font-semibold tracking-tight">{t("projects.title")}</h1>
-          <div className="flex items-center gap-1">
-            <TextField
-              type="search"
-              prefix={<Search size={16} />}
-              className="w-40 sm:w-60"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              aria-label={t("projects.search")}
-              placeholder={t("projects.searchPlaceholder")}
-            />
+    <div className="projects-page">
+      <header>
+        <h1 className="text-2xl leading-8 font-medium">{t("projects.title")}</h1>
+        <p className="mt-1 text-[13px] leading-5 text-muted-foreground">{t("projects.subtitle")}</p>
+      </header>
+      <section aria-labelledby="project-library-title">
+        <h2 id="project-library-title" className="project-section-title">
+          {t("projects.library")}
+          {!failed && !loading && <span className="tabular-nums">{visible.length}</span>}
+        </h2>
+        <div className="project-toolbar">
+          <SegmentedControl<ProjectFilter>
+            aria-label={t("projects.filterLabel")}
+            value={filter}
+            onChange={setFilter}
+            variant="buttons"
+            options={[
+              { value: "all", label: t("projects.all") },
+              { value: "draft", label: t("projects.drafts") },
+              { value: "active", label: t("projects.inProgress") },
+            ]}
+          />
+          <div className="project-tools">
             <DropdownMenu
               align="end"
               title={t("projects.sort.label")}
               trigger={({ triggerProps }) => (
-                <IconButton {...triggerProps} label={t("projects.sort.label")} icon={<ArrowUpDown />} />
+                <IconButton variant="secondary" {...triggerProps} label={t("projects.sort.label")} icon={<ArrowUpDown />} />
               )}
               items={[
                 {
@@ -134,91 +165,124 @@ function ProjectsPage() {
                 },
               ]}
             />
+            <SegmentedControl<ProjectView>
+              aria-label={t("projects.view")}
+              value={view}
+              variant="tray"
+              onChange={next => {
+                setView(next)
+                try { localStorage.setItem("projects-view", next) } catch { /* Keep the session choice. */ }
+              }}
+              options={[
+                { value: "grid", ariaLabel: t("projects.grid"), icon: <LayoutGrid size={15} /> },
+                { value: "list", ariaLabel: t("projects.list"), icon: <List size={15} /> },
+              ]}
+            />
+            <TextField
+              size="sm"
+              type="search"
+              prefix={<Search size={16} />}
+              className="project-search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              aria-label={t("projects.search")}
+              placeholder={t("projects.searchPlaceholder")}
+            />
+            <Button size="sm" icon={<Plus size={15} />} onClick={createProject}>
+              {t("projects.new")}
+            </Button>
           </div>
         </div>
 
-        {loading ? (
-          <Loading label={t("common.loading")} className="ui-as-folders">
-            {[0, 1, 2, 3].map((slot) => (
-              <Skeleton key={slot} height={144} />
-            ))}
-          </Loading>
-        ) : failed ? (
-          <EmptyState
-            bare
-            title={t("common.requestFailed")}
-            action={
-              <Button variant="secondary" onClick={fetchProjects}>
-                {t("credits.retry")}
-              </Button>
-            }
-          />
-        ) : visible.length === 0 && query.trim() ? (
-          // A search that finds nothing is not the empty page: quiet line,
-          // no CTA (the CTA belongs to the true zero state only).
-          <p className="py-16 text-center text-sm text-muted-foreground">
-            {t("projects.noSearchResults")}
-          </p>
-        ) : visible.length === 0 ? (
-          <EmptyState
-            bare
-            tall
-            icon={<FolderKanban />}
-            title={t("projects.emptyTitle")}
-            text={t("projects.emptyDesc")}
-            action={
-              <Link to="/home" className="underline">
-                {t("projects.new")}
-              </Link>
-            }
-          />
-        ) : (
-          <div className="ui-as-folders">
-            {visible.map((project) => (
-              <ProjectCard
-                key={project.id}
-                project={project}
-                onChanged={fetchProjects}
-                selected={selectedIds.has(project.id)}
-                onToggleSelect={() => toggleSelect(project.id)}
-              />
-            ))}
-          </div>
-        )}
-
-        {selectedIds.size > 0 ? (
-          // 多选悬浮条（Flora 式）：视口底中浮层（overlay-surface 冰霜律），
-          // 内容 = 计数 + 唯一真实批量动作（删除）+ × 清选。视口锚定而非
-          // 内容锚定——选中态期间恒可见，不随长网格滚走。
-          <div className="pointer-events-none fixed inset-x-0 bottom-6 z-40 flex justify-center">
-            <div className="overlay-surface pointer-events-auto flex items-center gap-2 rounded-xl px-3 py-2">
-              <span className="pl-1 text-sm">
-                {t("projects.selection.count", { count: selectedIds.size })}
-              </span>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-destructive"
-                onClick={() => setBulkDeleteOpen(true)}
-              >
-                <Trash2 className="size-4" />
-                {t("projects.selection.delete")}
-              </Button>
-              <IconButton label={t("projects.selection.clear")} icon={<X />} onClick={clearSelection} />
+        <div className="mt-4">
+          {loading ? (
+            <Loading label={t("common.loading")} className="ui-as-folders" data-view={view}>
+              {[96, 72, 112, 84].map(width => (
+                <div className="project-skeleton" key={width} aria-hidden="true">
+                  <Skeleton width={26} height={22} radius={6} />
+                  <span className="grid gap-2">
+                    <Skeleton width={width} height={10} />
+                    <Skeleton width={64} height={8} />
+                  </span>
+                </div>
+              ))}
+            </Loading>
+          ) : failed ? (
+            <EmptyState
+              title={t("common.requestFailed")}
+              action={
+                <Button variant="secondary" onClick={() => { setLoading(true); void fetchProjects() }}>
+                  {t("credits.retry")}
+                </Button>
+              }
+            />
+          ) : projects.length === 0 ? (
+            <EmptyState
+              icon={<Folder />}
+              title={t("projects.emptyTitle")}
+              text={<span className="block max-w-64">{t("projects.emptyDesc")}</span>}
+              action={
+                <Button size="sm" variant="secondary" icon={<Plus size={15} />} onClick={createProject}>
+                  {t("projects.new")}
+                </Button>
+              }
+            />
+          ) : visible.length === 0 ? (
+            <EmptyState
+              icon={<Search />}
+              title={t(query.trim() ? "projects.noSearchResults" : "projects.noFilterResults")}
+              action={
+                <Button size="sm" variant="secondary" onClick={() => { setQuery(""); setFilter("all") }}>
+                  {t("projects.resetFilters")}
+                </Button>
+              }
+            />
+          ) : (
+            <div className="ui-as-folders" data-view={view}>
+              {visible.map((project) => (
+                <ProjectCard
+                  key={project.id}
+                  project={project}
+                  onChanged={fetchProjects}
+                  selected={selectedIds.has(project.id)}
+                  selectionDisabled={selectedIds.size >= 100 && !selectedIds.has(project.id)}
+                  onToggleSelect={() => toggleSelect(project.id)}
+                />
+              ))}
             </div>
-          </div>
-        ) : null}
+          )}
+        </div>
+      </section>
 
-        <DeleteProjectsDialog
-          projectIds={[...selectedIds]}
-          open={bulkDeleteOpen}
-          onOpenChange={setBulkDeleteOpen}
-          onDeleted={() => {
-            clearSelection()
-            fetchProjects()
-          }}
-        />
-      </div>
+      {selectedIds.size > 0 ? (
+        <div className="pointer-events-none fixed inset-x-0 bottom-6 z-40 flex justify-center">
+          <div className="overlay-surface pointer-events-auto flex items-center gap-2 rounded-xl px-3 py-2">
+            <span className="pl-1 text-sm">
+              {t("projects.selection.count", { count: selectedIds.size })}
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-destructive"
+              onClick={() => setBulkDeleteOpen(true)}
+            >
+              <Trash2 className="size-4" />
+              {t("projects.selection.delete")}
+            </Button>
+            <IconButton label={t("projects.selection.clear")} icon={<X />} onClick={clearSelection} />
+          </div>
+        </div>
+      ) : null}
+
+      <DeleteProjectsDialog
+        projectIds={[...selectedIds]}
+        open={bulkDeleteOpen}
+        onOpenChange={setBulkDeleteOpen}
+        onDeleted={() => {
+          clearSelection()
+          void fetchProjects()
+        }}
+      />
     </div>
   )
 }

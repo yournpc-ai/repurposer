@@ -172,11 +172,6 @@ const zh: Resources = {
     myProjects: "我的项目",
   },
   home: {
-    examples: {
-      overlay: { label: "叠加产品图", prompt: "把附件里的产品图放在视频第 2 到 4 秒，保留字幕和原声，播放这一段。" },
-      framing: { label: "调整构图", prompt: "调整这段的构图，让讲者和字幕都清楚可见，然后播放改动的部分。" },
-      trim: { label: "剪短片头", prompt: "剪掉开头的停顿，播放新的片头。" },
-    },
     newChat: "新对话",
     // Studio hero：composer 上方的一行问句——下方轮换 placeholder 用三条
     // 示例 prompt 作答。
@@ -482,7 +477,7 @@ const zh: Resources = {
       nextPage: "下一页",
       previousPage: "上一页",
       upgrading: "内容升级中",
-      usePrompt: "开始创作",
+      usePrompt: "使用提示词",
       playSound: "播放声音",
       mute: "静音",
       emptyDemo: "该应用暂无样片。",
@@ -524,18 +519,22 @@ const zh: Resources = {
             "用这个 Skill 根据这个网站做一支宣传短片，让观众了解产品有什么价值：{{placeholder}}",
         },
         "product-promo-oxvalue-product-evidence": {
+          title: "产品实证",
           prompt:
             "用这个 Skill 根据这个网站做一支宣传短片，让观众了解产品有什么价值：{{placeholder}}",
         },
         "product-promo-oxvalue-energy-arc": {
+          title: "动势节奏",
           prompt:
             "用这个 Skill 根据这个网站做一支宣传短片，让观众了解产品有什么价值：{{placeholder}}",
         },
         "text-short-clear-rhythm": {
+          title: "清晰节奏",
           prompt:
             "把下面这段文案做成文字动画：\n\n我们常常以为，讲得越多，别人就懂得越多。\n于是不断补充背景、堆叠细节，生怕漏掉任何一个重点。\n可信息越密，真正想说的话，反而越容易被淹没。\n\n好的表达，从一个清楚的问题开始。\n先说你想解决什么，再用一个具体的例子，让人看见它为什么重要。\n给每个想法一点空间，也给观众一点理解的时间。\n\n把复杂的想法讲清楚，不是把内容变少，\n而是找到那条让人愿意听下去、也能够跟得上的线索。\n让好的内容，从被看见，走向被理解。",
         },
         "knowledge-explainer-clear-expression": {
+          title: "清晰表达",
           prompt:
             "用这个 Skill 帮我做一支动画，讲清楚为什么一次只讲一个重点更容易让人理解，面向没有基础的观众。",
         },
@@ -658,6 +657,7 @@ const zh: Resources = {
     "title-lockup": { name: "标题组合" },
   },
   mentions: {
+    addMaterialFirst: "先用加号添加素材，即可在这里引用。",
     pickerEmpty: "没有匹配项",
     remove: "移除提及",
     regionChip: "{{time}} · {{width}}×{{height}}px",
@@ -675,6 +675,17 @@ const zh: Resources = {
     },
   },
   projects: {
+    subtitle: "打开项目，回看视频或在对话中继续剪辑。",
+    resetFilters: "清除筛选",
+    library: "项目库",
+    filterLabel: "项目状态",
+    all: "全部",
+    drafts: "草稿",
+    inProgress: "进行中",
+    view: "显示方式",
+    grid: "网格视图",
+    list: "列表视图",
+    noFilterResults: "当前状态下没有项目。",
     title: "项目",
     search: "搜索",
     searchPlaceholder: "搜索项目…",
@@ -700,7 +711,7 @@ const zh: Resources = {
     langZh: "中文",
     langEn: "英文",
     emptyTitle: "还没有项目",
-    emptyDesc: "创建第一个项目，把素材变成社交帖子、金句卡、长文章等内容。",
+    emptyDesc: "添加素材或写下剪辑需求，开始第一个项目。",
     noSearchResults: "没有匹配的项目。",
     noEvent: "未设置活动",
     deleteConfirm: "删除此项目？",
@@ -714,6 +725,7 @@ const zh: Resources = {
     renamePlaceholder: "项目名称",
     deleteDesc: "「{{title}}」及其所有切片、帖子和聊天记录将被永久删除。",
     selection: {
+      toggleNamed: "选择「{{title}}」",
       count: "已选 {{count}} 项",
       delete: "删除",
       clear: "取消选择",
@@ -1782,7 +1794,7 @@ const zh: Resources = {
     enterCode: "输入验证码",
     codeTitle: "查收验证码邮件",
     codeSubtitle: "输入发送到 <b>{{email}}</b> 的 6 位验证码，10 分钟内有效。",
-    digitLabel: "第 {{index}} 位，共 {{total}} 位",
+    codeLabel: "6 位验证码",
     enterAllDigits: "请输入全部 6 位数字",
     verifyAndLogin: "验证并登录",
     verifying: "验证中…",
@@ -1805,8 +1817,6 @@ const zh: Resources = {
         "视频、音频、幻灯片、照片或文字稿都行，有什么放什么。也可以先不上传，直接在下面写想法。",
       promptTitle: "说明要做什么",
       promptDesc: "写下想要的结果。用 @ 点名已上传的素材，然后发送。",
-      recipesTitle: "试试剪辑示例",
-      recipesDesc: "点一个示例填入输入框，再按你的素材修改要求。",
     },
   },
   notifications: {
@@ -1855,10 +1865,38 @@ const zh: Resources = {
     disconnectedToast: "{{platform}} 已断开",
   },
   settings: {
+    profile: "个人资料",
+    profileDescription: "管理你的账户资料。",
+    profileNote: "个人资料会同步到你登录的各台设备。",
+    avatar: "头像",
+    preferencesDescription: "设置界面外观，以及助手何时向你确认。",
+    appearanceGroup: "语言与外观",
+    languageHint: "用于菜单和助手回复",
+    themeHint: "选择「跟随系统」可使用设备的外观",
+    personalGroup: "个人",
+    studioGroup: "工作室",
+    searchSections: "搜索设置",
+    searchEmpty: "没有匹配的设置",
+    navigateHint: "选择",
+    openHint: "打开",
+    resizeSidebar: "调整侧栏宽度",
+    name: "显示名称",
+    email: "登录邮箱",
+    notifications: "通知",
+    notificationDescription: "选择如何接收发布异常的提醒。",
+    emailAlerts: "通过邮件接收发布异常提醒",
+    emailDetails: "发布失败、结果待确认或渠道需要重新连接时，给我发邮件。",
+    inboxOnly: "发布动态可在站内通知查看，邮件提醒暂不可用。",
+    security: "账户安全",
+    securityDescription: "查看最近活跃的设备，并退出指定会话。",
+    device: "设备",
+    currentDevice: "当前设备",
+    channelsUnavailable: "LinkedIn 和 TikTok 的发布连接暂未开放。",
     title: "设置",
   },
   a11y: {
     toggleSidebar: "切换侧边栏",
+    closeSidebar: "关闭侧边栏",
     openSidebar: "打开侧边栏",
   },
   // 质检环（产物质量线期 3）：verify 节点检查项的人话标签——

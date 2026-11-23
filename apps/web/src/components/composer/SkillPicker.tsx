@@ -49,7 +49,7 @@ export function SkillPicker({
     return () => controller.abort()
   }, [])
 
-  const filtered = filterSkillOptions(options, query, (option) =>
+  const filtered = filterSkillOptions(options, query.toLowerCase() === "skill" ? "" : query, (option) =>
     skillDisplayName(option, t),
   )
 
@@ -96,7 +96,7 @@ export function SkillPicker({
         top: openAbove ? position.top : position.bottom + 4,
         transform: openAbove ? "translateY(calc(-100% - 4px))" : undefined,
       }}
-      className="thin-scroll z-50 flex max-h-64 flex-col gap-0.5 overflow-y-auto p-1.5"
+      className="composer-picker thin-scroll z-50 max-h-64 overflow-y-auto"
     >
       {status === "loading" ? (
         <span className="px-2 py-1.5 text-muted-foreground">

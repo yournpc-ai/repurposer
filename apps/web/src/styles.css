@@ -510,6 +510,28 @@ body {
   --radius-pill: 9999px;
 }
 
+/* Keep the login card centered at every viewport size, with the Clean control surfaces. */
+dialog.login-modal::backdrop {
+  background: color-mix(in srgb, var(--background) 60%, transparent);
+  backdrop-filter: blur(2px);
+}
+.dark dialog.login-modal::backdrop { background: rgb(0 0 0 / 30%); }
+dialog.login-modal .ui-tfc,
+dialog.login-modal button[type="submit"] { --h: 44px; }
+
+.composer-picker.ui-crdc {
+  --ui-crdc-pad: 6px;
+  gap: 2px;
+  box-shadow: var(--aui-shadow-popover);
+}
+
+/* Browsers paint autofill on the inner input. Match the surrounding Clean field. */
+.ui-tfc__input:autofill {
+  box-shadow: inset 0 0 0 100vmax var(--aui-surface);
+  -webkit-text-fill-color: var(--aui-ink);
+  caret-color: var(--aui-ink);
+}
+
 :root {
   color-scheme: light;
 

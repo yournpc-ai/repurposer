@@ -247,7 +247,7 @@ export function Tour({
               tabIndex={-1}
               onKeyDown={trapTab}
               className={cn(
-                "overlay-surface flex w-80 flex-col gap-3 rounded-lg p-4 text-popover-foreground border border-subtle outline-hidden duration-150",
+                "overlay-surface flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-3 rounded-lg p-4 text-popover-foreground border border-subtle outline-hidden duration-150",
                 "data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95"
               )}
             >
@@ -289,27 +289,24 @@ export function Tour({
                   {index > 0 && (
                     <Button
                       variant="secondary"
-                      size="sm"
-                      className="h-9"
+                      size="md"
+                      icon={<ChevronLeft />}
                       onClick={goPrev}
                     >
-                      <ChevronLeft className="h-4 w-4" />
                       {t("tour.prev")}
                     </Button>
                   )}
                   {index === 0 && (
                     <Button
                       variant="ghost"
-                      size="sm"
-                      className="h-9"
+                      size="md"
                       onClick={() => finish("skip")}
                     >
                       {t("tour.skip")}
                     </Button>
                   )}
-                  <Button size="sm" className="h-9" onClick={goNext}>
+                  <Button size="md" iconRight={isLast ? undefined : <ChevronRight />} onClick={goNext}>
                     {isLast ? t("tour.done") : t("tour.next")}
-                    {!isLast && <ChevronRight className="h-4 w-4" />}
                   </Button>
                 </div>
               </div>

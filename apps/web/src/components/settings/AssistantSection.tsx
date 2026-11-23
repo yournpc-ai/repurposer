@@ -1,114 +1,43 @@
-"use client"
-
-import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Spinner } from "@/components/ui/spinner-clean"
-
 import { Select } from "@/components/ui/select-clean"
-import { apiGet, apiPut } from "@/lib/api"
+import { useAccountSettings } from "./account-settings-context"
 
-/** Assistant section of the shared SettingsDialog (ADR-117 §1): the two
- * confirmation prefs — execution (wait for a confirm beat before starting
- * paid work) and credits (one priced confirmation before a paid plan
- * starts), both defaulting to auto. The section is the prefs' ONLY UI seat
- * (composer / dock control strips never carry them); the server reads them
- * fresh per turn, so a change takes effect in the same session with no
- * client broadcast. The internal guardrail is an ops parameter — the
- * footnote's honesty line is its only user-facing mention. */
-
-type ConfirmMode = "auto" | "ask"
 type ConfirmKey = "confirm_execution" | "confirm_credits"
-
-interface ConfirmationPrefs {
-  confirm_execution: ConfirmMode
-  confirm_credits: ConfirmMode
-}
 
 export function AssistantSection() {
   const { t } = useTranslation()
-  const [prefs, setPrefs] = useState<ConfirmationPrefs | null>(null)
-  // Save in flight, per row (2026-10-15 user ruling — GeneralSection 同款
-  // 体感): the flip is optimistic, but the control wears the PUT's pending
-  // state — spinner + disabled until the server acks, rollback on failure.
-  const [saving, setSaving] = useState<ConfirmKey | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    void (async () => {
-      try {
-        const res = await apiGet("/api/v1/auth/settings", { toast: false })
-        if (!res.ok) return
-        if (!cancelled) setPrefs((await res.json()) as ConfirmationPrefs)
-      } catch {
-        /* silent — the selects stay disabled until the read lands */
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  const update = useCallback(
-    async (key: ConfirmKey, value: ConfirmMode) => {
-      const prev = prefs
-      if (prev === null || saving !== null) return
-      setPrefs({ ...prev, [key]: value })
-      setSaving(key)
-      try {
-        const res = await apiPut(
-          "/api/v1/auth/settings",
-          { [key]: value },
-          // A bare string is the SUCCESS toast's copy in apiFetch's
-          // contract (errors still auto-toast the server detail) — the
-          // custom error line rides the `{error}` seat, success stays
-          // silent (动作反馈律).
-          { toast: { error: t("assistant.updateFailed") } },
-        )
-        // Rollback on failure — the global toast already reported it.
-        if (!res.ok) setPrefs(prev)
-      } catch {
-        // Network-level failure: apiFetch toasts then rethrows — the
-        // optimistic flip rolls back too.
-        setPrefs(prev)
-      } finally {
-        setSaving(null)
-      }
-    },
-    [prefs, saving, t],
-  )
-
-  const prefRow = (
-    key: ConfirmKey,
-    labelKey: string,
-    descKey: string,
-  ) => (
-    <div className="flex items-center gap-3 py-3">
+  const { data: prefs, busy, save } = useAccountSettings()
+  if (!prefs) return null
+  const prefRow = (key: ConfirmKey, labelKey: string, descKey: string) => (
+    <div className="settings-row">
       <div className="min-w-0 flex-1">
-        <p className="text-xs text-foreground">{t(labelKey)}</p>
-        <p className="mt-0.5 text-[11px] text-muted-foreground">
-          {t(descKey)}
-        </p>
+        <p className="text-sm text-foreground">{t(labelKey)}</p>
+        <p className="mt-0.5 text-xs text-muted-foreground">{t(descKey)}</p>
       </div>
-      {saving === key && <Spinner label={t("common.saving")} />}
-      <Select size="sm" aria-label={t(labelKey)}
-        options={[{ value: "auto", label: t("assistant.mode.auto") }, { value: "ask", label: t("assistant.mode.ask") }]}
-        value={prefs?.[key] ?? "auto"}
-        onChange={(value) => void update(key, value as ConfirmMode)}
-        disabled={prefs === null || saving !== null}
+      <Select
+        size="sm"
+        aria-label={t(labelKey)}
+        options={[
+          { value: "auto", label: t("assistant.mode.auto") },
+          { value: "ask", label: t("assistant.mode.ask") },
+        ]}
+        value={prefs[key]}
+        onChange={(value) => void save({ [key]: value })}
+        disabled={busy}
       />
     </div>
   )
 
   return (
-    <section>
-      <h4 className="text-sm font-semibold">{t("assistant.permissions")}</h4>
-      <div className="mt-3 divide-y divide-border-subtle">
+    <section className="settings-group">
+      <h4>{t("assistant.permissions")}</h4>
+      <div className="settings-card">
         {prefRow("confirm_execution", "assistant.execution.label", "assistant.execution.desc")}
         {prefRow("confirm_credits", "assistant.spending.label", "assistant.spending.desc")}
-        <p className="py-3 text-[11px] leading-relaxed text-meta">
-          {t("assistant.footnote")}
-        </p>
       </div>
+      <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+        {t("assistant.footnote")}
+      </p>
     </section>
   )
 }

@@ -2,9 +2,6 @@
 
 import { useEffect, useState } from "react"
 import {
-  Monitor,
-  Moon,
-  Sun,
   LogOut,
   LogIn,
   Zap,
@@ -17,12 +14,9 @@ import {
 import { useNavigate, useRouterState } from "@tanstack/react-router"
 import { useTranslation } from "react-i18next"
 
-import { IconButton } from "@/components/ui/icon-button-clean"
-import { Button } from "@/components/ui/button-clean"
 import { apiFetch } from "@/lib/api"
-import { setLocale, type Locale } from "@/lib/i18n"
-import { useTheme, type Theme } from "@/lib/theme/ThemeProvider"
-import { clearAuth, getUser } from "@/lib/auth"
+import { clearAuth } from "@/lib/auth"
+import { AppearanceChoice, LanguageChoice } from "./settings/PreferenceChoices"
 import { useAuth } from "@/lib/auth-context"
 import { useSettingsDialog } from "@/components/settings/settings-dialog-context"
 import { formatCredits } from "@/components/credits/tx-row"
@@ -35,26 +29,17 @@ import { Avatar } from "@/components/ui/avatar-clean"
  * shared SettingsDialog. Never a DropdownMenu — it carries inline controls,
  * not a list of links. */
 
-const THEME_OPTIONS: { value: Theme; icon: typeof Monitor; labelKey: string }[] = [
-  { value: "system", icon: Monitor, labelKey: "common.themeSystem" },
-  { value: "light", icon: Sun, labelKey: "common.themeLight" },
-  { value: "dark", icon: Moon, labelKey: "common.themeDark" },
-]
-
-const LOCALE_OPTIONS: { value: Locale; labelKey: string }[] = [
-  { value: "en", labelKey: "languages.en" },
-  { value: "zh", labelKey: "languages.zh" },
-]
+const rowLayout = "grid min-h-9 w-full grid-cols-[1rem_minmax(0,1fr)_auto] items-center gap-2.5 px-2 text-left text-xs text-foreground"
+const actionRow = rowLayout + " rounded-md transition-colors hover:bg-accent"
+const rowIcon = "size-4 text-muted-foreground"
+const sectionLabel = "px-2 pb-1 pt-3 text-meta text-[10px] font-medium"
 
 export function AccountConsole({ onClose }: { onClose: () => void }) {
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
   const currentPath = useRouterState({ select: (s) => s.location.pathname })
-  const { isAuthenticated, setLoginOpen, refreshAuth } = useAuth()
+  const { isAuthenticated, setLoginOpen, refreshAuth, user } = useAuth()
   const { openSettings } = useSettingsDialog()
-  const { theme, setTheme } = useTheme()
-  const user = getUser()
-  const currentLocale: Locale = i18n.language === "en" ? "en" : "zh"
   /** The wallet's real balance (ADR-055 — the credits slot's value). Reads
    * on mount only; a run's hold/capture settles server-side and shows on
    * the next open. Silent failure keeps the "—" (page-level load failure,
@@ -76,7 +61,8 @@ export function AccountConsole({ onClose }: { onClose: () => void }) {
     }
   }, [isAuthenticated])
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await apiFetch("/api/v1/auth/logout", { method: "POST" }).catch(() => null)
     clearAuth()
     refreshAuth()
     onClose()
@@ -104,9 +90,9 @@ export function AccountConsole({ onClose }: { onClose: () => void }) {
           onClose()
           setLoginOpen(true)
         }}
-        className="flex h-9 items-center gap-2 rounded-md px-2 text-xs text-foreground transition-colors hover:bg-accent"
+        className={actionRow}
       >
-        <LogIn className="h-3.5 w-3.5 text-muted-foreground" />
+        <LogIn className={rowIcon} />
         {t("common.login")}
       </button>
     )
@@ -115,7 +101,7 @@ export function AccountConsole({ onClose }: { onClose: () => void }) {
   return (
     <div className="flex flex-col">
       {/* Identity header */}
-      <div className="flex items-center gap-2.5 px-1 pb-2.5">
+      <div className="flex items-center gap-2.5 px-2 pb-3">
         <Avatar name={user?.name || user?.email} size={40} />
         <div className="min-w-0 flex-1">
           <p className="truncate text-xs font-medium text-foreground">{user?.name || user?.email}</p>
@@ -128,21 +114,21 @@ export function AccountConsole({ onClose }: { onClose: () => void }) {
       {/* Inset ACCOUNT block — Credits is the only value surface while
           subscriptions are unavailable. The whole row opens its real
           management seat instead of presenting a static, button-like row. */}
-      <div className="flex flex-col gap-0.5 rounded-lg bg-inset p-1">
+      <div className="rounded-lg bg-inset">
         <button
           type="button"
           onClick={() => {
             onClose()
             openSettings("credits")
           }}
-          className="group flex h-8 items-center gap-2 rounded-md px-2 text-left transition-colors hover:bg-accent"
+          className={actionRow}
         >
-          <Zap className="h-3.5 w-3.5 text-muted-foreground" />
+          <Zap className={rowIcon} />
           <span className="text-xs text-foreground">{t("common.credits")}</span>
-          <span className="ml-auto text-[11px] tabular-nums text-muted-foreground group-hover:text-foreground">
+          <span className="flex items-center gap-1.5 tabular-nums text-muted-foreground">
             {balance !== null ? formatCredits(balance, i18n.language) : "—"}
+            <ChevronRight className={rowIcon} />
           </span>
-          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
         </button>
         {/* Negative balance (BILLING §5): a NULL-estimate run may settle the
             balance past zero — the number shows honestly and this note
@@ -157,74 +143,51 @@ export function AccountConsole({ onClose }: { onClose: () => void }) {
       {/* 偏好: labeled rows with trailing controls (MiniMax row anatomy) —
           theme / language as trailing segmented, deep settings as a chevron
           row. */}
-      <p className="px-1 pb-1 pt-2.5 text-meta text-[10px] font-medium">{t("common.preferences")}</p>
-      <div className="flex flex-col gap-0.5 px-1">
-        <div className="flex h-9 items-center gap-2 px-2">
-          <Palette className="h-3.5 w-3.5 text-muted-foreground" />
+      <p className={sectionLabel}>{t("common.preferences")}</p>
+      <div className="flex flex-col gap-0.5">
+        <div className={rowLayout}>
+          <Palette className={rowIcon} />
           <span className="text-xs text-foreground">{t("common.theme")}</span>
-          <div className="ml-auto flex items-center gap-0.5 rounded-md bg-inset p-0.5">
-            {THEME_OPTIONS.map(({ value, icon: Icon, labelKey }) => (
-              <IconButton
-                key={value}
-                size="sm"
-                label={t(labelKey)}
-                icon={<Icon />}
-                pressed={theme === value}
-                onClick={() => setTheme(value)}
-              />
-            ))}
-          </div>
+          <AppearanceChoice compact />
         </div>
-        <div className="flex h-9 items-center gap-2 px-2">
-          <Languages className="h-3.5 w-3.5 text-muted-foreground" />
+        <div className={rowLayout}>
+          <Languages className={rowIcon} />
           <span className="text-xs text-foreground">{t("common.language")}</span>
-          <div className="ml-auto flex items-center gap-0.5 rounded-md bg-inset p-0.5">
-            {LOCALE_OPTIONS.map(({ value, labelKey }) => (
-              <Button
-                key={value}
-                size="sm"
-                variant={currentLocale === value ? "secondary" : "ghost"}
-                aria-pressed={currentLocale === value}
-                onClick={() => setLocale(value, i18n)}
-              >
-                {t(labelKey)}
-              </Button>
-            ))}
-          </div>
+          <LanguageChoice />
         </div>
         {/* Settings — deep row, opens the shared SettingsDialog. */}
         <button
           type="button"
           onClick={() => {
             onClose()
-            openSettings("channels")
+            openSettings()
           }}
-          className="flex h-9 items-center gap-2 rounded-md px-2 text-xs text-foreground transition-colors hover:bg-accent"
+          className={actionRow}
         >
-          <Settings className="h-3.5 w-3.5 text-muted-foreground" />
+          <Settings className={rowIcon} />
           {t("common.settings")}
-          <ChevronRight className="ml-auto h-3.5 w-3.5 text-muted-foreground" />
+          <ChevronRight className={rowIcon} />
         </button>
       </div>
 
       {/* 帮助 */}
-      <p className="px-1 pb-1 pt-2.5 text-meta text-[10px] font-medium">{t("common.helpSection")}</p>
+      <p className={sectionLabel}>{t("common.helpSection")}</p>
       <button
         type="button"
         onClick={handleReplayTour}
-        className="flex h-8 items-center gap-2 rounded-md px-2 text-xs text-foreground transition-colors hover:bg-accent"
+        className={actionRow}
       >
-        <RotateCcw className="h-3.5 w-3.5 text-muted-foreground" />
+        <RotateCcw className={rowIcon} />
         {t("common.replayTour")}
       </button>
 
-      {/* Logout */}
+      <hr className="my-1.5 border-border" />
       <button
         type="button"
         onClick={handleLogout}
-        className="mt-1.5 flex h-8 items-center gap-2 rounded-md px-2 text-xs text-foreground transition-colors hover:bg-accent"
+        className={actionRow}
       >
-        <LogOut className="h-3.5 w-3.5 text-muted-foreground" />
+        <LogOut className={rowIcon} />
         {t("common.logout")}
       </button>
     </div>

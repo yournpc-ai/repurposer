@@ -5,16 +5,17 @@ import asyncio
 import structlog
 
 from app.config import settings
-from app.models.database import AsyncSessionLocal, require_current_schema
-from app.pipeline.asset_processing import claim_pending_asset, process_asset
 from app.distribution import (
     claim_due_publication,
     process_publication,
     reap_stale_publications,
 )
+from app.models.database import AsyncSessionLocal, require_current_schema
+from app.pipeline.asset_processing import claim_pending_asset, process_asset
 from app.pipeline.export_jobs import claim_export, execute_export
 from app.pipeline.media_jobs import KINDS, claim_media, execute_media
 from app.pipeline.staging import reap_stale_staging_uploads
+from app.platform.notifications import deliver_due_alert
 from app.platform.payment_webhooks import (
     claim_payment_alert,
     flag_stale_webhook_events,
@@ -84,6 +85,11 @@ async def _tick() -> bool:
     if payment_alert is not None:
         did_work = True
         await process_payment_alert(payment_alert)
+
+    if settings.resend_api_key:
+        async with AsyncSessionLocal() as db:
+            if await deliver_due_alert(db):
+                did_work = True
 
     global _asset_task
     if _asset_task is None or _asset_task.done():

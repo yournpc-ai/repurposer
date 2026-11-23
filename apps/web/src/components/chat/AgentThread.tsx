@@ -3086,40 +3086,9 @@ export function AgentThread({
           onSkillChange={handleSkillChange}
           onChange={handleEditorChange}
           onSubmit={handleSend}
-          // Long-content headroom (2026-09-06, FLORA-measured): ~10 lines
-          // visible before scrolling (was max-h-32 ≈ 6). Full-width px-3
-          // text band; the vertical padding is SYMMETRIC (2026-09-23 user
-          // ruling — py-2.5 both sides; the old pb-1 read lopsided against
-          // the pt-2.5 head). Rest height (2026-10-15 user ruling): the box
-          // hugs its content (the min-h-20 three-line floor retired — it was
-          // 64px of dead air under a one-line draft), with ONE floor left:
-          // min-h-15 = exactly TWO lines — the teaching placeholder is a
-          // composed two-line read (2026-09-24 ruling), so the empty box is
-          // two lines tall; the two-line floor makes a one-line draft the
-          // same height, and the empty→typing transition never jumps.
-          className="block max-h-56 min-h-15 w-full px-3 py-2.5 text-sm thin-scroll"
+          className="block max-h-48 min-h-11 w-full px-1 py-1 text-sm thin-scroll"
         />
-        {/* The control strip — in-flow under the text band (ElevenLabs'
-            bottom row): + opens the file picker (their + opens an upload
-            menu; ours has one destination — the picker — so no menu),
-            send/stop anchor the right end (the flex-1 spacer). Gaps: mt-1 + the text band's
-            pb-2.5 = 14px between the input text and the strip (2026-09-23
-            user ruling — 10px read cramped), and pb-1.5 → card bottom
-            reads 14px (6+8), MiniMax-measured parity (same day, second
-            pass: on a THIN one-line card the 18px symmetric bottom read
-            too heavy — the same-day py-2.5/pb-2.5 symmetry ruling was
-            superseded; the text band keeps py-2.5, the bottom zone
-            tightens). Interior rhythm: 18 top / 14 middle / 14 bottom.
-            GLYPH-RAIL alignment (2026-09-06
-            user ruling, FLORA-measured — the dock twin of the composer's
-            glyph-left-edge law): the strip carries NO container padding;
-            the + glyph's LEFT edge and the ↑ glyph's RIGHT edge sit on the
-            text band's 12px rails (px-3 / pr-3) via 3px button margins
-            (36px button − 18px glyph = 9px inset; 12 − 9 = 3). Ghost
-            buttons show no chrome at rest, so only the glyphs read —
-            aligning containers leaves the glyphs visibly adrift when not
-            hovering. Both glyphs are 18px for optical parity. */}
-        <div className="mt-1 flex items-center gap-0.5 pb-1.5">
+        <div className="mt-1 flex items-center gap-1">
           <ComposerIconButton
             icon={Plus}
             label={t("generationOverlay.attachFiles")}
@@ -3154,7 +3123,7 @@ export function AgentThread({
             {openingHistory === "failed" && <Button variant="secondary" size="sm" onClick={() => setHistoryAttempt((n) => n + 1)}>{t("common.retryHistory")}</Button>}
         {chatScroller}
       </div>
-      <div className="mx-auto w-full max-w-3xl shrink-0 px-4 pb-4 pt-2">
+      <div className={cn("mx-auto w-full shrink-0 px-4 pb-4 pt-2", pillDock ? "max-w-3xl" : "max-w-2xl")}>
           {pillDock && <div className="mb-2 max-h-[55dvh] overflow-y-auto">{pillDock}</div>}
           <Card
             className={cn("relative w-full", fileDragging && "outline-2 outline-dashed outline-ring")}

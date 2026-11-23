@@ -17,31 +17,32 @@ import re
 from datetime import datetime
 from pathlib import Path
 from typing import Literal
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from sqlalchemy import delete, select
 
+from app.config import settings as app_settings
 from app.dependencies import DBDep, get_current_user, get_current_user_required
 from app.models.schemas import NotificationListResponse
-from app.models.tables import User
+from app.models.tables import LoginSession, User, now_utc
 from app.platform import notifications as svc
 from app.platform.auth import (
     RateLimitError,
     create_access_token,
     create_verification_code,
     get_or_create_user,
+    session_claims,
     verify_code,
 )
 from app.platform.billing import get_or_create_wallet, held, list_transactions
+from app.platform.email import InvalidRecipientError, send_verification_email
 from app.platform.user_settings import (
-    merge_confirmation_pref,
-    merge_workspace_layout,
     read_confirmation_prefs,
     read_workspace_layout,
 )
-from app.platform.email import InvalidRecipientError, send_verification_email
 from app.providers.storage import (
     download_to_temp,
     owner_from_path,
@@ -182,25 +183,26 @@ class UserSettingsResponse(BaseModel):
     confirm_execution: str
     confirm_credits: str
     workspace_layout: str
+    theme: Literal["light", "dark", "system"] | None
+    locale: Literal["en", "zh"] | None
+    publish_alerts: bool
+    email_available: bool
 
 
 class UserSettingsUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    theme: Literal["light", "dark", "system"] | None = None
+    locale: Literal["en", "zh"] | None = None
+    publish_alerts: bool | None = None
     confirm_execution: Literal["auto", "ask"] | None = None
     confirm_credits: Literal["auto", "ask"] | None = None
     workspace_layout: Literal["auto", "chat"] | None = None
 
     @model_validator(mode="after")
     def _at_least_one_key(self) -> "UserSettingsUpdate":
-        if (
-            self.confirm_execution is None
-            and self.confirm_credits is None
-            and self.workspace_layout is None
-        ):
-            raise ValueError(
-                "at least one of confirm_execution / confirm_credits / workspace_layout"
-            )
+        if not self.model_dump(exclude_none=True):
+            raise ValueError("at least one setting is required")
         return self
 
 
@@ -211,11 +213,20 @@ async def get_settings(
 ) -> UserSettingsResponse:
     """Read the user's settings (读容忍 — absent/unknown values read as the
     defaults)."""
-    execution, credits = read_confirmation_prefs(current_user.settings)
+    return _settings_response(current_user)
+
+
+def _settings_response(user: User) -> UserSettingsResponse:
+    saved = user.settings or {}
+    execution, credits = read_confirmation_prefs(saved)
     return UserSettingsResponse(
         confirm_execution=execution,
         confirm_credits=credits,
-        workspace_layout=read_workspace_layout(current_user.settings),
+        theme=saved.get("theme") if saved.get("theme") in ("light", "dark", "system") else None,
+        locale=saved.get("locale") if saved.get("locale") in ("en", "zh") else None,
+        publish_alerts=saved.get("publish_alerts") is True,
+        email_available=bool(app_settings.resend_api_key and app_settings.from_email),
+        workspace_layout=read_workspace_layout(saved),
     )
 
 
@@ -232,28 +243,81 @@ async def put_settings(
     mutated a detached instance and committing the route's session wrote
     NOTHING (PUT echoed the new value with 200 while ``users.settings``
     stayed NULL). The write goes through the route's session."""
-    user = await db.get(User, current_user.id)
+    user = await db.get(User, current_user.id, with_for_update=True)
     if user is None:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Account no longer exists")
-    settings = user.settings
-    if data.confirm_execution is not None:
-        settings = merge_confirmation_pref(
-            settings, "confirm_execution", data.confirm_execution
-        )
-    if data.confirm_credits is not None:
-        settings = merge_confirmation_pref(
-            settings, "confirm_credits", data.confirm_credits
-        )
-    if data.workspace_layout is not None:
-        settings = merge_workspace_layout(settings, data.workspace_layout)
-    user.settings = settings
+        raise HTTPException(401, "Account no longer exists")
+    user.settings = {**(user.settings or {}), **data.model_dump(exclude_none=True)}
     await db.commit()
-    execution, credits = read_confirmation_prefs(user.settings)
-    return UserSettingsResponse(
-        confirm_execution=execution,
-        confirm_credits=credits,
-        workspace_layout=read_workspace_layout(user.settings),
+    return _settings_response(user)
+
+
+class ProfileUpdate(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+
+@auth_router.get("/profile", response_model=UserResponse)
+async def read_profile(current_user: User = Depends(get_current_user_required)):
+    return UserResponse(id=str(current_user.id), email=current_user.email, name=current_user.name)
+
+
+@auth_router.put("/profile", response_model=UserResponse)
+async def save_profile(
+    data: ProfileUpdate, db: DBDep, current_user: User = Depends(get_current_user_required)
+):
+    user = await db.get(User, current_user.id)
+    user.name = data.name
+    await db.commit()
+    return await read_profile(user)
+
+
+class SessionResponse(BaseModel):
+    id: UUID
+    user_agent: str
+    last_seen_at: datetime
+    current: bool
+
+
+@auth_router.get("/sessions", response_model=list[SessionResponse])
+async def list_sessions(
+    request: Request, db: DBDep, user: User = Depends(get_current_user_required)
+):
+    current_id = session_claims(request.headers["authorization"].split()[1])[1]
+    rows = await db.scalars(
+        select(LoginSession)
+        .where(
+            LoginSession.user_id == user.id,
+            LoginSession.revoked_at.is_(None),
+            LoginSession.expires_at > now_utc(),
+        )
+        .order_by(LoginSession.last_seen_at.desc())
     )
+    return [
+        SessionResponse(
+            id=row.id,
+            user_agent=row.user_agent,
+            last_seen_at=row.last_seen_at,
+            current=row.id == current_id,
+        )
+        for row in rows
+    ]
+
+
+@auth_router.post("/logout", status_code=204)
+async def logout(request: Request, db: DBDep, user: User = Depends(get_current_user_required)):
+    session_id = session_claims(request.headers["authorization"].split()[1])[1]
+    await revoke_session(session_id, db, user)
+
+
+@auth_router.delete("/sessions/{session_id}", status_code=204)
+async def revoke_session(
+    session_id: UUID, db: DBDep, user: User = Depends(get_current_user_required)
+):
+    row = await db.get(LoginSession, session_id)
+    if row is None or row.user_id != user.id:
+        raise HTTPException(404, "Session not found")
+    row.revoked_at = now_utc()
+    await db.commit()
 
 
 @auth_router.post("/send-code", response_model=SendCodeResponse)
@@ -292,6 +356,7 @@ async def send_code(
 @auth_router.post("/verify-code", response_model=VerifyCodeResponse)
 async def verify_code_endpoint(
     data: VerifyCodeRequest,
+    request: Request,
     db: DBDep,
 ) -> VerifyCodeResponse:
     """Verify the code and return a JWT."""
@@ -308,8 +373,23 @@ async def verify_code_endpoint(
     # chain — every login (re)checks, the wallet opens exactly once (the
     # wallet PK + the signup idempotency key are the dedupe backstop).
     await get_or_create_wallet(db, user.id)
+    session_id = uuid4()
+    token = create_access_token(user.id, session_id)
+    expires = session_claims(token)[2]
+    await db.execute(
+        delete(LoginSession).where(
+            LoginSession.user_id == user.id, LoginSession.expires_at <= now_utc()
+        )
+    )
+    db.add(
+        LoginSession(
+            id=session_id,
+            user_id=user.id,
+            user_agent=request.headers.get("user-agent", "")[:512],
+            expires_at=expires,
+        )
+    )
     await db.commit()
-    token = create_access_token(user.id)
 
     return VerifyCodeResponse(
         token=token,
@@ -436,9 +516,15 @@ async def get_wallet_transactions(
 
     from app.models.tables import (
         CreditTransaction as _CreditTransaction,
+    )
+    from app.models.tables import (
         ExportJob,
         MediaJob,
+    )
+    from app.models.tables import (
         PaymentOrder as _PaymentOrder,
+    )
+    from app.models.tables import (
         Project as _Project,
     )
     from app.ui_locale import current_ui_language

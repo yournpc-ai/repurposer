@@ -128,11 +128,11 @@ export function MentionPicker({
         top: position.top > 220 ? position.top : position.bottom + 4,
         transform: position.top > 220 ? "translateY(calc(-100% - 4px))" : undefined,
       }}
-      className="thin-scroll z-50 flex max-h-64 flex-col gap-0.5 overflow-y-auto p-1.5"
+      className="composer-picker thin-scroll z-50 max-h-64 overflow-y-auto"
     >
       {filtered.length === 0 ? (
         <span className="px-2 py-1.5 text-muted-foreground">
-          {t("mentions.pickerEmpty")}
+          {t(!query && candidates.length === 0 && context.files ? "mentions.addMaterialFirst" : "mentions.pickerEmpty")}
         </span>
       ) : (
         filtered.map(({ type, candidate }, index) => {

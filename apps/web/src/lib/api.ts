@@ -71,7 +71,7 @@ export async function apiFetch(
     }
     throw e
   }
-  if (response.status === 401 && typeof window !== "undefined") {
+  if (response.status === 401 && typeof window !== "undefined" && token === getToken()) {
     clearAuth()
     window.dispatchEvent(new CustomEvent(UNAUTHORIZED_EVENT))
   }

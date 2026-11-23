@@ -1,107 +1,78 @@
-"use client"
-
+import { useState } from "react"
 import { useTranslation } from "react-i18next"
-
 import { PlatformIcon, PLATFORM_LABELS } from "@/components/publish/PlatformIcon"
-import { Avatar } from "@/components/ui/avatar-clean"
-import { Badge } from "@/components/ui/badge-clean"
 import { Button } from "@/components/ui/button-clean"
-import { Card } from "@/components/ui/card-clean"
+import { Spinner } from "@/components/ui/spinner-clean"
 import { apiDelete } from "@/lib/api"
 import { connectChannel, PLATFORMS, useChannels } from "@/lib/channels"
+import type { ChannelPlatform } from "@/lib/types"
 
-import type { ChannelAccount } from "@/lib/types"
-
-/** Channels section of the shared SettingsDialog (ported from the retired
- * /settings page, 2026-08-21): platform connection cards — connect /
- * disconnect / reconnect-expired. The OAuth callback outcome (toast +
- * refresh) is handled by the /settings shim route, not here. */
 export function ChannelsSection() {
   const { t } = useTranslation()
-  const { refresh, accountFor, isConfigured } = useChannels()
-
-  const disconnect = async (account: ChannelAccount) => {
-    const res = await apiDelete(`/api/v1/channels/${account.id}`, {
-      toast: t("channels.disconnectedToast", {
-        platform: PLATFORM_LABELS[account.platform],
-      }),
-    })
-    if (res.ok) refresh()
+  const { refresh, accountFor, isConfigured, status } = useChannels()
+  const [pending, setPending] = useState<ChannelPlatform | null>(null)
+  if (status === "loading") return <Spinner label={t("common.loading")} />
+  if (status === "error")
+    return (
+      <Button size="sm" variant="secondary" className="self-start" onClick={refresh}>
+        {t("credits.retry")}
+      </Button>
+    )
+  const visible = PLATFORMS.filter((platform) => isConfigured(platform) || accountFor(platform))
+  if (!visible.length)
+    return <p className="settings-note">{t("settings.channelsUnavailable")}</p>
+  async function act(platform: ChannelPlatform, disconnectId?: string) {
+    setPending(platform)
+    try {
+      if (disconnectId) {
+        const res = await apiDelete("/api/v1/channels/" + disconnectId, {
+          toast: t("channels.disconnectedToast", { platform: PLATFORM_LABELS[platform] }),
+        })
+        if (res.ok) await refresh()
+      } else await connectChannel(platform)
+    } catch {
+      /* The API client reports action failures. */
+    } finally {
+      setPending(null)
+    }
   }
-
   return (
-    <div className="space-y-3">
-      <div className="grid gap-4 sm:grid-cols-2">
-        {PLATFORMS.map((platform) => {
-          const account = accountFor(platform)
-          const configured = isConfigured(platform)
-          const expired = account?.status === "expired"
-          return (
-            <Card key={platform} className="p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-sm font-medium">
-                  <PlatformIcon platform={platform} />
-                  {PLATFORM_LABELS[platform]}
-                </div>
-                {account && !expired && (
-                  <Badge className="rounded-md" tone="neutral">
-                    {t("channels.connected")}
-                  </Badge>
-                )}
-                {expired && (
-                  <Badge className="rounded-md" tone="danger">
-                    {t("channels.expired")}
-                  </Badge>
+    <ul className="settings-card">
+      {visible.map((platform) => {
+        const account = accountFor(platform)
+        const expired = account?.status === "expired"
+        const disconnect = account && (!expired || !isConfigured(platform))
+        return (
+          <li key={platform} className="settings-row">
+            <div className="flex min-w-0 items-center gap-3">
+              <PlatformIcon platform={platform} />
+              <div className="min-w-0">
+                <p>{PLATFORM_LABELS[platform]}</p>
+                {account && (
+                  <p className="truncate text-xs text-muted-foreground">
+                    {account.display_name} ·{" "}
+                    {t(expired ? "channels.expired" : "channels.connected")}
+                  </p>
                 )}
               </div>
-              <div className="mt-4 flex items-center justify-between">
-                {!configured ? (
-                  <span className="text-sm text-muted-foreground">
-                    {t("channels.comingSoon")}
-                  </span>
-                ) : account ? (
-                  <>
-                    <div className="flex items-center gap-2">
-                      <Avatar name={account.display_name} src={account.avatar_url ?? undefined} size={24} />
-                      <span className="truncate text-sm">
-                        {account.display_name}
-                      </span>
-                    </div>
-                    {expired ? (
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        className="h-9"
-                        onClick={() => connectChannel(platform)}
-                      >
-                        {t("channels.reconnect")}
-                      </Button>
-                    ) : (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-9"
-                        onClick={() => disconnect(account)}
-                      >
-                        {t("channels.disconnect")}
-                      </Button>
-                    )}
-                  </>
-                ) : (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="h-9"
-                    onClick={() => connectChannel(platform)}
-                  >
-                    {t("channels.connect")}
-                  </Button>
-                )}
-              </div>
-            </Card>
-          )
-        })}
-      </div>
-    </div>
+            </div>
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={pending !== null}
+              onClick={() => void act(platform, disconnect ? account.id : undefined)}
+            >
+              {t(
+                disconnect
+                  ? "channels.disconnect"
+                  : expired
+                    ? "channels.reconnect"
+                    : "channels.connect",
+              )}
+            </Button>
+          </li>
+        )
+      })}
+    </ul>
   )
 }
