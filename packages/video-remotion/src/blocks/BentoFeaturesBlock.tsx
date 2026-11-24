@@ -25,7 +25,7 @@ interface BentoProps extends StudioStyle {
 }
 
 export function BentoFeaturesBlock({ props, frame }: { props: BentoProps; frame: Frame }): React.JSX.Element {
-  const c = palette(props);
+  const c = palette(props, frame.compositionStyle);
   const three = props.cards.length === 3;
   return (
     <Stage style={props} frame={frame}>
@@ -47,12 +47,10 @@ export function BentoFeaturesBlock({ props, frame }: { props: BentoProps; frame:
             <article
               key={i}
               style={{
-                ...cardFace(c),
+                ...cardFace(c, { selected }),
                 ...appear(frame.tSec, itemTime(card.reveal_at_s, i, props.cards.length, frame.durSec)),
                 gridRow: lead ? "span 2" : undefined,
                 padding: lead ? 48 : "24px 38px",
-                background: selected ? c.tint : c.surface,
-                borderColor: selected ? c.accent : c.line,
                 display: "flex",
                 flexDirection: "column",
                 justifyContent: lead ? "space-between" : "center",
@@ -65,7 +63,8 @@ export function BentoFeaturesBlock({ props, frame }: { props: BentoProps; frame:
                     display: "flex",
                     gap: 14,
                     alignItems: "center",
-                    color: c.secondary,
+                    color: selected ? c.accentText : c.secondary,
+                    fontWeight: selected ? 700 : 600,
                     fontSize: 22,
                     letterSpacing: ".035em",
                   }}
@@ -78,6 +77,7 @@ export function BentoFeaturesBlock({ props, frame }: { props: BentoProps; frame:
                 <strong
                   style={{
                     display: "block",
+                    fontWeight: c.headingWeight,
                     letterSpacing: "-.025em",
                     lineHeight: 1.13,
                     fontSize: typeSize(card.title, lead ? 70 : 43, 685, lead ? 3 : 2),

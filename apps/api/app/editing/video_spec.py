@@ -33,6 +33,7 @@ from app.editing.schemas import (
     WebObject,
     speech_text_digest,
 )
+from app.editing.styles import resolve_style_tokens
 from app.editing.timing import SOURCE_TIMEBASE, ticks_to_frames
 
 SPEC_FORMAT = 1
@@ -538,7 +539,7 @@ def _compile_fonts(content: CompositionContent) -> list[dict[str, Any]]:
                 )
                 resources[key] = resource
     if has_motion_block:
-        for resource in font_resources(FONT_ID, FONT_SET_DIGEST, {400, 700}):
+        for resource in font_resources(FONT_ID, FONT_SET_DIGEST, {400, 700, 900}):
             key = (
                 resource["font_id"], resource["font_set_digest"],
                 resource["family"], resource["weight"],
@@ -628,6 +629,7 @@ def compile_video_spec(
         "width": settings.width,
         "height": settings.height,
         "background": settings.background,
+        **({"style": resolve_style_tokens(settings.style)} if settings.style is not None else {}),
         "sample_rate": settings.sample_rate,
         "duration_frames": total_frames,
         "fonts": _compile_fonts(content),

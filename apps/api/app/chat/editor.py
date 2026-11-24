@@ -16,6 +16,7 @@ from app.skills.blueprint import InstantiateSkillBlueprintArgs, music_clips_for_
 from app.editing.catalog import MotionBlockId, SoundRecipeId, VoiceId
 from app.editing.edits import AddClip, AddTrack, BindSource, SetTransition, SplitClip, TemporalEdit, UpdateClip, UpdateScene
 from app.editing.schemas import Animation, ClipSource, EditTarget, MotionBlockObject, ProductShowcaseProps, TimeRange, Transition, TransitionKind
+from app.editing.styles import BackdropStyle, StylePresetId
 from app.editing.store import (
     RequestMismatch,
     StaleBase,
@@ -191,6 +192,38 @@ class UpdateMotionBlockArgs(BaseModel):
     props_patch: dict[str, Any] = Field(
         min_length=1,
         description="Partial props to merge into this motion block only (e.g. entrance_duration_s, backdrop_style, camera_preset, callout_steps, cursor, highlight_at_s, items, theme); unrelated clips stay untouched.",
+    )
+
+
+class SetCompositionStyleArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    preset_id: StylePresetId = Field(
+        description="First-class orthogonal visual style preset: institutional_dark, swiss_paper, vox_editorial, or kinetic_anime."
+    )
+    accent_color: str | None = Field(
+        default=None,
+        pattern=r"^#[0-9a-fA-F]{6}$",
+        description="Optional hex accent color override (contrast-checked automatically against canvas/surface).",
+    )
+    backdrop_style: BackdropStyle | None = Field(
+        default=None,
+        description="Optional backdrop texture override (ambient_mesh, architectural_grid, editorial_paper, kinetic_diagonal, clean).",
+    )
+    theme: Literal["dark", "light"] | None = Field(
+        default=None,
+        description="Optional light/dark polarity override on top of the preset.",
+    )
+    override_block_styles: bool = Field(
+        default=True,
+        description="When true (default), strip per-block theme/accent/backdrop overrides so all motion blocks inherit the new style uniformly. Set false to keep existing local per-block overrides.",
+    )
+    update_captions: bool = Field(
+        default=True,
+        description="When true (default), update derived captions to match the style's caption tokens while preserving independent user-edited captions and non-caption text.",
+    )
+    update_transitions: bool = Field(
+        default=False,
+        description="When true, also switch existing adjacent scene transitions to the preset's default_transition. Defaults to false.",
     )
 
 
@@ -381,6 +414,11 @@ EDITOR_TOOLS = (
         UpdateMotionBlockArgs, "updateMotionBlock",
     ),
     _editor_tool(
+        "set_composition_style",
+        "Atomically apply a first-class orthogonal visual style preset (institutional_dark, swiss_paper, vox_editorial, kinetic_anime) across the entire composition — updating canvas background, motion block inheritance, derived captions (never touching independent captions or non-caption text), and optional transitions while leaving all audio tracks untouched.",
+        SetCompositionStyleArgs, "setCompositionStyle",
+    ),
+    _editor_tool(
         "set_transition",
         "Add or update a centered transition ('crossfade', 'whip_pan', 'wipe_reveal', 'zoom_through', or 'iris_focus') between two adjacent full-canvas opaque clips (including opaque motion blocks with show_backdrop=True) on the same visual track.",
         SetTransitionArgs, "setTransition",
@@ -470,7 +508,7 @@ WRITE_TOOLS = {
     if t.name == "remove_clip" or t.params_model in (
         SplitClipArgs, TrimClipArgs, MoveClipArgs, TranslateArgs, ScaleArgs, SetKeyframeArgs,
         InsertVisualArgs, InsertAudioArgs, EditAudioClipArgs, InsertMotionBlockArgs, UpdateMotionBlockArgs,
-        SetTransitionArgs, ExtendStillArgs, BindClipSourceArgs,
+        SetCompositionStyleArgs, SetTransitionArgs, ExtendStillArgs, BindClipSourceArgs,
     )
 }
 
@@ -932,6 +970,23 @@ async def edit_clip(
             start=start,
             end=end,
         )
+    elif isinstance(args, SetCompositionStyleArgs):
+        from app.editing.revisions import set_composition_style_ops
+
+        ops, summary = set_composition_style_ops(
+            content,
+            preset_id=args.preset_id,
+            accent_color=args.accent_color,
+            backdrop_style=args.backdrop_style,
+            theme=args.theme,
+            override_block_styles=args.override_block_styles,
+            update_captions=args.update_captions,
+            update_transitions=args.update_transitions,
+        )
+        if not ops:
+            raise ValueError("The composition already uses this exact visual style.")
+        extra["style_summary"] = summary
+        extra["style"] = summary["style"]
     elif isinstance(args, UpdateMotionBlockArgs):
         target = clips.get(args.clip_id)
         if target is None or not isinstance(target.object, MotionBlockObject):
@@ -1316,6 +1371,8 @@ async def execute_editor(turn, name, args):
                             receipt["audio_gain_keyframes"] = result["audio_gain_keyframes"]
                             receipt["fade_in_seconds"] = result.get("fade_in_seconds")
                             receipt["fade_out_seconds"] = result.get("fade_out_seconds")
+                    if name == "set_composition_style":
+                        receipt["style_summary"] = result["style_summary"]
                     if name == "set_transition":
                         receipt["transition"] = result["transition"]
                     if name == "split_clip":

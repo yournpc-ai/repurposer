@@ -28,6 +28,7 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator, m
 
 from app.editing.catalog import MotionBlockId
 from app.editing.fonts import FONT_ID, FONT_SET_DIGEST, LAYOUT_VERSION, SEGMENTATION_VERSION
+from app.editing.styles import BackdropStyle, CompositionStyle
 from app.editing.timing import DEFAULT_TIMEBASE
 
 if TYPE_CHECKING:
@@ -75,6 +76,7 @@ class VersionSettings(BaseModel):
     sample_rate: int = Field(default=48000, gt=0)
     channels: int = Field(default=2, gt=0)
     background: str = Field(default="#000000", pattern=r"^#[0-9a-fA-F]{6}$")
+    style: CompositionStyle | None = Field(default=None, exclude_if=lambda v: v is None)
 
 
 class TimeRange(BaseModel):
@@ -605,19 +607,11 @@ class KineticTitleProps(BaseModel):
     position: Literal["top", "center", "bottom", "bottom_left", "top_left"] = "bottom_left"
     entrance_duration_s: float = Field(default=0.75, ge=0.2, le=3.5, allow_inf_nan=False)
     exit_duration_s: float = Field(default=0.4, ge=0.0, le=2.0, allow_inf_nan=False)
-    accent_color: str = _HEX_COLOR
-    text_color: str = _HEX_COLOR
-    surface_style: Literal["transparent", "scrim", "glass_card", "light_card", "pill_caption"] = "glass_card"
-
-    @model_validator(mode="before")
-    @classmethod
-    def _defaults(cls, data: Any) -> Any:
-        if isinstance(data, dict):
-            out = dict(data)
-            out.setdefault("accent_color", "#14B8A6")
-            out.setdefault("text_color", "#F8FAFC")
-            return out
-        return data
+    accent_color: Annotated[str, _HEX_COLOR] | None = Field(default=None, exclude_if=lambda v: v is None)
+    text_color: Annotated[str, _HEX_COLOR] | None = Field(default=None, exclude_if=lambda v: v is None)
+    surface_style: Literal["transparent", "scrim", "glass_card", "light_card", "pill_caption"] | None = Field(
+        default=None, exclude_if=lambda v: v is None
+    )
 
 
 def captured_element_box(element: dict) -> list[float] | None:
@@ -646,7 +640,6 @@ class ProductShowcaseCallout(BaseModel):
         return self
 
 
-BackdropStyle = Literal["ambient_mesh", "architectural_grid", "editorial_paper", "clean"]
 CueSecond = Annotated[float, Field(ge=0, allow_inf_nan=False)]
 UnitCoordinate = Annotated[float, Field(ge=0, le=1, allow_inf_nan=False)]
 
@@ -679,7 +672,7 @@ class ProductShowcaseProps(BaseModel):
 
     url_bar: str | None = Field(default=None, max_length=80)
     badge: str | None = Field(default=None, max_length=48)
-    theme: Literal["dark", "light"] = "light"
+    theme: Literal["dark", "light"] | None = Field(default=None, exclude_if=lambda v: v is None)
     chrome_mode: Literal["browser", "frameless"] = "browser"
     camera_motion: Literal["subtle_push", "settle_tilt", "drift_focus", "static"] = "settle_tilt"
     entrance_duration_s: float = Field(default=0.9, ge=0.2, le=3.5, allow_inf_nan=False)
@@ -695,8 +688,8 @@ class ProductShowcaseProps(BaseModel):
     cursor: ShowcaseCursor | None = Field(default=None, exclude_if=lambda value: value is None)
     callout_steps: list[ShowcaseStep] = Field(default_factory=list, max_length=4, exclude_if=lambda steps: not steps)
     callout: ProductShowcaseCallout | None = None
-    accent_color: str = _HEX_COLOR
-    backdrop_style: BackdropStyle = Field(default="ambient_mesh", exclude_if=lambda value: value == "ambient_mesh")
+    accent_color: Annotated[str, _HEX_COLOR] | None = Field(default=None, exclude_if=lambda v: v is None)
+    backdrop_style: BackdropStyle | None = Field(default=None, exclude_if=lambda v: v is None)
     show_backdrop: bool = True
 
     @field_validator("callout_steps")
@@ -744,7 +737,6 @@ class ProductShowcaseProps(BaseModel):
     def _defaults(cls, data: Any) -> Any:
         if isinstance(data, dict):
             out = dict(data)
-            out.setdefault("accent_color", "#0D9488")
             raw_callout = out.get("callout")
             if raw_callout in ("", "null", "none", "None", {}):
                 out["callout"] = None
@@ -762,12 +754,12 @@ class StatementHookProps(BaseModel):
     highlight_at_s: CueSecond | None = Field(default=None, exclude_if=lambda value: value is None)
     highlight_phrase: str | None = Field(default=None, max_length=80)
     subheadline: str | None = Field(default=None, max_length=200)
-    theme: Literal["light", "dark"] = "light"
+    theme: Literal["light", "dark"] | None = Field(default=None, exclude_if=lambda v: v is None)
     layout_variant: Literal["centered", "editorial_left"] = "centered"
-    accent_color: str = _HEX_COLOR
+    accent_color: Annotated[str, _HEX_COLOR] | None = Field(default=None, exclude_if=lambda v: v is None)
     entrance_duration_s: float = Field(default=0.9, ge=0.25, le=3.0, allow_inf_nan=False)
     exit_duration_s: float = Field(default=0.35, ge=0.0, le=1.5, allow_inf_nan=False)
-    backdrop_style: BackdropStyle = Field(default="ambient_mesh", exclude_if=lambda value: value == "ambient_mesh")
+    backdrop_style: BackdropStyle | None = Field(default=None, exclude_if=lambda v: v is None)
     show_backdrop: bool = True
 
     @model_validator(mode="before")
@@ -775,7 +767,6 @@ class StatementHookProps(BaseModel):
     def _defaults(cls, data: Any) -> Any:
         if isinstance(data, dict):
             out = dict(data)
-            out.setdefault("accent_color", "#0D9488")
             for k in ("eyebrow", "highlight_phrase", "subheadline"):
                 if out.get(k) in ("", "null", "none", "None"):
                     out[k] = None
@@ -804,11 +795,11 @@ class MetricGridProps(BaseModel):
     title: str | None = Field(default=None, max_length=120)
     items: list[MetricGridItem] = Field(min_length=2, max_length=4)
     columns: Literal[2, 3] = 3
-    theme: Literal["light", "dark"] = "light"
-    accent_color: str = _HEX_COLOR
+    theme: Literal["light", "dark"] | None = Field(default=None, exclude_if=lambda v: v is None)
+    accent_color: Annotated[str, _HEX_COLOR] | None = Field(default=None, exclude_if=lambda v: v is None)
     stagger_s: float = Field(default=0.14, ge=0.04, le=0.6, allow_inf_nan=False)
     count_up: bool = True
-    backdrop_style: BackdropStyle = Field(default="ambient_mesh", exclude_if=lambda value: value == "ambient_mesh")
+    backdrop_style: BackdropStyle | None = Field(default=None, exclude_if=lambda v: v is None)
     show_backdrop: bool = True
 
     @model_validator(mode="before")
@@ -816,7 +807,6 @@ class MetricGridProps(BaseModel):
     def _defaults(cls, data: Any) -> Any:
         if isinstance(data, dict):
             out = dict(data)
-            out.setdefault("accent_color", "#0D9488")
             for k in ("eyebrow", "title"):
                 if out.get(k) in ("", "null", "none", "None"):
                     out[k] = None
@@ -833,21 +823,12 @@ class ClosingCtaProps(BaseModel):
     tagline: str = Field(min_length=1, max_length=160)
     cta_label: str | None = Field(default=None, max_length=48)
     url_text: str | None = Field(default=None, max_length=80)
-    theme: Literal["light", "dark"] = "dark"
-    accent_color: str = _HEX_COLOR
+    theme: Literal["light", "dark"] | None = Field(default=None, exclude_if=lambda v: v is None)
+    accent_color: Annotated[str, _HEX_COLOR] | None = Field(default=None, exclude_if=lambda v: v is None)
     entrance_duration_s: float = Field(default=0.9, ge=0.25, le=3.0, allow_inf_nan=False)
     logo_surface: Literal["light_pill", "raw"] = "light_pill"
-    backdrop_style: BackdropStyle = Field(default="ambient_mesh", exclude_if=lambda value: value == "ambient_mesh")
+    backdrop_style: BackdropStyle | None = Field(default=None, exclude_if=lambda v: v is None)
     show_backdrop: bool = True
-
-    @model_validator(mode="before")
-    @classmethod
-    def _defaults(cls, data: Any) -> Any:
-        if isinstance(data, dict):
-            out = dict(data)
-            out.setdefault("accent_color", "#14B8A6")
-            return out
-        return data
 
 
 ShortLabel = Annotated[str, Field(min_length=1, max_length=32)]
@@ -860,9 +841,9 @@ class NarrativeFields(BaseModel):
 
 
 class NarrativeStyle(NarrativeFields):
-    theme: Literal["light", "dark"] = "dark"
-    backdrop_style: BackdropStyle = "ambient_mesh"
-    accent_color: Annotated[str, _HEX_COLOR] = "#20968B"
+    theme: Literal["light", "dark"] | None = Field(default=None, exclude_if=lambda v: v is None)
+    backdrop_style: BackdropStyle | None = Field(default=None, exclude_if=lambda v: v is None)
+    accent_color: Annotated[str, _HEX_COLOR] | None = Field(default=None, exclude_if=lambda v: v is None)
     show_backdrop: bool = True
 
 

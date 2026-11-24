@@ -318,7 +318,7 @@ Rookie Cut 的视觉与模板体系采取**三层正交合流架构**，同时�
 |---|---|---|
 | **Workflow Skill（制片工种 / 创作方法论）** | 内置 `SKILL.md` 技能包（`promo-video`、`talking-head-video`、`knowledge-explainer`、`text-animation`） | 定义**这一品类如何从零制作**（如口播必须保留真人原声、宣传片先采集真实官网证据），不锁死固定幕数；在 `/` 菜单中作为「创作模式」存在 |
 | **Template / Blueprint（具象复刻模板）** | `UserSkill` + `SkillVersion`（含 `SKILL.md` + 脱敏 `references/blueprint.json`，`slot_blueprint_v1`） | 由一条打磨完毕的标杆作品固化的**可一键换料结构母版**（锁定幕数、节拍、转场与可替换槽位）；可由独立工具渲染**编号 Slot 宣传片**用于社媒分发，首页 Tabs 则只展示成品示范片 + hover `Use Prompt` |
-| **Style（一等公民视觉与声音风格包）** | `CompositionStyle`（计划挂在 `CompositionContent.settings.style` 与 `SkillBlueprintV1.style`，**0 新 SQL 表**） | **正交独立于叙事模板的美学属性**（如 `vox_editorial` / `institutional_dark` / `swiss_paper` / `kinetic_anime`）：统管调色、底纹、字体、字幕样式、默认运镜、转场偏好与音效色盘；单幕 Block 默认继承整片 Style，局部需要时覆盖。支持 `Template × Style` 自由组合（如「Vox 风格的产品宣传片模板」）与自然语言一键整片换装 |
+| **Style（一等公民视觉与声音风格包）** | `CompositionStyle`（`app/editing/styles.py` ↔ `video-remotion/src/engine/styles.ts` 同构注册表，持久化于 `CompositionContent.settings.style` 与 `SkillBlueprintV1.style`，**0 新 SQL 表**；`style=None` 时序列化与 `video-spec` 零漂移省略该键） | **正交独立于叙事模板的美学属性**（`institutional_dark` / `swiss_paper` / `vox_editorial` / `kinetic_anime`）：确定性展开为对比度自保的 `ResolvedStyleTokens`（含调色、`accent`/`accent_ink`/`accent_text`、底纹、`card_treatment`、`headline_treatment`、`heading_weight` 700/900、派生字幕样式与默认转场，另附创作指导 `bgm_mood` / `sfx_palette`）；13 个 Motion Block 默认继承整片 Style，单幕可局部覆写。支持 `Template × Style` 跨风格实例化与 `set_composition_style` 一键原子换装（保护 `independent` 字幕与全部音频轨不动） |
 | **Block（原生镜头积木，系统内部原语）** | `MotionBlockObject`（13 个原生块）+ 未来固化后的自由代码 Skill 块 | 组成单个场景/幕的**最小可编辑画面单元**；普通用户无需学习 Block 名字，只通过自然语言修改具体一幕 |
 
 ### 4.3.4 主时钟双管线（Beat Sheet）与视觉自检闭环（Eval Layer）

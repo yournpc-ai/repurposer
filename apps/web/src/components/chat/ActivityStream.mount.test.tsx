@@ -150,6 +150,7 @@ it("covers 100% of high-frequency video tools in TOOL_ACTIONS, en.ts, and zh.ts 
     "edit_audio_clip",
     "insert_motion_block",
     "update_motion_block",
+    "set_composition_style",
     "set_transition",
     "save_composition_as_skill",
     "instantiate_skill_blueprint",

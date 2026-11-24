@@ -6,6 +6,12 @@ import { clamp01, cueProgress, easeOutCubic, easeOutExpo, easeOutQuart, hexToRgb
 import { StudioBackdrop, studioInk, type BackdropStyle } from "./engine/backdrop";
 import { evaluateCamera, type CameraPreset } from "./engine/camera";
 import { VirtualCursor, type CursorCue } from "./engine/cursor";
+import {
+  cardSurfaceStyle,
+  highlightTapeStyle,
+  resolveBlockStyle,
+  type ResolvedStyleTokens,
+} from "./engine/styles";
 
 import { ImageAdapter, type Frame } from "./blocks/Stage";
 import { ChatDemoBlock } from "./blocks/ChatDemoBlock";
@@ -74,15 +80,16 @@ interface ProductShowcaseCallout {
 const ProductShowcaseBlock: React.FC<{
   clip: VideoClip & { object: VideoMotionBlockObject };
   fonts: VideoSpec["fonts"];
+  compositionStyle?: ResolvedStyleTokens;
   fps: number;
   frame: number;
   cueOffsetFrames: number;
-}> = ({ clip, fonts, fps, cueOffsetFrames, frame }) => {
+}> = ({ clip, fonts, compositionStyle, fps, cueOffsetFrames, frame }) => {
   const obj = clip.object;
   const props = obj.props as {
     url_bar?: string | null;
     badge?: string | null;
-    theme?: "dark" | "light";
+    theme?: "dark" | "light" | null;
     chrome_mode?: "browser" | "frameless";
     camera_motion?: "subtle_push" | "settle_tilt" | "drift_focus" | "static";
     entrance_duration_s?: number;
@@ -95,8 +102,8 @@ const ProductShowcaseBlock: React.FC<{
     cursor?: CursorCue | null;
     callout_steps?: (ProductShowcaseCallout & { start_s: number; end_s: number })[];
     callout?: ProductShowcaseCallout | null;
-    accent_color?: string;
-    backdrop_style?: BackdropStyle;
+    accent_color?: string | null;
+    backdrop_style?: BackdropStyle | null;
     show_backdrop?: boolean;
   };
 
@@ -106,10 +113,14 @@ const ProductShowcaseBlock: React.FC<{
   const durationFrames = Math.max(1, clip.end_frame - clip.start_frame);
   const tSec = frame / fps;
 
-  const theme = props.theme ?? "light";
-  const isDark = theme === "dark";
+  const tokens = resolveBlockStyle(compositionStyle, props, {
+    theme: "light",
+    accent: "#0D9488",
+    backdrop_style: "ambient_mesh",
+  });
+  const isDark = tokens.isDark;
   const chromeMode = props.chrome_mode ?? "browser";
-  const accent = props.accent_color ?? "#0D9488";
+  const accent = tokens.accent;
   const showBackdrop = props.show_backdrop ?? true;
   const cameraMotion = props.camera_motion ?? "settle_tilt";
   const entranceDur = Math.max(0.2, props.entrance_duration_s ?? 0.9);
@@ -126,15 +137,41 @@ const ProductShowcaseBlock: React.FC<{
   const padX = Math.round((chromeMode === "frameless" ? 72 : 96) * scaleUnit);
   const padTop = Math.round((chromeMode === "frameless" ? 50 : 62) * scaleUnit);
   const padBottom = Math.round((chromeMode === "frameless" ? 56 : 78) * scaleUnit);
-  const radius = Math.round(16 * scaleUnit);
+  const radius = tokens.hasCompositionStyle
+    ? tokens.cardTreatment === "brutal_offset"
+      ? Math.round(2 * scaleUnit)
+      : tokens.cardTreatment === "editorial_rule"
+        ? Math.round(4 * scaleUnit)
+        : tokens.cardTreatment === "minimal_hairline"
+          ? Math.round(6 * scaleUnit)
+          : Math.round(16 * scaleUnit)
+    : Math.round(16 * scaleUnit);
   const chromeHeight = Math.round(38 * scaleUnit);
   const dotSize = Math.max(6, Math.round(9 * scaleUnit));
 
-  const chromeBg = isDark ? "#11141C" : "#FFFFFF";
-  const borderColor = isDark ? "rgba(255, 255, 255, 0.12)" : "rgba(15, 23, 42, 0.11)";
-  const dividerColor = isDark ? "rgba(255, 255, 255, 0.07)" : "rgba(15, 23, 42, 0.08)";
-  const urlBg = isDark ? "rgba(255, 255, 255, 0.045)" : "rgba(15, 23, 42, 0.045)";
-  const urlText = isDark ? "#BFCAD3" : "#3A474C";
+  const chromeBg = tokens.hasCompositionStyle ? tokens.surfaceBg : (isDark ? "#11141C" : "#FFFFFF");
+  const dividerColor = tokens.hasCompositionStyle
+    ? hexToRgba(tokens.lineColor, tokens.cardTreatment === "editorial_rule" ? 0.9 : 0.55)
+    : (isDark ? "rgba(255, 255, 255, 0.07)" : "rgba(15, 23, 42, 0.08)");
+  const urlBg = tokens.hasCompositionStyle
+    ? hexToRgba(tokens.lineColor, isDark ? 0.25 : 0.14)
+    : (isDark ? "rgba(255, 255, 255, 0.045)" : "rgba(15, 23, 42, 0.045)");
+  const urlText = tokens.hasCompositionStyle ? tokens.secondaryInk : (isDark ? "#BFCAD3" : "#3A474C");
+
+  const frameSurface: React.CSSProperties = tokens.hasCompositionStyle
+    ? {
+        ...cardSurfaceStyle(tokens, { scaleUnit, elevated: true }),
+        borderRadius: radius,
+        background: chromeBg,
+      }
+    : {
+        borderRadius: radius,
+        border: `1px solid ${isDark ? "rgba(255, 255, 255, 0.12)" : "rgba(15, 23, 42, 0.11)"}`,
+        background: chromeBg,
+        boxShadow: isDark
+          ? `0 ${Math.round(36 * scaleUnit)}px ${Math.round(90 * scaleUnit)}px rgba(0, 0, 0, 0.62), 0 ${Math.round(6 * scaleUnit)}px ${Math.round(20 * scaleUnit)}px rgba(0, 0, 0, 0.4)`
+          : `0 ${Math.round(28 * scaleUnit)}px ${Math.round(72 * scaleUnit)}px rgba(15, 23, 42, 0.14), 0 ${Math.round(4 * scaleUnit)}px ${Math.round(14 * scaleUnit)}px rgba(15, 23, 42, 0.06)`,
+      };
 
   const { cropX, cropY } = camera;
   const sizeCapture = React.useCallback((image: HTMLImageElement) => {
@@ -160,12 +197,25 @@ const ProductShowcaseBlock: React.FC<{
         width: "100%",
         height: "100%",
         overflow: "hidden",
-        background: showBackdrop ? (isDark ? "#070B11" : "#F5F7FA") : "transparent",
+        background: showBackdrop
+          ? tokens.hasCompositionStyle
+            ? tokens.canvasBg
+            : (isDark ? "#070B11" : "#F5F7FA")
+          : "transparent",
         fontFamily: fontStack(fonts),
       }}
     >
       {showBackdrop ? (
-        <StudioBackdrop theme={isDark ? "dark" : "light"} accent={accent} scaleUnit={scaleUnit} style={props.backdrop_style} tSec={tSec} />
+        <StudioBackdrop
+          theme={tokens.theme}
+          accent={accent}
+          accentSecondary={tokens.accentSecondary}
+          canvasBg={tokens.hasCompositionStyle ? tokens.canvasBg : undefined}
+          lineColor={tokens.hasCompositionStyle ? tokens.lineColor : undefined}
+          scaleUnit={scaleUnit}
+          style={tokens.backdropStyle}
+          tSec={tSec}
+        />
       ) : null}
 
       <div
@@ -186,16 +236,11 @@ const ProductShowcaseBlock: React.FC<{
             position: "relative",
             width: "100%",
             height: "100%",
-            borderRadius: radius,
             overflow: "hidden",
-            border: `1px solid ${borderColor}`,
-            background: chromeBg,
+            ...frameSurface,
             opacity: camera.opacity,
             transform: camera.stage,
             transformOrigin: "50% 60%",
-            boxShadow: isDark
-              ? `0 ${Math.round(36 * scaleUnit)}px ${Math.round(90 * scaleUnit)}px rgba(0, 0, 0, 0.62), 0 ${Math.round(6 * scaleUnit)}px ${Math.round(20 * scaleUnit)}px rgba(0, 0, 0, 0.4)`
-              : `0 ${Math.round(28 * scaleUnit)}px ${Math.round(72 * scaleUnit)}px rgba(15, 23, 42, 0.14), 0 ${Math.round(4 * scaleUnit)}px ${Math.round(14 * scaleUnit)}px rgba(15, 23, 42, 0.06)`,
             display: "flex",
             flexDirection: "column",
           }}
@@ -265,23 +310,39 @@ const ProductShowcaseBlock: React.FC<{
                       alignItems: "center",
                       gap: Math.round(6 * scaleUnit),
                       padding: `${Math.round(3 * scaleUnit)}px ${Math.round(10 * scaleUnit)}px`,
-                      borderRadius: 999,
-                      background: hexToRgba(accent, isDark ? 0.16 : 0.12),
-                      border: `1px solid ${hexToRgba(accent, 0.34)}`,
-                      color: isDark ? "#E2E8F0" : "#0F172A",
+                      borderRadius:
+                        tokens.cardTreatment === "editorial_rule" || tokens.cardTreatment === "brutal_offset"
+                          ? Math.round(3 * scaleUnit)
+                          : 999,
+                      background:
+                        tokens.cardTreatment === "editorial_rule" || tokens.cardTreatment === "brutal_offset"
+                          ? accent
+                          : hexToRgba(accent, isDark ? 0.16 : 0.12),
+                      border:
+                        tokens.cardTreatment === "editorial_rule"
+                          ? `1.5px solid ${tokens.lineColor}`
+                          : `1px solid ${hexToRgba(accent, 0.34)}`,
+                      color:
+                        tokens.cardTreatment === "editorial_rule" || tokens.cardTreatment === "brutal_offset"
+                          ? tokens.accentInk
+                          : tokens.hasCompositionStyle
+                            ? tokens.accentText
+                            : (isDark ? "#E2E8F0" : "#0F172A"),
                       fontSize: Math.max(10, Math.round(11.5 * scaleUnit)),
-                      fontWeight: 600,
+                      fontWeight: tokens.headingWeight === 900 ? 900 : 600,
                       letterSpacing: "0.04em",
                     }}
                   >
-                    <span
-                      style={{
-                        width: Math.max(5, Math.round(6 * scaleUnit)),
-                        height: Math.max(5, Math.round(6 * scaleUnit)),
-                        borderRadius: "50%",
-                        background: accent,
-                      }}
-                    />
+                    {tokens.cardTreatment !== "editorial_rule" && tokens.cardTreatment !== "brutal_offset" ? (
+                      <span
+                        style={{
+                          width: Math.max(5, Math.round(6 * scaleUnit)),
+                          height: Math.max(5, Math.round(6 * scaleUnit)),
+                          borderRadius: "50%",
+                          background: accent,
+                        }}
+                      />
+                    ) : null}
                     {props.badge}
                   </div>
                 ) : null}
@@ -388,9 +449,10 @@ const ProductShowcaseBlock: React.FC<{
 const KineticTitleBlock: React.FC<{
   clip: VideoClip & { object: VideoMotionBlockObject };
   fonts: VideoSpec["fonts"];
+  compositionStyle?: ResolvedStyleTokens;
   fps: number;
   frame: number;
-}> = ({ clip, fonts, fps, frame }) => {
+}> = ({ clip, fonts, compositionStyle, fps, frame }) => {
   const obj = clip.object;
   const props = obj.props as {
     headline: string;
@@ -400,9 +462,9 @@ const KineticTitleBlock: React.FC<{
     position?: "top" | "center" | "bottom" | "bottom_left" | "top_left";
     entrance_duration_s?: number;
     exit_duration_s?: number;
-    accent_color?: string;
-    text_color?: string;
-    surface_style?: "transparent" | "scrim" | "glass_card" | "light_card" | "pill_caption";
+    accent_color?: string | null;
+    text_color?: string | null;
+    surface_style?: "transparent" | "scrim" | "glass_card" | "light_card" | "pill_caption" | null;
   };
 
   const width = obj.layout.width;
@@ -412,13 +474,27 @@ const KineticTitleBlock: React.FC<{
   const durationSec = durationFrames / fps;
   const tSec = frame / fps;
 
+  const tokens = resolveBlockStyle(
+    compositionStyle,
+    { accent_color: props.accent_color },
+    { theme: "dark", accent: "#14B8A6", backdrop_style: "ambient_mesh" },
+  );
+
   const align = props.align ?? "left";
   const position = props.position ?? "bottom_left";
   const entranceDur = Math.max(0.2, props.entrance_duration_s ?? 0.75);
   const exitDur = Math.max(0, Math.min(durationSec * 0.4, props.exit_duration_s ?? 0.4));
-  const accent = props.accent_color ?? "#14B8A6";
-  const textColor = props.text_color ?? "#F8FAFC";
-  const surfaceStyle = props.surface_style ?? "glass_card";
+  const accent = props.accent_color ?? (tokens.hasCompositionStyle ? tokens.accent : "#14B8A6");
+  const accentText = tokens.hasCompositionStyle ? tokens.accentText : accent;
+  const surfaceStyle = props.surface_style ?? (tokens.hasCompositionStyle ? null : "glass_card");
+  const textColor =
+    props.text_color ??
+    (surfaceStyle === "light_card"
+      ? "#0F172A"
+      : surfaceStyle === null
+        ? tokens.ink
+        : "#F8FAFC");
+  const headingWeight = tokens.hasCompositionStyle ? tokens.headingWeight : 700;
 
   const exitProgress =
     exitDur > 0 && tSec > durationSec - exitDur
@@ -444,6 +520,30 @@ const KineticTitleBlock: React.FC<{
   if (surfaceStyle === "pill_caption") {
     const pillT = springOut(tSec / Math.max(0.45, entranceDur * 0.85) * 0.7, 13.0, 0.82);
     const pillOpacity = easeOutCubic(tSec / Math.max(0.18, entranceDur * 0.5)) * globalAlpha;
+    const isEditorial = tokens.hasCompositionStyle && tokens.cardTreatment === "editorial_rule";
+    const isBrutal = tokens.hasCompositionStyle && tokens.cardTreatment === "brutal_offset";
+    const isSwiss = tokens.hasCompositionStyle && tokens.cardTreatment === "minimal_hairline";
+    const pillBg = isEditorial
+      ? "#141413"
+      : isBrutal
+        ? tokens.surfaceBg
+        : isSwiss
+          ? tokens.surfaceBg
+          : "rgba(9, 17, 24, 0.97)";
+    const pillText = isEditorial
+      ? "#FFFDF7"
+      : isSwiss
+        ? tokens.ink
+        : isBrutal
+          ? tokens.ink
+          : studioInk(textColor, true);
+    const pillEyebrow = isEditorial
+      ? accent
+      : isSwiss
+        ? tokens.accentText
+        : isBrutal
+          ? tokens.accentSecondary
+          : studioInk(accent, true);
     return (
       <div
         style={{
@@ -467,11 +567,23 @@ const KineticTitleBlock: React.FC<{
             alignItems: "center",
             gap: Math.round(14 * scaleUnit),
             padding: `${Math.round((position === "top_left" ? 6 : 13) * scaleUnit)}px ${Math.round(24 * scaleUnit)}px`,
-            borderRadius: 999,
-            background: "rgba(9, 17, 24, 0.97)",
-            backdropFilter: "blur(20px)",
-            border: `1px solid ${hexToRgba(accent, 0.42)}`,
-            boxShadow: `0 ${Math.round(18 * scaleUnit)}px ${Math.round(44 * scaleUnit)}px rgba(0, 0, 0, 0.36)`,
+            borderRadius: isEditorial ? Math.round(4 * scaleUnit) : isBrutal ? Math.round(2 * scaleUnit) : isSwiss ? Math.round(6 * scaleUnit) : 999,
+            background: pillBg,
+            backdropFilter: !isEditorial && !isBrutal && !isSwiss ? "blur(20px)" : undefined,
+            border: isEditorial
+              ? `2px solid ${accent}`
+              : isBrutal
+                ? `2px solid ${accent}`
+                : isSwiss
+                  ? `1.5px solid ${tokens.lineColor}`
+                  : `1px solid ${hexToRgba(accent, 0.42)}`,
+            boxShadow: isEditorial
+              ? `${Math.round(4 * scaleUnit)}px ${Math.round(4 * scaleUnit)}px 0px ${accent}`
+              : isBrutal
+                ? `${Math.round(5 * scaleUnit)}px ${Math.round(5 * scaleUnit)}px 0px ${tokens.accentSecondary}`
+                : isSwiss
+                  ? "none"
+                  : `0 ${Math.round(18 * scaleUnit)}px ${Math.round(44 * scaleUnit)}px rgba(0, 0, 0, 0.36)`,
             opacity: pillOpacity,
             transform: `translateY(${(1 - pillT) * (position === "top_left" ? -6 : 20) * scaleUnit + exitLift}px) scale(${0.96 + 0.04 * pillT})`,
             maxWidth: `${Math.round(1100 * scaleUnit)}px`,
@@ -481,9 +593,9 @@ const KineticTitleBlock: React.FC<{
             style={{
               width: Math.max(7, Math.round(9 * scaleUnit)),
               height: Math.max(7, Math.round(9 * scaleUnit)),
-              borderRadius: "50%",
+              borderRadius: isEditorial || isBrutal || isSwiss ? 1 : "50%",
               background: accent,
-              boxShadow: `0 0 ${Math.round(12 * scaleUnit)}px ${hexToRgba(accent, 0.75)}`,
+              boxShadow: !isEditorial && !isSwiss ? `0 0 ${Math.round(12 * scaleUnit)}px ${hexToRgba(accent, 0.75)}` : undefined,
               flexShrink: 0,
             }}
           />
@@ -491,10 +603,10 @@ const KineticTitleBlock: React.FC<{
             <span
               style={{
                 fontSize: Math.max(12, Math.round(14 * scaleUnit)),
-                fontWeight: 700,
+                fontWeight: headingWeight,
                 letterSpacing: "0.14em",
                 textTransform: "uppercase",
-                color: studioInk(accent, true),
+                color: pillEyebrow,
                 flexShrink: 0,
               }}
             >
@@ -502,14 +614,14 @@ const KineticTitleBlock: React.FC<{
             </span>
           ) : null}
           {props.eyebrow ? (
-            <span style={{ width: 1, height: Math.round(16 * scaleUnit), background: "rgba(255,255,255,0.20)", flexShrink: 0 }} />
+            <span style={{ width: 1, height: Math.round(16 * scaleUnit), background: isSwiss ? tokens.lineColor : "rgba(255,255,255,0.20)", flexShrink: 0 }} />
           ) : null}
           <span
             style={{
               fontSize: Math.max(16, Math.round(21 * scaleUnit)),
-              fontWeight: 600,
+              fontWeight: isEditorial || isBrutal ? 700 : 600,
               letterSpacing: "-0.01em",
-              color: studioInk(textColor, true),
+              color: pillText,
               lineHeight: 1.2,
             }}
           >
@@ -542,25 +654,30 @@ const KineticTitleBlock: React.FC<{
         : "linear-gradient(to top, rgba(7, 13, 17, 0.95) 0%, rgba(7, 13, 17, 0.72) 38%, rgba(7, 13, 17, 0) 72%)";
 
   const cardStyle: React.CSSProperties =
-    surfaceStyle === "glass_card"
+    surfaceStyle === null
       ? {
-          background: "rgba(10, 20, 24, 0.92)",
-          backdropFilter: "blur(24px)",
-          border: "1px solid rgba(255, 255, 255, 0.14)",
-          borderRadius: Math.round(16 * scaleUnit),
+          ...cardSurfaceStyle(tokens, { scaleUnit, elevated: true }),
           padding: `${Math.round(30 * scaleUnit)}px ${Math.round(38 * scaleUnit)}px`,
-          boxShadow: `0 ${Math.round(28 * scaleUnit)}px ${Math.round(68 * scaleUnit)}px rgba(0, 0, 0, 0.48)`,
         }
-      : surfaceStyle === "light_card"
+      : surfaceStyle === "glass_card"
         ? {
-            background: "rgba(255, 255, 255, 0.94)",
+            background: "rgba(10, 20, 24, 0.92)",
             backdropFilter: "blur(24px)",
-            border: "1px solid rgba(15, 23, 42, 0.10)",
+            border: "1px solid rgba(255, 255, 255, 0.14)",
             borderRadius: Math.round(16 * scaleUnit),
             padding: `${Math.round(30 * scaleUnit)}px ${Math.round(38 * scaleUnit)}px`,
-            boxShadow: `0 ${Math.round(24 * scaleUnit)}px ${Math.round(60 * scaleUnit)}px rgba(15, 23, 42, 0.14)`,
+            boxShadow: `0 ${Math.round(28 * scaleUnit)}px ${Math.round(68 * scaleUnit)}px rgba(0, 0, 0, 0.48)`,
           }
-        : {};
+        : surfaceStyle === "light_card"
+          ? {
+              background: "rgba(255, 255, 255, 0.94)",
+              backdropFilter: "blur(24px)",
+              border: "1px solid rgba(15, 23, 42, 0.10)",
+              borderRadius: Math.round(16 * scaleUnit),
+              padding: `${Math.round(30 * scaleUnit)}px ${Math.round(38 * scaleUnit)}px`,
+              boxShadow: `0 ${Math.round(24 * scaleUnit)}px ${Math.round(60 * scaleUnit)}px rgba(15, 23, 42, 0.14)`,
+            }
+          : {};
 
   return (
     <div
@@ -623,7 +740,7 @@ const KineticTitleBlock: React.FC<{
                   fontWeight: 600,
                   letterSpacing: "0.16em",
                   textTransform: "uppercase",
-                  color: accent,
+                  color: accentText,
                   opacity: eyebrowT,
                   transform: `translateY(${(1 - eyebrowT) * 18 * scaleUnit}px)`,
                 }}
@@ -666,7 +783,7 @@ const KineticTitleBlock: React.FC<{
                   <div
                     style={{
                       fontSize: headlineSize,
-                      fontWeight: 700,
+                      fontWeight: headingWeight,
                       lineHeight: 1.08,
                       letterSpacing: `${-0.028 + (1 - lineT) * 0.015}em`,
                       color: textColor,
@@ -675,7 +792,7 @@ const KineticTitleBlock: React.FC<{
                       textShadow:
                         surfaceStyle === "transparent"
                           ? "0 2px 24px rgba(0, 0, 0, 0.55)"
-                          : surfaceStyle === "light_card"
+                          : surfaceStyle === "light_card" || (surfaceStyle === null && !tokens.isDark)
                             ? "none"
                             : "0 1px 16px rgba(0, 0, 0, 0.28)",
                     }}
@@ -718,10 +835,11 @@ const KineticTitleBlock: React.FC<{
 const StatementHookBlock: React.FC<{
   clip: VideoClip & { object: VideoMotionBlockObject };
   fonts: VideoSpec["fonts"];
+  compositionStyle?: ResolvedStyleTokens;
   fps: number;
   frame: number;
   cueOffsetFrames: number;
-}> = ({ clip, fonts, fps, cueOffsetFrames, frame }) => {
+}> = ({ clip, fonts, compositionStyle, fps, cueOffsetFrames, frame }) => {
   const obj = clip.object;
   const props = obj.props as {
     headline: string;
@@ -729,12 +847,12 @@ const StatementHookBlock: React.FC<{
     highlight_phrase?: string | null;
     highlight_at_s?: number | null;
     subheadline?: string | null;
-    theme?: "light" | "dark";
+    theme?: "light" | "dark" | null;
     layout_variant?: "centered" | "editorial_left";
-    accent_color?: string;
+    accent_color?: string | null;
     entrance_duration_s?: number;
     exit_duration_s?: number;
-    backdrop_style?: BackdropStyle;
+    backdrop_style?: BackdropStyle | null;
     show_backdrop?: boolean;
   };
 
@@ -745,9 +863,14 @@ const StatementHookBlock: React.FC<{
   const durationSec = durationFrames / fps;
   const tSec = frame / fps;
 
-  const isDark = (props.theme ?? "light") === "dark";
+  const tokens = resolveBlockStyle(compositionStyle, props, {
+    theme: "light",
+    accent: "#0D9488",
+    backdrop_style: "ambient_mesh",
+  });
+  const isDark = tokens.isDark;
   const isCentered = (props.layout_variant ?? "centered") === "centered";
-  const accent = props.accent_color ?? "#0D9488";
+  const accent = tokens.accent;
   const showBackdrop = props.show_backdrop ?? true;
   const entranceDur = Math.max(0.25, props.entrance_duration_s ?? 0.9);
   const exitDur = Math.max(0, Math.min(durationSec * 0.35, props.exit_duration_s ?? 0.35));
@@ -759,9 +882,14 @@ const StatementHookBlock: React.FC<{
   const globalAlpha = 1 - exitProgress;
   const exitLift = -exitProgress * 18 * scaleUnit;
 
-  const inkPrimary = isDark ? "#F8FAFC" : "#0F172A";
-  const inkMuted = isDark ? "#BFCAD3" : "#3A474C";
-  const ruleColor = isDark ? "rgba(255, 255, 255, 0.14)" : "rgba(15, 23, 42, 0.12)";
+  const inkPrimary = tokens.hasCompositionStyle ? tokens.ink : (isDark ? "#F8FAFC" : "#0F172A");
+  const inkMuted = tokens.hasCompositionStyle ? tokens.secondaryInk : (isDark ? "#BFCAD3" : "#3A474C");
+  const ruleColor = tokens.hasCompositionStyle
+    ? hexToRgba(tokens.lineColor, tokens.cardTreatment === "editorial_rule" ? 0.85 : 0.45)
+    : (isDark ? "rgba(255, 255, 255, 0.14)" : "rgba(15, 23, 42, 0.12)");
+  const treatment = tokens.headlineTreatment;
+  const headingWeight = tokens.hasCompositionStyle ? tokens.headingWeight : 700;
+  const isFullTape = treatment === "highlight_tape" || treatment === "outlined_impact";
 
   const eyebrowT = springOut(tSec, 13.5, 0.84);
   const ruleT = easeOutQuart((tSec - 0.08) / Math.max(0.35, entranceDur * 0.65));
@@ -790,12 +918,25 @@ const StatementHookBlock: React.FC<{
         width: "100%",
         height: "100%",
         overflow: "hidden",
-        background: showBackdrop ? (isDark ? "#070B11" : "#F5F7FA") : "transparent",
+        background: showBackdrop
+          ? tokens.hasCompositionStyle
+            ? tokens.canvasBg
+            : (isDark ? "#070B11" : "#F5F7FA")
+          : "transparent",
         fontFamily: fontStack(fonts),
       }}
     >
       {showBackdrop ? (
-        <StudioBackdrop theme={isDark ? "dark" : "light"} accent={accent} scaleUnit={scaleUnit} style={props.backdrop_style} tSec={tSec} />
+        <StudioBackdrop
+          theme={tokens.theme}
+          accent={accent}
+          accentSecondary={tokens.accentSecondary}
+          canvasBg={tokens.hasCompositionStyle ? tokens.canvasBg : undefined}
+          lineColor={tokens.hasCompositionStyle ? tokens.lineColor : undefined}
+          scaleUnit={scaleUnit}
+          style={tokens.backdropStyle}
+          tSec={tSec}
+        />
       ) : null}
 
       <div
@@ -826,27 +967,86 @@ const StatementHookBlock: React.FC<{
           }}
         >
           {props.eyebrow ? (
-            <div style={{ overflow: "hidden", paddingBottom: 2 }}>
+            <div style={{ padding: Math.round(6 * scaleUnit) }}>
               <div
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: Math.round(12 * scaleUnit),
-                  padding: `${Math.round(7 * scaleUnit)}px ${Math.round(16 * scaleUnit)}px`,
-                  borderRadius: 999,
-                  background: hexToRgba(accent, isDark ? 0.14 : 0.10),
-                  border: `1px solid ${hexToRgba(accent, isDark ? 0.34 : 0.28)}`,
-                  fontSize: Math.max(13, Math.round(15 * scaleUnit)),
-                  fontWeight: 600,
-                  letterSpacing: "0.14em",
-                  textTransform: "uppercase",
-                  color: studioInk(accent, isDark),
-                  opacity: clamp01(eyebrowT * 1.15),
-                  transform: `translateY(${(1 - eyebrowT) * 20 * scaleUnit}px)`,
-                }}
+                style={
+                  treatment === "highlight_tape"
+                    ? {
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: Math.round(10 * scaleUnit),
+                        padding: `${Math.round(7 * scaleUnit)}px ${Math.round(18 * scaleUnit)}px`,
+                        borderRadius: Math.round(3 * scaleUnit),
+                        background: accent,
+                        border: `${Math.max(1.5, Math.round(2 * scaleUnit))}px solid ${tokens.lineColor}`,
+                        boxShadow: `${Math.round(4 * scaleUnit)}px ${Math.round(4 * scaleUnit)}px 0px ${tokens.lineColor}`,
+                        fontSize: Math.max(13, Math.round(15 * scaleUnit)),
+                        fontWeight: 900,
+                        letterSpacing: "0.12em",
+                        textTransform: "uppercase",
+                        color: tokens.accentInk,
+                        opacity: clamp01(eyebrowT * 1.15),
+                        transform: `translateY(${(1 - eyebrowT) * 20 * scaleUnit}px)`,
+                      }
+                    : treatment === "outlined_impact"
+                      ? {
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: Math.round(10 * scaleUnit),
+                          padding: `${Math.round(7 * scaleUnit)}px ${Math.round(20 * scaleUnit)}px`,
+                          borderRadius: Math.round(2 * scaleUnit),
+                          background: accent,
+                          boxShadow: `${Math.round(5 * scaleUnit)}px ${Math.round(5 * scaleUnit)}px 0px ${tokens.accentSecondary}`,
+                          fontSize: Math.max(13, Math.round(15 * scaleUnit)),
+                          fontWeight: 900,
+                          letterSpacing: "0.14em",
+                          textTransform: "uppercase",
+                          color: tokens.accentInk,
+                          opacity: clamp01(eyebrowT * 1.15),
+                          transform: `translateY(${(1 - eyebrowT) * 20 * scaleUnit}px) skewX(-10deg)`,
+                        }
+                      : treatment === "swiss_rule"
+                        ? {
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: Math.round(10 * scaleUnit),
+                            padding: `${Math.round(4 * scaleUnit)}px 0`,
+                            borderTop: `${Math.max(1.5, Math.round(2 * scaleUnit))}px solid ${accent}`,
+                            fontSize: Math.max(13, Math.round(15 * scaleUnit)),
+                            fontWeight: 700,
+                            letterSpacing: "0.16em",
+                            textTransform: "uppercase",
+                            color: tokens.accentText,
+                            opacity: clamp01(eyebrowT * 1.15),
+                            transform: `translateY(${(1 - eyebrowT) * 20 * scaleUnit}px)`,
+                          }
+                        : {
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: Math.round(12 * scaleUnit),
+                            padding: `${Math.round(7 * scaleUnit)}px ${Math.round(16 * scaleUnit)}px`,
+                            borderRadius: 999,
+                            background: hexToRgba(accent, isDark ? 0.14 : 0.10),
+                            border: `1px solid ${hexToRgba(accent, isDark ? 0.34 : 0.28)}`,
+                            fontSize: Math.max(13, Math.round(15 * scaleUnit)),
+                            fontWeight: 600,
+                            letterSpacing: "0.14em",
+                            textTransform: "uppercase",
+                            color: tokens.hasCompositionStyle ? tokens.accentText : studioInk(accent, isDark),
+                            opacity: clamp01(eyebrowT * 1.15),
+                            transform: `translateY(${(1 - eyebrowT) * 20 * scaleUnit}px)`,
+                          }
+                }
               >
-                <span style={{ width: Math.max(6, Math.round(7 * scaleUnit)), height: Math.max(6, Math.round(7 * scaleUnit)), borderRadius: "50%", background: accent }} />
-                {props.eyebrow}
+                {treatment === "clean" && (
+                  <span style={{ width: Math.max(6, Math.round(7 * scaleUnit)), height: Math.max(6, Math.round(7 * scaleUnit)), borderRadius: "50%", background: accent }} />
+                )}
+                {treatment === "swiss_rule" && (
+                  <span style={{ width: Math.max(7, Math.round(8 * scaleUnit)), height: Math.max(7, Math.round(8 * scaleUnit)), background: accent }} />
+                )}
+                <span style={treatment === "outlined_impact" ? { transform: "skewX(10deg)" } : undefined}>
+                  {props.eyebrow}
+                </span>
               </div>
             </div>
           ) : null}
@@ -857,7 +1057,7 @@ const StatementHookBlock: React.FC<{
               display: "flex",
               flexDirection: "column",
               alignItems: isCentered ? "center" : "flex-start",
-              gap: Math.round(10 * scaleUnit),
+              gap: Math.round(12 * scaleUnit),
             }}
           >
             {lines.map((line, lineIdx) => {
@@ -865,7 +1065,7 @@ const StatementHookBlock: React.FC<{
               const matchIdx = highlightNeedle ? lowerLine.indexOf(highlightNeedle) : -1;
               const matchEnd = matchIdx >= 0 ? matchIdx + highlightNeedle.length : -1;
               const hasSpaces = /\s/.test(line);
-              const tokens = tokenizeLine(line);
+              const tokensInLine = tokenizeLine(line);
               let cursor = 0;
 
               return (
@@ -876,10 +1076,10 @@ const StatementHookBlock: React.FC<{
                     flexWrap: "wrap",
                     justifyContent: isCentered ? "center" : "flex-start",
                     columnGap: hasSpaces ? Math.round(headlineSize * 0.24) : 0,
-                    rowGap: Math.round(8 * scaleUnit),
+                    rowGap: Math.round(10 * scaleUnit),
                   }}
                 >
-                  {tokens.map((tok, tokIdx) => {
+                  {tokensInLine.map((tok, tokIdx) => {
                     const tokPos = line.indexOf(tok, cursor);
                     if (tokPos >= 0) cursor = tokPos + tok.length;
                     const inHighlight =
@@ -893,42 +1093,43 @@ const StatementHookBlock: React.FC<{
                     const s = springOut(localT, 12.5, 0.80);
                     const op = easeOutCubic(localT / 0.26);
 
+                    const tokenColor = inHighlight
+                      ? isFullTape
+                        ? highlightSweep > 0.35
+                          ? tokens.accentInk
+                          : inkPrimary
+                        : tokens.hasCompositionStyle
+                          ? `color-mix(in srgb, ${tokens.accentText} ${highlightSweep * 100}%, ${inkPrimary})`
+                          : `color-mix(in srgb, ${studioInk(accent, isDark)} ${highlightSweep * 100}%, ${inkPrimary})`
+                      : inkPrimary;
+
                     return (
                       <span
                         key={`${lineIdx}:${tokIdx}:${tok}`}
                         style={{
                           display: "inline-block",
-                          overflow: "hidden",
+                          overflow: inHighlight && isFullTape ? "visible" : "hidden",
                           padding: `${Math.round(4 * scaleUnit)}px ${inHighlight ? Math.round(10 * scaleUnit) : 0}px`,
-                          margin: `-${Math.round(4 * scaleUnit)}px ${inHighlight ? -Math.round(4 * scaleUnit) : 0}px`,
+                          margin: `-${Math.round(4 * scaleUnit)}px ${inHighlight ? Math.round((isFullTape ? 2 : -4) * scaleUnit) : 0}px`,
                           position: "relative",
                         }}
                       >
                         {inHighlight ? (
-                          <span
-                            style={{
-                              position: "absolute",
-                              left: 0,
-                              right: 0,
-                              bottom: Math.round(6 * scaleUnit),
-                              height: "36%",
-                              borderRadius: Math.round(8 * scaleUnit),
-                              background: hexToRgba(accent, isDark ? 0.12 : 0.14),
-                              transformOrigin: "left center",
-                              transform: `scaleX(${highlightSweep})`,
-                              pointerEvents: "none",
-                            }}
-                          />
+                          <span style={highlightTapeStyle(tokens, highlightSweep, scaleUnit)} />
                         ) : null}
                         <span
                           style={{
                             position: "relative",
                             display: "inline-block",
                             fontSize: headlineSize,
-                            fontWeight: 700,
+                            fontWeight: headingWeight,
                             lineHeight: 1.08,
-                            letterSpacing: `${-0.032 + (1 - clamp01(s)) * 0.014}em`,
-                            color: inHighlight ? `color-mix(in srgb, ${studioInk(accent, isDark)} ${highlightSweep * 100}%, ${inkPrimary})` : inkPrimary,
+                            letterSpacing: `${(treatment === "swiss_rule" ? -0.04 : -0.032) + (1 - clamp01(s)) * 0.014}em`,
+                            color: tokenColor,
+                            textShadow:
+                              treatment === "outlined_impact" && !inHighlight
+                                ? `${Math.round(4 * scaleUnit)}px ${Math.round(4 * scaleUnit)}px 0px ${tokens.accent}`
+                                : undefined,
                             opacity: op,
                             transform: `translateY(${(1 - s) * 108}%)`,
                           }}
@@ -946,10 +1147,15 @@ const StatementHookBlock: React.FC<{
           {/* Precision expanding accent divider */}
           <div
             style={{
-              width: `${Math.round(96 * scaleUnit)}px`,
-              height: Math.max(2, Math.round(3 * scaleUnit)),
-              borderRadius: 99,
-              background: `linear-gradient(90deg, ${accent}, ${hexToRgba(accent, 0.25)})`,
+              width: `${Math.round((treatment === "swiss_rule" ? 160 : 96) * scaleUnit)}px`,
+              height: Math.max(2, Math.round((treatment === "highlight_tape" || treatment === "outlined_impact" ? 5 : 3) * scaleUnit)),
+              borderRadius: treatment === "clean" ? 99 : 0,
+              background:
+                treatment === "highlight_tape"
+                  ? tokens.lineColor
+                  : treatment === "outlined_impact"
+                    ? tokens.accentSecondary
+                    : `linear-gradient(90deg, ${accent}, ${hexToRgba(accent, 0.25)})`,
               transformOrigin: isCentered ? "center" : "left",
               transform: `scaleX(${ruleT})`,
               opacity: ruleT,
@@ -1010,21 +1216,22 @@ interface MetricGridItem {
 const MetricGridBlock: React.FC<{
   clip: VideoClip & { object: VideoMotionBlockObject };
   fonts: VideoSpec["fonts"];
+  compositionStyle?: ResolvedStyleTokens;
   fps: number;
   frame: number;
   cueOffsetFrames: number;
-}> = ({ clip, fonts, fps, cueOffsetFrames, frame }) => {
+}> = ({ clip, fonts, compositionStyle, fps, cueOffsetFrames, frame }) => {
   const obj = clip.object;
   const props = obj.props as {
     eyebrow?: string | null;
     title?: string | null;
     items: MetricGridItem[];
     columns?: 2 | 3;
-    theme?: "light" | "dark";
-    accent_color?: string;
+    theme?: "light" | "dark" | null;
+    accent_color?: string | null;
     stagger_s?: number;
     count_up?: boolean;
-    backdrop_style?: BackdropStyle;
+    backdrop_style?: BackdropStyle | null;
     show_backdrop?: boolean;
   };
 
@@ -1033,18 +1240,24 @@ const MetricGridBlock: React.FC<{
   const scaleUnit = Math.min(width / 1920, height / 1080);
   const tSec = frame / fps;
 
-  const isDark = (props.theme ?? "light") === "dark";
-  const accent = props.accent_color ?? "#0D9488";
+  const tokens = resolveBlockStyle(compositionStyle, props, {
+    theme: "light",
+    accent: "#0D9488",
+    backdrop_style: "ambient_mesh",
+  });
+  const isDark = tokens.isDark;
+  const accent = tokens.accent;
   const showBackdrop = props.show_backdrop ?? true;
   const stagger = props.stagger_s ?? 0.14;
   const countUp = props.count_up ?? true;
   const items = props.items ?? [];
   const cols = items.length === 2 || items.length === 4 ? 2 : (props.columns ?? 3);
 
-  const inkPrimary = isDark ? "#F8FAFC" : "#0F172A";
-  const inkSecondary = isDark ? "#BFCAD3" : "#3A474C";
+  const inkPrimary = tokens.hasCompositionStyle ? tokens.ink : (isDark ? "#F8FAFC" : "#0F172A");
+  const inkSecondary = tokens.hasCompositionStyle ? tokens.secondaryInk : (isDark ? "#BFCAD3" : "#3A474C");
   const cardBg = isDark ? "rgba(15, 22, 33, 0.88)" : "rgba(255, 255, 255, 0.94)";
   const cardBorder = isDark ? "rgba(255, 255, 255, 0.10)" : "rgba(15, 23, 42, 0.09)";
+  const headingWeight = tokens.hasCompositionStyle ? tokens.headingWeight : 700;
 
   const headerT = springOut(tSec, 13.0, 0.84);
   const headerOp = easeOutCubic(tSec / 0.35);
@@ -1057,12 +1270,25 @@ const MetricGridBlock: React.FC<{
         width: "100%",
         height: "100%",
         overflow: "hidden",
-        background: showBackdrop ? (isDark ? "#070B11" : "#F5F7FA") : "transparent",
+        background: showBackdrop
+          ? tokens.hasCompositionStyle
+            ? tokens.canvasBg
+            : (isDark ? "#070B11" : "#F5F7FA")
+          : "transparent",
         fontFamily: fontStack(fonts),
       }}
     >
       {showBackdrop ? (
-        <StudioBackdrop theme={isDark ? "dark" : "light"} accent={accent} scaleUnit={scaleUnit} style={props.backdrop_style} tSec={tSec} />
+        <StudioBackdrop
+          theme={tokens.theme}
+          accent={accent}
+          accentSecondary={tokens.accentSecondary}
+          canvasBg={tokens.hasCompositionStyle ? tokens.canvasBg : undefined}
+          lineColor={tokens.hasCompositionStyle ? tokens.lineColor : undefined}
+          scaleUnit={scaleUnit}
+          style={tokens.backdropStyle}
+          tSec={tSec}
+        />
       ) : null}
 
       <div
@@ -1094,27 +1320,58 @@ const MetricGridBlock: React.FC<{
                 style={{
                   display: "inline-flex",
                   alignItems: "center",
+                  alignSelf: "flex-start",
                   gap: Math.round(10 * scaleUnit),
+                  ...(tokens.headlineTreatment === "highlight_tape"
+                    ? {
+                        padding: `${Math.round(5 * scaleUnit)}px ${Math.round(14 * scaleUnit)}px`,
+                        background: accent,
+                        color: tokens.accentInk,
+                        border: `${Math.max(1.5, Math.round(2 * scaleUnit))}px solid ${tokens.lineColor}`,
+                        boxShadow: `${Math.round(3 * scaleUnit)}px ${Math.round(3 * scaleUnit)}px 0px ${tokens.lineColor}`,
+                        borderRadius: Math.round(3 * scaleUnit),
+                        fontWeight: 900,
+                      }
+                    : tokens.headlineTreatment === "outlined_impact"
+                      ? {
+                          padding: `${Math.round(5 * scaleUnit)}px ${Math.round(16 * scaleUnit)}px`,
+                          background: accent,
+                          color: tokens.accentInk,
+                          transform: "skewX(-10deg)",
+                          boxShadow: `${Math.round(4 * scaleUnit)}px ${Math.round(4 * scaleUnit)}px 0px ${tokens.accentSecondary}`,
+                          borderRadius: Math.round(2 * scaleUnit),
+                          fontWeight: 900,
+                        }
+                      : {
+                          color: tokens.hasCompositionStyle ? tokens.accentText : studioInk(accent, isDark),
+                          fontWeight: 700,
+                        }),
                   fontSize: Math.max(13, Math.round(15 * scaleUnit)),
-                  fontWeight: 600,
-                  letterSpacing: "0.16em",
+                  letterSpacing: "0.14em",
                   textTransform: "uppercase",
-                  color: studioInk(accent, isDark),
                 }}
               >
-                <span style={{ width: Math.round(24 * scaleUnit * clamp01(headerT)), height: Math.max(2, Math.round(2.5 * scaleUnit)), background: accent, borderRadius: 2 }} />
-                {props.eyebrow}
+                {tokens.headlineTreatment !== "highlight_tape" && tokens.headlineTreatment !== "outlined_impact" && (
+                  <span style={{ width: Math.round(24 * scaleUnit * clamp01(headerT)), height: Math.max(2, Math.round(2.5 * scaleUnit)), background: accent, borderRadius: 2 }} />
+                )}
+                <span style={tokens.headlineTreatment === "outlined_impact" ? { transform: "skewX(10deg)" } : undefined}>
+                  {props.eyebrow}
+                </span>
               </div>
             ) : null}
             {props.title ? (
               <div
                 style={{
                   fontSize: Math.round(52 * scaleUnit),
-                  fontWeight: 700,
+                  fontWeight: headingWeight,
                   lineHeight: 1.12,
                   letterSpacing: "-0.028em",
                   color: inkPrimary,
                   maxWidth: `${Math.round(1260 * scaleUnit)}px`,
+                  textShadow:
+                    tokens.headlineTreatment === "outlined_impact"
+                      ? `${Math.round(3 * scaleUnit)}px ${Math.round(3 * scaleUnit)}px 0px ${accent}`
+                      : undefined,
                 }}
               >
                 {props.title}
@@ -1140,6 +1397,16 @@ const MetricGridBlock: React.FC<{
             const shownValue = countUp ? formatCountUp(item.value, countProgress) : item.value;
             const sheenX = -40 + easeOutQuart((localT - 0.18) / 0.9) * 180;
             const valueSize = item.value.length > 8 ? 50 : 66;
+            const cardBase: React.CSSProperties = tokens.hasCompositionStyle
+              ? cardSurfaceStyle(tokens, { scaleUnit })
+              : {
+                  borderRadius: Math.round(20 * scaleUnit),
+                  background: cardBg,
+                  border: `1px solid ${cardBorder}`,
+                  boxShadow: isDark
+                    ? `0 ${Math.round(24 * scaleUnit)}px ${Math.round(64 * scaleUnit)}px rgba(0, 0, 0, 0.48)`
+                    : `0 ${Math.round(20 * scaleUnit)}px ${Math.round(52 * scaleUnit)}px rgba(15, 23, 42, 0.08), 0 2px 6px rgba(15, 23, 42, 0.04)`,
+                };
 
             return (
               <div
@@ -1147,33 +1414,36 @@ const MetricGridBlock: React.FC<{
                 style={{
                   position: "relative",
                   overflow: "hidden",
-                  borderRadius: Math.round(20 * scaleUnit),
-                  background: cardBg,
-                  border: `1px solid ${cardBorder}`,
+                  ...cardBase,
                   padding: `${Math.round((hasDetail ? 34 : 24) * scaleUnit)}px ${Math.round(34 * scaleUnit)}px`,
                   display: "flex",
                   flexDirection: "column",
                   justifyContent: "center",
                   opacity: alpha,
                   transform: `translateY(${(1 - settle) * 34 * scaleUnit}px) scale(${0.955 + 0.045 * settle})`,
-                  boxShadow: isDark
-                    ? `0 ${Math.round(24 * scaleUnit)}px ${Math.round(64 * scaleUnit)}px rgba(0, 0, 0, 0.48)`
-                    : `0 ${Math.round(20 * scaleUnit)}px ${Math.round(52 * scaleUnit)}px rgba(15, 23, 42, 0.08), 0 2px 6px rgba(15, 23, 42, 0.04)`,
                 }}
               >
-                {/* Animated top-edge specular sheen */}
-                <div
-                  style={{
-                    position: "absolute",
-                    top: 0,
-                    left: `${sheenX}%`,
-                    width: "45%",
-                    height: Math.max(2, Math.round(2.5 * scaleUnit)),
-                    background: `linear-gradient(90deg, transparent, ${accent}, transparent)`,
-                    opacity: localT > 0.15 && localT < 1.3 ? 0.85 : 0.25,
-                    pointerEvents: "none",
-                  }}
-                />
+                {/* Style-matched top accent treatment */}
+                {tokens.cardTreatment === "editorial_rule" ? (
+                  <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: Math.max(4, Math.round(6 * scaleUnit)), background: accent, borderBottom: `1.5px solid ${tokens.lineColor}` }} />
+                ) : tokens.cardTreatment === "brutal_offset" ? (
+                  <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: Math.max(3, Math.round(4 * scaleUnit)), background: tokens.accentSecondary }} />
+                ) : tokens.cardTreatment === "minimal_hairline" ? (
+                  <div style={{ position: "absolute", top: 0, left: 0, width: Math.round(44 * scaleUnit), height: Math.max(2, Math.round(3 * scaleUnit)), background: accent }} />
+                ) : (
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: `${sheenX}%`,
+                      width: "45%",
+                      height: Math.max(2, Math.round(2.5 * scaleUnit)),
+                      background: `linear-gradient(90deg, transparent, ${accent}, transparent)`,
+                      opacity: localT > 0.15 && localT < 1.3 ? 0.85 : 0.25,
+                      pointerEvents: "none",
+                    }}
+                  />
+                )}
 
                 <div style={{ display: "flex", flexDirection: "column", gap: Math.round(12 * scaleUnit) }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
@@ -1191,12 +1461,26 @@ const MetricGridBlock: React.FC<{
                       <span
                         style={{
                           padding: `${Math.round(4 * scaleUnit)}px ${Math.round(11 * scaleUnit)}px`,
-                          borderRadius: 999,
-                          background: hexToRgba(accent, isDark ? 0.16 : 0.11),
-                          border: `1px solid ${hexToRgba(accent, 0.30)}`,
-                          color: studioInk(accent, isDark),
+                          borderRadius:
+                            tokens.cardTreatment === "editorial_rule" || tokens.cardTreatment === "brutal_offset"
+                              ? Math.round(3 * scaleUnit)
+                              : 999,
+                          background:
+                            tokens.cardTreatment === "editorial_rule" || tokens.cardTreatment === "brutal_offset"
+                              ? accent
+                              : hexToRgba(accent, isDark ? 0.16 : 0.11),
+                          border:
+                            tokens.cardTreatment === "editorial_rule"
+                              ? `1.5px solid ${tokens.lineColor}`
+                              : `1px solid ${hexToRgba(accent, 0.30)}`,
+                          color:
+                            tokens.cardTreatment === "editorial_rule" || tokens.cardTreatment === "brutal_offset"
+                              ? tokens.accentInk
+                              : tokens.hasCompositionStyle
+                                ? tokens.accentText
+                                : studioInk(accent, isDark),
                           fontSize: Math.max(11, Math.round(12.5 * scaleUnit)),
-                          fontWeight: 600,
+                          fontWeight: headingWeight === 900 ? 900 : 600,
                           letterSpacing: "0.04em",
                         }}
                       >
@@ -1208,7 +1492,7 @@ const MetricGridBlock: React.FC<{
                   <div
                     style={{
                       fontSize: Math.round(valueSize * scaleUnit),
-                      fontWeight: 700,
+                      fontWeight: headingWeight,
                       lineHeight: 1.04,
                       letterSpacing: "-0.035em",
                       fontVariantNumeric: "tabular-nums",
@@ -1248,20 +1532,21 @@ const MetricGridBlock: React.FC<{
 const ClosingCtaBlock: React.FC<{
   clip: VideoClip & { object: VideoMotionBlockObject };
   fonts: VideoSpec["fonts"];
+  compositionStyle?: ResolvedStyleTokens;
   fps: number;
   frame: number;
-}> = ({ clip, fonts, fps, frame }) => {
+}> = ({ clip, fonts, compositionStyle, fps, frame }) => {
   const obj = clip.object;
   const props = obj.props as {
     brand_name: string;
     tagline: string;
     cta_label?: string | null;
     url_text?: string | null;
-    theme?: "light" | "dark";
-    accent_color?: string;
+    theme?: "light" | "dark" | null;
+    accent_color?: string | null;
     entrance_duration_s?: number;
     logo_surface?: "light_pill" | "raw";
-    backdrop_style?: BackdropStyle;
+    backdrop_style?: BackdropStyle | null;
     show_backdrop?: boolean;
   };
 
@@ -1272,16 +1557,24 @@ const ClosingCtaBlock: React.FC<{
   const tSec = frame / fps;
   const progressAll = clamp01(frame / Math.max(1, durationFrames - 1));
 
-  const isDark = (props.theme ?? "dark") === "dark";
-  const accent = props.accent_color ?? "#14B8A6";
+  const tokens = resolveBlockStyle(compositionStyle, props, {
+    theme: "dark",
+    accent: "#14B8A6",
+    backdrop_style: "ambient_mesh",
+  });
+  const isDark = tokens.isDark;
+  const accent = tokens.accent;
   const showBackdrop = props.show_backdrop ?? true;
   const entranceDur = Math.max(0.25, props.entrance_duration_s ?? 0.9);
   const logoSurface = props.logo_surface ?? "light_pill";
   const logoUrl = resolveResourceUrl(clip, obj, 0);
 
-  const inkPrimary = isDark ? "#F8FAFC" : "#0F172A";
-  const inkMuted = isDark ? "#BFCAD3" : "#3A474C";
-  const tickColor = isDark ? "rgba(255, 255, 255, 0.16)" : "rgba(15, 23, 42, 0.16)";
+  const inkPrimary = tokens.hasCompositionStyle ? tokens.ink : (isDark ? "#F8FAFC" : "#0F172A");
+  const inkMuted = tokens.hasCompositionStyle ? tokens.secondaryInk : (isDark ? "#BFCAD3" : "#3A474C");
+  const tickColor = tokens.hasCompositionStyle
+    ? hexToRgba(tokens.lineColor, 0.55)
+    : (isDark ? "rgba(255, 255, 255, 0.16)" : "rgba(15, 23, 42, 0.16)");
+  const headingWeight = tokens.hasCompositionStyle ? tokens.headingWeight : 700;
 
   const brandT = springOut(tSec, 12.0, 0.82);
   const brandOp = easeOutCubic(tSec / Math.max(0.22, entranceDur * 0.45));
@@ -1294,6 +1587,9 @@ const ClosingCtaBlock: React.FC<{
 
   const markSize = Math.round(20 * scaleUnit);
   const inset = Math.round(52 * scaleUnit);
+  const isEditorial = tokens.hasCompositionStyle && tokens.cardTreatment === "editorial_rule";
+  const isBrutal = tokens.hasCompositionStyle && tokens.cardTreatment === "brutal_offset";
+  const isSwiss = tokens.hasCompositionStyle && tokens.cardTreatment === "minimal_hairline";
 
   return (
     <div
@@ -1302,12 +1598,25 @@ const ClosingCtaBlock: React.FC<{
         width: "100%",
         height: "100%",
         overflow: "hidden",
-        background: showBackdrop ? (isDark ? "#070B11" : "#F5F7FA") : "transparent",
+        background: showBackdrop
+          ? tokens.hasCompositionStyle
+            ? tokens.canvasBg
+            : (isDark ? "#070B11" : "#F5F7FA")
+          : "transparent",
         fontFamily: fontStack(fonts),
       }}
     >
       {showBackdrop ? (
-        <StudioBackdrop theme={isDark ? "dark" : "light"} accent={accent} scaleUnit={scaleUnit} style={props.backdrop_style} tSec={tSec} />
+        <StudioBackdrop
+          theme={tokens.theme}
+          accent={accent}
+          accentSecondary={tokens.accentSecondary}
+          canvasBg={tokens.hasCompositionStyle ? tokens.canvasBg : undefined}
+          lineColor={tokens.hasCompositionStyle ? tokens.lineColor : undefined}
+          scaleUnit={scaleUnit}
+          style={tokens.backdropStyle}
+          tSec={tSec}
+        />
       ) : null}
 
       {/* Faint institutional studio corner registration marks */}
@@ -1401,10 +1710,11 @@ const ClosingCtaBlock: React.FC<{
           <div
             style={{
               fontSize: Math.round(84 * scaleUnit),
-              fontWeight: 700,
+              fontWeight: headingWeight,
               lineHeight: 1.04,
               letterSpacing: `${-0.035 + (1 - clamp01(brandT)) * 0.015}em`,
               color: inkPrimary,
+              textShadow: isBrutal ? `${Math.round(4 * scaleUnit)}px ${Math.round(4 * scaleUnit)}px 0px ${accent}` : undefined,
               opacity: brandOp,
               transform: `translateY(${(1 - brandT) * 90}%)`,
             }}
@@ -1417,9 +1727,13 @@ const ClosingCtaBlock: React.FC<{
         <div
           style={{
             width: `${Math.round(132 * scaleUnit)}px`,
-            height: Math.max(2, Math.round(3 * scaleUnit)),
-            borderRadius: 99,
-            background: `linear-gradient(90deg, transparent, ${accent}, transparent)`,
+            height: Math.max(2, Math.round((isEditorial || isBrutal ? 5 : 3) * scaleUnit)),
+            borderRadius: isEditorial || isBrutal || isSwiss ? 0 : 99,
+            background: isEditorial
+              ? tokens.lineColor
+              : isBrutal
+                ? tokens.accentSecondary
+                : `linear-gradient(90deg, transparent, ${accent}, transparent)`,
             transform: `scaleX(${dividerT})`,
             opacity: dividerT,
           }}
@@ -1453,48 +1767,76 @@ const ClosingCtaBlock: React.FC<{
               alignItems: "center",
               gap: Math.round(16 * scaleUnit),
               padding: `${Math.round(16 * scaleUnit)}px ${Math.round(32 * scaleUnit)}px`,
-              borderRadius: 999,
-              background: isDark ? "rgba(15, 25, 34, 0.92)" : "#0F172A",
-              border: `1px solid ${hexToRgba(accent, 0.55)}`,
-              boxShadow: `0 ${Math.round(20 * scaleUnit)}px ${Math.round(52 * scaleUnit)}px ${hexToRgba(accent, isDark ? 0.22 : 0.18)}`,
+              borderRadius: isEditorial ? Math.round(4 * scaleUnit) : isBrutal ? Math.round(2 * scaleUnit) : isSwiss ? Math.round(6 * scaleUnit) : 999,
+              background: isEditorial
+                ? accent
+                : isBrutal
+                  ? accent
+                  : isSwiss
+                    ? tokens.ink
+                    : isDark
+                      ? "rgba(15, 25, 34, 0.92)"
+                      : "#0F172A",
+              border: isEditorial
+                ? `${Math.max(1.5, Math.round(2 * scaleUnit))}px solid ${tokens.lineColor}`
+                : isBrutal
+                  ? `${Math.max(1.5, Math.round(2 * scaleUnit))}px solid ${tokens.ink}`
+                  : isSwiss
+                    ? `1.5px solid ${tokens.ink}`
+                    : `1px solid ${hexToRgba(accent, 0.55)}`,
+              boxShadow: isEditorial
+                ? `${Math.round(5 * scaleUnit)}px ${Math.round(5 * scaleUnit)}px 0px ${tokens.lineColor}`
+                : isBrutal
+                  ? `${Math.round(6 * scaleUnit)}px ${Math.round(6 * scaleUnit)}px 0px ${tokens.accentSecondary}`
+                  : isSwiss
+                    ? "none"
+                    : `0 ${Math.round(20 * scaleUnit)}px ${Math.round(52 * scaleUnit)}px ${hexToRgba(accent, isDark ? 0.22 : 0.18)}`,
               opacity: ctaOp,
               transform: `translateY(${(1 - ctaT) * 24 * scaleUnit}px) scale(${0.95 + 0.05 * ctaT})`,
             }}
           >
-            {/* Subtle animated specular shimmer */}
-            <div
-              style={{
-                position: "absolute",
-                top: 0,
-                bottom: 0,
-                left: `${shimmerPos}%`,
-                width: "28%",
-                background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent)",
-                pointerEvents: "none",
-              }}
-            />
+            {/* Subtle animated specular shimmer (glass_soft only) */}
+            {!isEditorial && !isBrutal && !isSwiss ? (
+              <div
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  bottom: 0,
+                  left: `${shimmerPos}%`,
+                  width: "28%",
+                  background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent)",
+                  pointerEvents: "none",
+                }}
+              />
+            ) : null}
             {props.cta_label ? (
               <span
                 style={{
                   fontSize: Math.round(18 * scaleUnit),
-                  fontWeight: 600,
+                  fontWeight: headingWeight === 900 ? 900 : 600,
                   letterSpacing: "0.02em",
-                  color: studioInk(accent, true),
+                  color: isEditorial || isBrutal ? tokens.accentInk : isSwiss ? "#FFFFFF" : studioInk(accent, true),
                 }}
               >
                 {props.cta_label}
               </span>
             ) : null}
             {props.cta_label && props.url_text ? (
-              <span style={{ width: 1, height: Math.round(18 * scaleUnit), background: "rgba(255,255,255,0.22)" }} />
+              <span
+                style={{
+                  width: isEditorial ? 2 : 1,
+                  height: Math.round(18 * scaleUnit),
+                  background: isEditorial ? hexToRgba(tokens.accentInk, 0.35) : "rgba(255,255,255,0.28)",
+                }}
+              />
             ) : null}
             {props.url_text ? (
               <span
                 style={{
                   fontSize: Math.round(21 * scaleUnit),
-                  fontWeight: 600,
+                  fontWeight: headingWeight === 900 ? 900 : 600,
                   letterSpacing: "0.01em",
-                  color: "#F8FAFC",
+                  color: isEditorial || isBrutal ? tokens.accentInk : "#F8FAFC",
                 }}
               >
                 {props.url_text}
@@ -1510,8 +1852,8 @@ const ClosingCtaBlock: React.FC<{
             >
               <path
                 d="M4 10H16M16 10L11 5M16 10L11 15"
-                stroke={accent}
-                strokeWidth="2"
+                stroke={isEditorial || isBrutal ? tokens.accentInk : accent}
+                strokeWidth="2.2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
@@ -1542,12 +1884,13 @@ const narratives = {
 export const MotionBlockView: React.FC<{
   clip: VideoClip & { object: VideoMotionBlockObject };
   fonts: VideoSpec["fonts"];
+  compositionStyle?: VideoSpec["style"];
   fps: number;
   frame: number;
   cueOffsetFrames?: number;
   tailFrames?: number;
   containerStyle: React.CSSProperties;
-}> = ({ clip, fonts, fps, cueOffsetFrames = 0, tailFrames = 0, frame, containerStyle }) => {
+}> = ({ clip, fonts, compositionStyle, fps, cueOffsetFrames = 0, tailFrames = 0, frame, containerStyle }) => {
   const id = clip.object.block_id;
   if (id in narratives) {
     const render = narratives[id as keyof typeof narratives];
@@ -1558,6 +1901,7 @@ export const MotionBlockView: React.FC<{
       scaleUnit: Math.min(layout.width / 1920, layout.height / 1080),
       fontFamily: fontStack(fonts),
       resources: resources.map((resource, i) => resolveResourceUrl(clip, clip.object, i) ?? resource.url),
+      compositionStyle,
     };
     return (
       <div style={containerStyle}>
@@ -1568,15 +1912,48 @@ export const MotionBlockView: React.FC<{
   return (
     <div style={containerStyle}>
       {id === "product_showcase" ? (
-        <ProductShowcaseBlock cueOffsetFrames={cueOffsetFrames} clip={clip} fonts={fonts} fps={fps} frame={frame} />
+        <ProductShowcaseBlock
+          cueOffsetFrames={cueOffsetFrames}
+          clip={clip}
+          fonts={fonts}
+          compositionStyle={compositionStyle}
+          fps={fps}
+          frame={frame}
+        />
       ) : id === "statement_hook" ? (
-        <StatementHookBlock cueOffsetFrames={cueOffsetFrames} clip={clip} fonts={fonts} fps={fps} frame={frame} />
+        <StatementHookBlock
+          cueOffsetFrames={cueOffsetFrames}
+          clip={clip}
+          fonts={fonts}
+          compositionStyle={compositionStyle}
+          fps={fps}
+          frame={frame}
+        />
       ) : id === "metric_grid" ? (
-        <MetricGridBlock cueOffsetFrames={cueOffsetFrames} clip={clip} fonts={fonts} fps={fps} frame={frame} />
+        <MetricGridBlock
+          cueOffsetFrames={cueOffsetFrames}
+          clip={clip}
+          fonts={fonts}
+          compositionStyle={compositionStyle}
+          fps={fps}
+          frame={frame}
+        />
       ) : id === "closing_cta" ? (
-        <ClosingCtaBlock clip={clip} fonts={fonts} fps={fps} frame={frame} />
+        <ClosingCtaBlock
+          clip={clip}
+          fonts={fonts}
+          compositionStyle={compositionStyle}
+          fps={fps}
+          frame={frame}
+        />
       ) : (
-        <KineticTitleBlock clip={clip} fonts={fonts} fps={fps} frame={frame} />
+        <KineticTitleBlock
+          clip={clip}
+          fonts={fonts}
+          compositionStyle={compositionStyle}
+          fps={fps}
+          frame={frame}
+        />
       )}
     </div>
   );

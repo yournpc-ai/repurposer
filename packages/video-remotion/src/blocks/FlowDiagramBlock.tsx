@@ -26,7 +26,7 @@ interface FlowProps extends StudioStyle {
 }
 
 export function FlowDiagramBlock({ props, frame }: { props: FlowProps; frame: Frame }): React.JSX.Element {
-  const c = palette(props);
+  const c = palette(props, frame.compositionStyle);
   const { nodes } = props;
   const gap = 64;
   const width = (1660 - (nodes.length - 1) * gap) / nodes.length;
@@ -92,7 +92,7 @@ export function FlowDiagramBlock({ props, frame }: { props: FlowProps; frame: Fr
                   {node.step_label ?? String(i + 1).padStart(2, "0")}
                 </div>
                 <div style={{ height: 3, background: c.accent, width: 46 * travel }} />
-                <strong style={{ lineHeight: 1.14, fontSize: typeSize(node.title, 43, inner, 3) }}>
+                <strong style={{ fontWeight: c.headingWeight, lineHeight: 1.14, fontSize: typeSize(node.title, 43, inner, 3) }}>
                   {node.title}
                 </strong>
                 {node.detail && (
@@ -104,8 +104,10 @@ export function FlowDiagramBlock({ props, frame }: { props: FlowProps; frame: Fr
                   <span
                     style={{
                       alignSelf: "flex-start",
-                      borderRadius: 8,
+                      borderRadius: c.cardTreatment === "brutal_offset" ? 2 : 8,
                       background: c.tint,
+                      color: c.cardTreatment === "editorial_rule" ? c.ink : c.accentText,
+                      fontWeight: 700,
                       padding: "5px 10px",
                       fontSize: typeSize(node.badge, 20, inner - 20, 2),
                     }}

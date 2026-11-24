@@ -10,6 +10,7 @@ from sqlalchemy import select
 from app.agents.tool_progress import current_call_id
 from app.editing.schemas import CompositionContent, Track, VersionSettings
 from app.editing.store import RequestMismatch, apply_composition_edits, snapshot_facts
+from app.editing.styles import CompositionStyle, StylePresetId, resolve_style_tokens
 from app.models.schemas import canonical_json_hash
 from app.models.tables import Composition, CompositionVersion, Message, Project, SourceSnapshot
 from app.tools.video.design import (
@@ -59,6 +60,17 @@ class CreateVideoArgs(BaseModel):
     aspect: Literal["16:9", "9:16", "1:1"] = "16:9"
     background: str = Field(default="#000000", pattern=r"^#[0-9A-Fa-f]{6}$")
     fps: int = Field(default=30, ge=1, le=120)
+    style_preset: StylePresetId | None = Field(
+        default=None,
+        exclude_if=lambda v: v is None,
+        description="Optional orthogonal CompositionStyle preset (institutional_dark, swiss_paper, vox_editorial, kinetic_anime).",
+    )
+    accent_color: str | None = Field(
+        default=None,
+        pattern=r"^#[0-9A-Fa-f]{6}$",
+        exclude_if=lambda v: v is None,
+        description="Optional hex accent override paired with style_preset.",
+    )
     pending_disposition: Literal["answer", "skip", "none"] = "none"
 
 
@@ -171,7 +183,17 @@ async def create_video(db, turn, args: CreateVideoArgs):
         if skill is not None:
             provenance["external_skill"] = skill.provenance
         width, height = {"16:9": (1920, 1080), "9:16": (1080, 1920), "1:1": (1080, 1080)}[args.aspect]
-        settings = VersionSettings(width=width, height=height, fps={"num": args.fps}, background=args.background)
+        comp_style = (
+            CompositionStyle(preset_id=args.style_preset, accent_color=args.accent_color)
+            if args.style_preset is not None
+            else None
+        )
+        effective_bg = args.background
+        if comp_style is not None and "background" not in args.model_fields_set and required.get("background") is None:
+            effective_bg = resolve_style_tokens(comp_style)["canvas_bg"]
+        settings = VersionSettings(
+            width=width, height=height, fps={"num": args.fps}, background=effective_bg, style=comp_style
+        )
         content = CompositionContent(settings=settings, creative_state=creative_state).model_dump(mode="json")
         shots = [shot.model_copy(update={"scene_id": f"scene_{i + 1}"}) for i, shot in enumerate(args.shots)]
         content = _scene_plan_write(content, [CompositionScenePlan(scene_id=shot.scene_id,

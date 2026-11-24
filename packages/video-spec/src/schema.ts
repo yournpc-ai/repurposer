@@ -416,6 +416,67 @@ const trackSchema = z
 
 export const transitionKinds = ["crossfade", "whip_pan", "wipe_reveal", "zoom_through", "iris_focus"] as const;
 
+export const stylePresetIds = [
+  "institutional_dark",
+  "swiss_paper",
+  "vox_editorial",
+  "kinetic_anime",
+] as const;
+
+export const backdropStyles = [
+  "ambient_mesh",
+  "architectural_grid",
+  "editorial_paper",
+  "kinetic_diagonal",
+  "clean",
+] as const;
+
+export const cardTreatments = [
+  "glass_soft",
+  "minimal_hairline",
+  "editorial_rule",
+  "brutal_offset",
+] as const;
+
+export const headlineTreatments = [
+  "clean",
+  "swiss_rule",
+  "highlight_tape",
+  "outlined_impact",
+] as const;
+
+const videoCaptionStyleSchema = z
+  .object({
+    color: hexColor,
+    weight: z.union([z.literal(400), z.literal(700), z.literal(900)]),
+    background: hexColor.nullable(),
+    stroke: textStrokeSchema.nullable(),
+    shadow: textShadowSchema.nullable(),
+  })
+  .strict();
+
+export const videoStyleSchema = z
+  .object({
+    preset_id: z.enum(stylePresetIds),
+    theme: z.enum(["dark", "light"]),
+    backdrop_style: z.enum(backdropStyles),
+    canvas_bg: hexColor,
+    surface_bg: hexColor,
+    ink: hexColor,
+    secondary_ink: hexColor,
+    line_color: hexColor,
+    accent: hexColor,
+    accent_secondary: hexColor,
+    accent_ink: hexColor,
+    accent_text: hexColor,
+    card_treatment: z.enum(cardTreatments),
+    headline_treatment: z.enum(headlineTreatments),
+    heading_weight: z.union([z.literal(700), z.literal(900)]),
+    default_transition: z.enum(transitionKinds),
+    caption_style: videoCaptionStyleSchema,
+  })
+  .strict();
+
 export const videoSpecSchema = z
   .object({
     family: z.literal("video"),
@@ -424,6 +485,7 @@ export const videoSpecSchema = z
     width: z.number().int().positive(),
     height: z.number().int().positive(),
     background: hexColor,
+    style: videoStyleSchema.optional(),
     sample_rate: z.number().int().positive(),
     duration_frames: z.number().int().positive(),
     fonts: z.array(fontResourceSchema),
@@ -449,6 +511,7 @@ export const videoSpecSchema = z
   })
   .strict();
 
+export type VideoStyle = z.infer<typeof videoStyleSchema>;
 export type VideoSpec = z.infer<typeof videoSpecSchema>;
 export type VideoClip = VideoSpec["tracks"][number]["clips"][number];
 export type VideoAnimation = VideoClip["animations"][number];

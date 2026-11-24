@@ -14,8 +14,11 @@ from app.editing.edits import (
     BindSource,
     Op,
     RemoveClip,
+    SetSettings,
+    SetTransition,
     UpdateClip,
     TextAnimationTargetLost,
+    apply_ops,
     replace_text_ops,
 )
 from app.editing.schemas import (
@@ -24,11 +27,21 @@ from app.editing.schemas import (
     EditTarget,
     ImageObject,
     LayoutBox,
+    MotionBlockObject,
     SourceCaptionDerivation,
     SpeechObject,
     TextObject,
+    TextShadow,
+    TextStroke,
     TimeRange,
     VideoObject,
+)
+from app.editing.styles import (
+    INHERITABLE_BLOCK_STYLE_KEYS,
+    BackdropStyle,
+    CompositionStyle,
+    StylePresetId,
+    resolve_style_tokens,
 )
 from app.editing.timing import output_ticks_to_source_ticks, seconds_to_ticks
 
@@ -833,6 +846,158 @@ def expand_revision_op(
     return [RemoveClip(op="remove_clip", clip_id=operation.clip_id)]
 
 
+def set_composition_style_ops(
+    content: CompositionContent,
+    *,
+    preset_id: StylePresetId,
+    accent_color: str | None = None,
+    backdrop_style: BackdropStyle | None = None,
+    theme: Literal["dark", "light"] | None = None,
+    override_block_styles: bool = True,
+    update_captions: bool = True,
+    update_transitions: bool = False,
+) -> tuple[list[Op], dict[str, Any]]:
+    """Build atomic edit ops to apply a first-class CompositionStyle.
+
+    Guardrails:
+    - Never touches any audio track (``track.kind == "audio"``).
+    - Never mutates ``independent`` captions or non-caption TextObjects; only
+      updates ``derived`` captions when ``update_captions=True``.
+    - When ``override_block_styles=True``, strips inheritable style overrides on
+      MotionBlockObjects so all acts inherit ``settings.style`` uniformly.
+    """
+    new_style = CompositionStyle(
+        preset_id=preset_id,
+        accent_color=accent_color,
+        backdrop_style=backdrop_style,
+        theme=theme,
+    )
+    tokens = resolve_style_tokens(new_style)
+    ops: list[Op] = []
+
+    new_settings = content.settings.model_copy(
+        update={"style": new_style, "background": tokens["canvas_bg"]}
+    )
+    if new_settings != content.settings:
+        ops.append(SetSettings(op="set_settings", settings=new_settings))
+
+    blocks_updated = 0
+    blocks_preserved = 0
+    captions_updated = 0
+    independent_captions_preserved = 0
+    transitions_updated = 0
+
+    cap_token = tokens["caption_style"]
+    cap_stroke = (
+        TextStroke(color=cap_token["stroke"]["color"], width=cap_token["stroke"]["width"])
+        if cap_token["stroke"] is not None
+        else None
+    )
+    cap_shadow = (
+        TextShadow(
+            color=cap_token["shadow"]["color"],
+            offset=(cap_token["shadow"]["offset"][0], cap_token["shadow"]["offset"][1]),
+            blur=cap_token["shadow"]["blur"],
+        )
+        if cap_token["shadow"] is not None
+        else None
+    )
+
+    for track in content.timeline.tracks:
+        if track.kind != "visual":
+            # Audio decoupling law: never touch dialogue, music, or effect audio tracks.
+            continue
+        for clip in track.clips:
+            obj = clip.object
+            if isinstance(obj, MotionBlockObject):
+                strip_keys = INHERITABLE_BLOCK_STYLE_KEYS.get(obj.block_id, ())
+                has_local = any(k in obj.props for k in strip_keys)
+                if override_block_styles and has_local:
+                    cleaned_props = {k: v for k, v in obj.props.items() if k not in strip_keys}
+                    updated_obj = MotionBlockObject.model_validate(
+                        {**obj.model_dump(mode="json"), "props": cleaned_props}
+                    )
+                    if updated_obj != obj:
+                        ops.append(UpdateClip(op="update_clip", clip_id=clip.clip_id, object=updated_obj))
+                        blocks_updated += 1
+                elif not override_block_styles and has_local:
+                    blocks_preserved += 1
+            elif isinstance(obj, TextObject):
+                if obj.caption is None:
+                    # Non-caption native text is never altered by style caption refresh.
+                    continue
+                if obj.caption.state == "independent":
+                    independent_captions_preserved += 1
+                    continue
+                if update_captions and obj.caption.state == "derived":
+                    updated_text_style = obj.style.model_copy(
+                        update={
+                            "color": cap_token["color"],
+                            "background": cap_token["background"],
+                            "weight": cap_token["weight"],
+                            "stroke": cap_stroke,
+                            "shadow": cap_shadow,
+                        }
+                    )
+                    if updated_text_style != obj.style:
+                        updated_obj = obj.model_copy(update={"style": updated_text_style})
+                        ops.append(UpdateClip(op="update_clip", clip_id=clip.clip_id, object=updated_obj))
+                        captions_updated += 1
+
+    if update_transitions:
+        target_kind = tokens["default_transition"]
+        for trn in content.timeline.transitions:
+            if trn.kind != target_kind:
+                ops.append(
+                    SetTransition(
+                        op="set_transition",
+                        transition=trn.model_copy(update={"kind": target_kind}),
+                    )
+                )
+                transitions_updated += 1
+
+    summary: dict[str, Any] = {
+        "style": new_style.model_dump(mode="json"),
+        "preset_id": new_style.preset_id,
+        "canvas_bg": tokens["canvas_bg"],
+        "theme": tokens["theme"],
+        "backdrop_style": tokens["backdrop_style"],
+        "accent": tokens["accent"],
+        "blocks_updated": blocks_updated,
+        "blocks_preserved": blocks_preserved,
+        "captions_updated": captions_updated,
+        "independent_captions_preserved": independent_captions_preserved,
+        "transitions_updated": transitions_updated,
+    }
+    return ops, summary
+
+
+def apply_composition_style(
+    content: CompositionContent,
+    *,
+    preset_id: StylePresetId,
+    accent_color: str | None = None,
+    backdrop_style: BackdropStyle | None = None,
+    theme: Literal["dark", "light"] | None = None,
+    override_block_styles: bool = True,
+    update_captions: bool = True,
+    update_transitions: bool = False,
+) -> tuple[CompositionContent, dict[str, Any]]:
+    """Pure deterministic composition style transformation returning (new_content, summary)."""
+    ops, summary = set_composition_style_ops(
+        content,
+        preset_id=preset_id,
+        accent_color=accent_color,
+        backdrop_style=backdrop_style,
+        theme=theme,
+        override_block_styles=override_block_styles,
+        update_captions=update_captions,
+        update_transitions=update_transitions,
+    )
+    updated = apply_ops(content, ops, {}) if ops else content.model_copy(deep=True)
+    return updated, summary
+
+
 __all__ = [
     "AddAudioEffectOp",
     "AddNarrationOp",
@@ -843,7 +1008,9 @@ __all__ = [
     "RevisionTargetAmbiguityError",
     "SetNarrationOp",
     "SetTextOp",
+    "apply_composition_style",
     "expand_revision_op",
+    "set_composition_style_ops",
     "set_narration_ops",
     "set_text_ops",
 ]

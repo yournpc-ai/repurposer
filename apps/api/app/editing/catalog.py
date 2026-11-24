@@ -912,7 +912,21 @@ def sound_spec_digest(spec: dict[str, Any]) -> str:
 
 def catalog_prompt_index() -> dict[str, Any]:
     """Compact two-level index projected into editor context for fast LLM selection."""
+    from app.editing.styles import STYLE_PRESET_CATALOG
+
     return {
+        "style_presets": [
+            {
+                "id": s["id"],
+                "name": s["name"],
+                "desc": s["desc"],
+                "visual_signature": s["visual_signature"],
+                "default_transition": s["default_transition"],
+                "bgm_mood": s["bgm_mood"],
+                "sfx_palette": list(s["sfx_palette"]),
+            }
+            for s in STYLE_PRESET_CATALOG.values()
+        ],
         "motion_blocks": [
             {
                 "id": b["id"],

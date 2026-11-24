@@ -185,6 +185,7 @@ function textPaintStyle(
     fontWeight: weight,
     WebkitTextStrokeColor: strokeColor,
     WebkitTextStrokeWidth: strokeWidth,
+    paintOrder: strokeWidth > 0 ? "stroke fill" : undefined,
     ...(textPartId === null && shadow
       ? {
           textShadow: `${shadow.offset[0]}px ${shadow.offset[1]}px ${shadow.blur}px ${shadow.color}`,
@@ -415,11 +416,12 @@ const ShapeObjectView: React.FC<{ clip: VideoClip; frame: number }> = ({ clip, f
 const VisualObjectView: React.FC<{
   clip: VideoClip;
   fonts: VideoSpec["fonts"];
+  compositionStyle?: VideoSpec["style"];
   fps: number;
   gain: number;
   cueOffsetFrames: number;
   tailFrames: number;
-}> = ({ clip, fonts, fps, gain, cueOffsetFrames, tailFrames }) => {
+}> = ({ clip, fonts, compositionStyle, fps, gain, cueOffsetFrames, tailFrames }) => {
   const frame = useCurrentFrame();
   const obj = clip.object;
   if (obj.kind === "audio") return null;
@@ -437,6 +439,7 @@ const VisualObjectView: React.FC<{
       <MotionBlockView
         clip={clip as VideoClip & { object: VideoMotionBlockObject }}
         fonts={fonts}
+        compositionStyle={compositionStyle}
         fps={fps}
         frame={frame}
         tailFrames={tailFrames}
@@ -527,6 +530,7 @@ export const Video: React.FC<{
                 <VisualObjectView
                   clip={clip}
                   fonts={spec.fonts}
+                  compositionStyle={spec.style}
                   fps={spec.fps.num / spec.fps.den}
                   tailFrames={tailFrames.get(clip.clip_id) ?? 0}
                   cueOffsetFrames={cueOffsets.get(clip.clip_id) ?? 0}

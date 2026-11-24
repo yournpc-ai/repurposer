@@ -58,6 +58,12 @@ from app.editing.store import (
     content_of,
     get_video_version,
 )
+from app.editing.styles import (
+    INHERITABLE_BLOCK_STYLE_KEYS,
+    CompositionStyle,
+    StylePresetId,
+    resolve_style_tokens,
+)
 from app.editing.timing import (
     SOURCE_TIMEBASE,
     frames_to_ticks,
@@ -229,6 +235,7 @@ class SkillBlueprintV1(BaseModel):
     schema_version: Literal[1] = 1
     source_composition_uri: str | None = None
     canvas: dict[str, Any]
+    style: CompositionStyle | None = Field(default=None, exclude_if=lambda v: v is None)
     acts: list[BlueprintAct] = Field(min_length=1, max_length=24)
     audio_profile: BlueprintAudioProfile = Field(default_factory=BlueprintAudioProfile)
     sfx_cues: list[BlueprintSfxCue] = Field(default_factory=list, max_length=48)
@@ -331,6 +338,17 @@ def _render_skill_md(name: str, description: str, bp: SkillBlueprintV1) -> str:
         )
     lines.extend([
         "",
+        *(
+            [
+                "## Visual Style Profile",
+                f"- Default style preset: `{bp.style.preset_id}`"
+                + (f" (accent `{bp.style.accent_color}`)" if bp.style.accent_color else "")
+                + " — orthogonal to act structure; override via `style_preset` / `accent_color` during instantiation.",
+                "",
+            ]
+            if bp.style is not None
+            else []
+        ),
         "## Audio & Sound Design Profile",
         f"- Narration pacing: adapt each act duration to measured narration + `{bp.audio_profile.breathing_s:g}s` breathing room.",
         f"- BGM: {'included' if bp.audio_profile.has_bgm else 'optional'} at `{bp.audio_profile.bgm_gain_db:g} dB`"
@@ -441,7 +459,21 @@ def extract_skill_draft_from_composition(
             for slot, field in _ITEM_CUES.get(obj.block_id, ())
         ]
         allowed_style = _STYLE_PROP_KEYS.get(obj.block_id, set())
-        style_defaults = {k: v for k, v in obj.props.items() if k in allowed_style}
+        inheritable = set(INHERITABLE_BLOCK_STYLE_KEYS.get(obj.block_id, ()))
+        comp_tokens = resolve_style_tokens(content.settings.style) if content.settings.style is not None else None
+        style_defaults: dict[str, Any] = {}
+        for k, v in obj.props.items():
+            if k not in allowed_style:
+                continue
+            if comp_tokens is not None and k in inheritable:
+                # Omit keys that merely mirror the composition-level style so Template x Style stays orthogonal.
+                if (
+                    (k == "theme" and v == comp_tokens["theme"])
+                    or (k == "backdrop_style" and v == comp_tokens["backdrop_style"])
+                    or (k == "accent_color" and str(v).upper() == comp_tokens["accent"])
+                ):
+                    continue
+            style_defaults[k] = v
         cat = MOTION_BLOCK_CATALOG[obj.block_id]
         content_keys = _CONTENT_PROP_KEYS.get(obj.block_id, set())
         req_slots = [k for k in cat["required_slots"] if k not in style_defaults]
@@ -562,6 +594,7 @@ def extract_skill_draft_from_composition(
             "fps_den": content.settings.fps.den,
             "background": content.settings.background,
         },
+        style=content.settings.style,
         acts=acts,
         audio_profile=audio_profile,
         sfx_cues=sfx_cues,
@@ -749,6 +782,17 @@ class InstantiateSkillBlueprintArgs(BaseModel):
     skill_version_id: UUID = Field(description="Immutable SkillVersion UUID of the saved slot_blueprint_v1 Skill.")
     name: str = Field(min_length=1, max_length=120, description="Name for the new editable Composition.")
     acts: list[BlueprintActSlotInput] = Field(min_length=1, max_length=24, description="Ordered slot values matching blueprint acts.")
+    style_preset: StylePresetId | None = Field(
+        default=None,
+        exclude_if=lambda v: v is None,
+        description="Optional orthogonal CompositionStyle preset override (institutional_dark, swiss_paper, vox_editorial, kinetic_anime).",
+    )
+    accent_color: str | None = Field(
+        default=None,
+        pattern=r"^#[0-9a-fA-F]{6}$",
+        exclude_if=lambda v: v is None,
+        description="Optional hex brand accent color override combined with style_preset or blueprint.style.",
+    )
     bgm_snapshot_id: UUID | None = Field(
         default=None,
         description="Optional fixed music snapshot; looped or trimmed to the adapted total duration with blueprint fade-in/out.",
@@ -875,11 +919,29 @@ async def instantiate_skill_blueprint(
 
         fps_num = int(bp.canvas.get("fps_num", 30))
         fps_den = int(bp.canvas.get("fps_den", 1))
+        effective_style: CompositionStyle | None = None
+        if args.style_preset is not None:
+            effective_style = CompositionStyle(
+                preset_id=args.style_preset,
+                accent_color=args.accent_color,
+            )
+        elif bp.style is not None:
+            effective_style = (
+                bp.style.model_copy(update={"accent_color": args.accent_color})
+                if args.accent_color is not None
+                else bp.style
+            )
+        effective_bg = (
+            resolve_style_tokens(effective_style)["canvas_bg"]
+            if effective_style is not None
+            else str(bp.canvas.get("background", "#070B11"))
+        )
         settings_obj = VersionSettings(
             width=int(bp.canvas.get("width", 1920)),
             height=int(bp.canvas.get("height", 1080)),
             fps={"num": fps_num, "den": fps_den},
-            background=str(bp.canvas.get("background", "#070B11")),
+            background=effective_bg,
+            style=effective_style,
         )
 
         legacy_asset = select(Asset.id).where(Asset.user_id == owner, Asset.project_id == project)
@@ -891,7 +953,16 @@ async def instantiate_skill_blueprint(
         for idx, (bp_act, slot) in enumerate(zip(bp.acts, args.acts)):
             if slot.act_id and slot.act_id != bp_act.act_id:
                 raise ValueError(f"Act #{idx + 1} expected act_id={bp_act.act_id!r}, got {slot.act_id!r}.")
-            merged_props = bp_act.bind_props(slot.props)
+            if args.style_preset is not None:
+                # Cross-style instantiation: strip inheritable visual style defaults from the blueprint
+                # so every act inherits the newly requested style_preset unless overridden in slot.props.
+                strip_keys = set(INHERITABLE_BLOCK_STYLE_KEYS.get(bp_act.block_id, ()))
+                act_for_bind = bp_act.model_copy(
+                    update={"style_defaults": {k: v for k, v in bp_act.style_defaults.items() if k not in strip_keys}}
+                )
+                merged_props = act_for_bind.bind_props(slot.props)
+            else:
+                merged_props = bp_act.bind_props(slot.props)
 
             # Resolve visual resources (supports image snapshots & captured webpage views)
             act_resources: list[RemotionResource] = []

@@ -1,6 +1,6 @@
 import React from "react";
 import { cueProgress, easeInOutCubic, easeOutCubic } from "../engine/math";
-import { appear, palette, Stage, typeSize, type Frame, type StudioStyle } from "./Stage";
+import { appear, cardFace, palette, Stage, typeSize, type Frame, type StudioStyle } from "./Stage";
 
 interface QuoteProps extends StudioStyle {
   quote: string;
@@ -22,7 +22,7 @@ function runs(text: string): string[] {
 }
 
 export function QuoteProofBlock({ props, frame }: { props: QuoteProps; frame: Frame }): React.JSX.Element {
-  const c = palette(props);
+  const c = palette(props, frame.compositionStyle);
   const phrase = props.highlight_phrase ?? "";
   const at = phrase ? props.quote.indexOf(phrase) : -1;
   const pieces =
@@ -33,6 +33,7 @@ export function QuoteProofBlock({ props, frame }: { props: QuoteProps; frame: Fr
   const length = tokens.filter((token) => token.text.trim()).length;
   const sweep = easeInOutCubic(cueProgress(frame.tSec, props.highlight_at_s ?? frame.durSec * 0.5, 0.55));
   const creditAt = frame.durSec * 0.62;
+  const isTape = c.headlineTreatment === "highlight_tape" || c.headlineTreatment === "outlined_impact";
   let word = 0;
   return (
     <Stage style={props} frame={frame}>
@@ -46,14 +47,18 @@ export function QuoteProofBlock({ props, frame }: { props: QuoteProps; frame: Fr
         }}
       >
         <svg width="92" height="69" viewBox="0 0 92 69" fill={c.accent} aria-hidden>
-          <path d="M0 69V42Q0 15 30 1l6 9Q16 22 16 37h18v32ZM48 69V42Q48 15 78 1l6 9Q64 22 64 37h18v32Z" />
+          <path
+            d="M0 69V42Q0 15 30 1l6 9Q16 22 16 37h18v32ZM48 69V42Q48 15 78 1l6 9Q64 22 64 37h18v32Z"
+            stroke={c.cardTreatment === "editorial_rule" ? c.line : undefined}
+            strokeWidth={c.cardTreatment === "editorial_rule" ? 2.5 : undefined}
+          />
         </svg>
         <blockquote
           style={{
             margin: "38px 0 40px",
             fontSize: typeSize(props.quote, 85, 1470, 5),
-            fontWeight: 700,
-            lineHeight: 1.2,
+            fontWeight: c.headingWeight,
+            lineHeight: 1.22,
             letterSpacing: "-.026em",
             whiteSpace: "normal",
             textWrap: "balance",
@@ -72,10 +77,12 @@ export function QuoteProofBlock({ props, frame }: { props: QuoteProps; frame: Fr
                   verticalAlign: "bottom",
                   clipPath: `inset(${100 * (1 - p)}% 0 0 0)`,
                   transform: `translateY(${8 * (1 - p)}px)`,
+                  padding: marked && isTape ? "0 6px" : undefined,
+                  color: marked && isTape && sweep > 0.45 ? c.accentInk : undefined,
                   backgroundImage: marked ? `linear-gradient(${c.accent},${c.accent})` : undefined,
-                  backgroundPosition: "left bottom",
+                  backgroundPosition: isTape ? "left center" : "left bottom",
                   backgroundRepeat: "no-repeat",
-                  backgroundSize: `${100 * sweep}% 3px`,
+                  backgroundSize: isTape ? `${100 * sweep}% 88%` : `${100 * sweep}% 4px`,
                 }}
               >
                 {text}
@@ -86,8 +93,8 @@ export function QuoteProofBlock({ props, frame }: { props: QuoteProps; frame: Fr
         <div
           style={{
             width: `${100 * easeInOutCubic(cueProgress(frame.tSec, creditAt - 0.24, 0.6))}%`,
-            height: 2,
-            background: c.line,
+            height: c.cardTreatment === "editorial_rule" || c.cardTreatment === "brutal_offset" ? 3 : 2,
+            background: c.cardTreatment === "brutal_offset" ? c.accent : c.line,
           }}
         />
         <footer
@@ -100,7 +107,7 @@ export function QuoteProofBlock({ props, frame }: { props: QuoteProps; frame: Fr
           }}
         >
           <div style={{ flex: 1, minWidth: 0 }}>
-            <strong style={{ fontSize: typeSize(props.author, 38, 980, 2) }}>{props.author}</strong>
+            <strong style={{ fontWeight: c.headingWeight, fontSize: typeSize(props.author, 38, 980, 2) }}>{props.author}</strong>
             {props.role_or_source && (
               <div
                 style={{
@@ -116,9 +123,15 @@ export function QuoteProofBlock({ props, frame }: { props: QuoteProps; frame: Fr
           {props.verification_badge && (
             <div
               style={{
-                background: c.tint,
-                border: `1px solid ${c.line}`,
-                borderRadius: 30,
+                ...(c.tokens.hasCompositionStyle
+                  ? cardFace(c, { selected: true })
+                  : {
+                      background: c.tint,
+                      border: `1px solid ${c.line}`,
+                      borderRadius: 30,
+                    }),
+                color: c.cardTreatment === "editorial_rule" ? c.ink : c.accentText,
+                fontWeight: 700,
                 maxWidth: 380,
                 padding: "10px 22px",
                 fontSize: typeSize(props.verification_badge, 23, 370, 2),

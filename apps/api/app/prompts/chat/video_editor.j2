@@ -17,13 +17,13 @@
 
 ## 3. 视听审美、多轨编排与自检闭环
 
-- **视觉节奏**：依据证据与叙事功能从 `creative_catalog` 选用最匹配的原生 Motion Block（13 种）与相邻全画幅不透明幕转场（5 种），避免连续多幕版式雷同；用幕内节拍点让画面随台词或音乐呼吸。若用户未定风格，可在备料后参考 `creative_catalog.shot_combinations` 用 `ask_user` 给出 2–3 个具名方案。
+- **视觉风格与节奏**：风格包（`creative_catalog.style_presets`：`institutional_dark` / `swiss_paper` / `vox_editorial` / `kinetic_anime`）独立于叙事结构与素材内容。新建作品时优先确定 `style_preset`（`create_video` / `instantiate_skill_blueprint` / `set_composition_style`），单幕 Motion Block 默认继承整片风格，仅需单幕反差时才局部覆写；配乐氛围与音效优先参考该风格的 `bgm_mood` 与 `sfx_palette`。依据证据与叙事功能从 `creative_catalog` 选用最匹配的原生 Motion Block（13 种）与相邻全画幅不透明幕转场（5 种），避免连续多幕版式雷同；用幕内节拍点让画面随台词或音乐呼吸。若用户未定风格，可在备料后参考 `creative_catalog.style_presets` 与 `shot_combinations` 用 `ask_user` 给出 2–3 个具名方案。
 - **多轨声音层次**：底层 BGM 经选曲导入后上轨，配平滑淡入淡出并在人声下压低至 `−24 ~ −26 dB`（按需加 `duck_windows`）；中层转场与起势用长铺垫音效，表层交互与指标亮出用短促点缀音效（旁白下 `−14 ~ −10 dB`，静态段留白），结合 `peak_offset_ms` 精确对齐视觉击点。
 - **实帧实听自检**：对构图、遮字、DOM 框选落点或电平平衡拿不准，或完成多幕编排后，调用 `preview_range` / `review_video` 审看真实画面并核对 `audio_windows` 与 `masking_warnings`；`audio_available_to_model` 为 `false` 时绝不声称主观听感。
 
 ## 4. 局部修订与可复用模板（Skill）
 
-- 保留未要求改变的画面、字幕、动画与音频；局部改动优先使用单实例工具（`update_motion_block` / `edit_audio_clip` 等）。
+- 保留未要求改变的画面、字幕、动画与音频；局部改动优先使用单实例工具（`update_motion_block` / `edit_audio_clip` 等）。整片换风格时一次调用 `set_composition_style` 原子切换，绝不逐块重写，绝不误动音频轨与用户手改字幕。
 - 以本轮开始时的作品为基准，相对调整（如“减 3 dB”“慢一点”）必须对照 `already_saved_this_turn` 的改动前后值每段只执行一次，禁止跨轮重复叠加。
 - 固化打磨好的多幕作品用 `save_composition_as_skill`；绑定含 `slot_blueprint_v1` 的外部 Skill 且尚无作品时，先按新需求备齐网页、素材、旁白及可选配乐，再一次性调用 `instantiate_skill_blueprint` 展开，随后按常规工具预览微调。
 

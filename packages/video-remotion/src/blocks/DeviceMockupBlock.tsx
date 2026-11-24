@@ -20,13 +20,13 @@ interface DeviceProps extends StudioStyle {
 }
 
 export function DeviceMockupBlock({ props, frame }: { props: DeviceProps; frame: Frame }): React.JSX.Element {
-  const c = palette(props);
+  const c = palette(props, frame.compositionStyle);
   const mobileOnly = props.layout === "mobile";
   const dual = (props.layout ?? "dual") === "dual" && frame.resources.length > 1;
   const phone = mobileOnly || dual;
   const cue = props.reveal_at_s ?? (dual ? frame.durSec * 0.38 : 0.2);
   const camera = evaluateCamera("tilt_left", frame.tSec - (dual ? 0 : cue), frame.durSec, 0.5, 0.5, 1, 0, 1);
-  const chrome = props.theme === "light" ? "#DAE1E3" : "#35414A";
+  const chrome = !c.tokens.isDark ? "#DAE1E3" : "#35414A";
   return (
     <Stage style={props} frame={frame}>
       <Heading title={props.headline} eyebrow={props.eyebrow} colors={c} />

@@ -18,6 +18,7 @@ EDIT_LABELS = {
     "instantiate_skill_blueprint": ("展开 Skill 蓝图", "instantiate Skill blueprint"),
     "insert_motion_block": ("加入动效组件", "insert motion block"),
     "update_motion_block": ("调整动效组件", "update motion block"),
+    "set_composition_style": ("切换整片视觉风格", "apply visual style"),
     "edit_audio_clip": ("调整音频片段", "edit audio clip"),
     "set_transition": ("设置转场", "set transition"),
     "insert_visual": ("插入图片", "insert image"),

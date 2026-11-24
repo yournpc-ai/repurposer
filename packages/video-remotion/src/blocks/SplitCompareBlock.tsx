@@ -33,7 +33,7 @@ export function SplitCompareBlock({
   props: CompareProps;
   frame: Frame;
 }): React.JSX.Element {
-  const c = palette(props);
+  const c = palette(props, frame.compositionStyle);
   const sides = [
     { heading: props.left_heading, items: props.left_items },
     { heading: props.right_heading, items: props.right_items },
@@ -56,17 +56,24 @@ export function SplitCompareBlock({
           <article
             key={side}
             style={{
-              ...cardFace(c),
+              ...cardFace(c, { selected: Boolean(side) }),
               padding: "34px 40px",
               flex: 1,
               minWidth: 0,
               display: "flex",
               flexDirection: "column",
-              background: side ? c.tint : c.surface,
               borderTop: `4px solid ${side ? c.accent : c.line}`,
             }}
           >
-            <strong style={{ lineHeight: 1.12, fontSize: typeSize(heading, 46, 692, 2), marginBottom: 22 }}>
+            <strong
+              style={{
+                fontWeight: c.headingWeight,
+                color: side ? c.accentText : c.ink,
+                lineHeight: 1.12,
+                fontSize: typeSize(heading, 46, 692, 2),
+                marginBottom: 22,
+              }}
+            >
               {heading}
             </strong>
             {items.map((item, i) => {

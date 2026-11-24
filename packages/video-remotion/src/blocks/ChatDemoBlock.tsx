@@ -25,7 +25,7 @@ interface ChatProps extends StudioStyle {
 
 export function ChatDemoBlock({ props, frame }: { props: ChatProps; frame: Frame }): React.JSX.Element {
   const { tSec, durSec } = frame;
-  const c = palette(props);
+  const c = palette(props, frame.compositionStyle);
   const steps = props.work_steps ?? [];
   const compact = props.messages.length > 2;
   const span = durSec * 0.72;
@@ -49,11 +49,12 @@ export function ChatDemoBlock({ props, frame }: { props: ChatProps; frame: Frame
       <div style={{ position: "absolute", inset: "78px 232px 106px", display: "flex", alignItems: "center" }}>
         <section
           style={{
-            ...cardFace(c),
+            ...cardFace(c, { elevated: true }),
             width: "100%",
             padding: "34px 52px",
-            borderRadius: 30,
-            boxShadow: "0 25px 60px rgba(5,14,21,.13)",
+            ...(c.tokens.hasCompositionStyle
+              ? {}
+              : { borderRadius: 30, boxShadow: "0 25px 60px rgba(5,14,21,.13)" }),
           }}
         >
           {props.title && (

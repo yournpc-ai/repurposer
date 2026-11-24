@@ -392,6 +392,7 @@ export const TOOL_ACTIONS: Readonly<Record<string, string>> = {
   inspect_clip: "inspectClip",
   insert_motion_block: "insertMotionBlock",
   update_motion_block: "updateMotionBlock",
+  set_composition_style: "setCompositionStyle",
   set_transition: "setTransition",
   insert_visual: "insertVisual",
   insert_audio: "insertAudio",

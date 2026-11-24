@@ -22,7 +22,7 @@ export function StepTimelineBlock({
   props: TimelineProps;
   frame: Frame;
 }): React.JSX.Element {
-  const c = palette(props);
+  const c = palette(props, frame.compositionStyle);
   const { steps } = props;
   const width = 1656 / steps.length;
   const times = steps.map((s, i) => itemTime(s.reveal_at_s, i, steps.length, frame.durSec));
@@ -65,10 +65,28 @@ export function StepTimelineBlock({
                   style={{
                     width: 64,
                     height: 64,
-                    borderRadius: "50%",
-                    background: c.surface,
+                    borderRadius:
+                      c.cardTreatment === "editorial_rule"
+                        ? 4
+                        : c.cardTreatment === "brutal_offset"
+                          ? 2
+                          : "50%",
+                    background: selected ? c.accent : c.surface,
+                    color: selected ? c.accentInk : c.ink,
                     boxSizing: "border-box",
-                    border: `${selected ? 4 : 2}px solid ${selected ? c.accent : c.line}`,
+                    border: `${selected ? 3 : 2}px solid ${
+                      c.cardTreatment === "editorial_rule"
+                        ? c.line
+                        : selected
+                          ? c.accent
+                          : c.line
+                    }`,
+                    boxShadow:
+                      selected && c.cardTreatment === "editorial_rule"
+                        ? `3px 3px 0px ${c.line}`
+                        : selected && c.cardTreatment === "brutal_offset"
+                          ? `4px 4px 0px ${c.accentSecondary}`
+                          : undefined,
                     display: "grid",
                     placeContent: "center",
                     textAlign: "center",
@@ -78,7 +96,7 @@ export function StepTimelineBlock({
                     style={{
                       opacity: progress,
                       maxWidth: 53,
-                      fontWeight: 700,
+                      fontWeight: c.headingWeight,
                       fontSize: typeSize(badge, 25, 53, 2),
                     }}
                   >
@@ -97,6 +115,7 @@ export function StepTimelineBlock({
                 <strong
                   style={{
                     display: "block",
+                    fontWeight: c.headingWeight,
                     fontSize: typeSize(step.title, 52, width - 50, 3),
                     lineHeight: 1.12,
                   }}

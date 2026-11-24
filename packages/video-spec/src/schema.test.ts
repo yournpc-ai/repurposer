@@ -121,3 +121,46 @@ test("the serialized native block library accepts all thirteen IDs", () => {
   assert.throws(() => parse("device_mockup", []));
   assert.throws(() => parse("device_mockup", [image, image, image]));
 });
+
+test("video-spec accepts optional closed style tokens and keeps legacy specs style-free", () => {
+  const legacy = videoSpecSchema.parse(textSpec());
+  assert.equal(legacy.style, undefined);
+
+  const styled = videoSpecSchema.parse({
+    ...textSpec(),
+    style: {
+      preset_id: "vox_editorial",
+      theme: "light",
+      backdrop_style: "editorial_paper",
+      canvas_bg: "#F4EFE2",
+      surface_bg: "#FFFDF7",
+      ink: "#141413",
+      secondary_ink: "#3E3D39",
+      line_color: "#141413",
+      accent: "#FACC15",
+      accent_secondary: "#2563EB",
+      accent_ink: "#141413",
+      accent_text: "#1D4ED8",
+      card_treatment: "editorial_rule",
+      headline_treatment: "highlight_tape",
+      heading_weight: 900,
+      default_transition: "wipe_reveal",
+      caption_style: {
+        color: "#FFFDF7",
+        weight: 700,
+        background: "#141413",
+        stroke: null,
+        shadow: null,
+      },
+    },
+  });
+  assert.equal(styled.style?.preset_id, "vox_editorial");
+  assert.equal(styled.style?.heading_weight, 900);
+
+  assert.throws(() =>
+    videoSpecSchema.parse({
+      ...textSpec(),
+      style: { ...styled.style, extra_css: "color: red" },
+    }),
+  );
+});
