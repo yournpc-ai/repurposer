@@ -145,15 +145,16 @@ t("home.allProjects", { count: projects.length })
 
 ## Testing
 
-测试资产只保留两类（ADR-114）：**用户主流程旅程矩阵**（各种用户通过 Chat 多轮完成创作、修订与交付）与**核心 API/DB 确定性测试**（支付、上传、工具协议、权限、计费、作品数据、执行与交付等用户直接依赖的合同）。内部 helper、提示词文案、实现形态、重复 ToolLoop 机制和事故编号不另立永久测试；行为能由真实旅程证明时，不复制一套内部锁。
+测试体系按四层 Chat-Origin 金字塔组织（完整规范见 `docs/TESTING.md`）：**Layer 0 纯合同与 Py↔TS 跨运行时一致性**（`apps/api/test/unit/`、`packages/*`）、**Layer 1A Chat-Origin 集成套件**（`apps/api/test/chat_origin/`，经真实 ASGI `/api/v1/chat` + 一次性 PostgreSQL）、**Layer 1B 基础设施与迁移一致性**（`apps/api/test/infra/`）、**Layer 2 Web Studio 与 Render 服务**（含 EN↔ZH i18n 一致性门禁），以及按需运行的 **Layer 3 真实视听评测 CLI**（`apps/api/scripts/eval_chat_e2e.py`）。内部 helper、提示词文案与实现形态不另立永久测试。
 
-**部署前检查**（按改动面运行，所跑项全绿才可部署）：
+**部署前检查**（统一经根目录 `Makefile` 运行，按改动面全绿才可部署）：
 
-1. 核心 API/DB：`cd apps/api && uv run --extra dev python -m pytest test/core -q`。不调用真实模型、不执行付费制作；需要事务的测试使用独立临时 PostgreSQL 数据库。
-2. 真实用户旅程：`cd apps/api && uv run python test/journeys/chat.py`，或以 `--only <name>[,<name>]` 运行当前 `JOURNEYS` 注册表的子集。需要活 API、当前 migration、fresh dev worker 与模型配额；会制作媒体的旅程须另行明确授权。旅程只锁用户可见结果和服务端/数据库真值，不锁 LLM 文案。
-3. Web：`cd apps/web && npm test`，并按改动运行 TypeScript 检查。
+1. 快速纯合同门禁：`make test-fast`（Layer 0 API `unit` + `video-spec` + `sound-engine` + Web `tsc`）。
+2. Chat-Origin 与全量 API 确定性测试：`make test-chat` / `make test-api`（不调用真实模型、不执行付费制作；会话级一次性 PostgreSQL + 每测毫秒级表清理）。
+3. Web 与 Render：`make test-web`（`tsc` + Vitest 含 i18n parity）、`make test-render`（`tsc` + Node 测试）；整仓确定性总门禁 `make test-all`。
+4. 真实视听评测（按需授权）：`make eval-chat SCENARIO=motion_block_promo`（独立临时 PostgreSQL + `local://` 存储，产出 `eval_scorecard.json` 与 `EVAL_REPORT.md`）。
 
-真实浏览器交互、最终动态视听、生产环境与公开发布仍需对应人工验收；核心测试或旅程通过不能替代这些证据。fixture 先拷 `scenario/` 前缀，常驻 worker 必须加载当前代码，失败先归因机制，禁止为放行削弱断言。运行与故障处置细则归 `docs/VERIFICATION.md`。
+真实浏览器交互、最终动态视听、生产环境与公开发布仍需对应人工验收；确定性测试或评测脚本通过不能替代这些证据。失败先归因机制，禁止为放行削弱断言。运行与故障处置细则归 `docs/TESTING.md` 与 `docs/VERIFICATION.md`。
 
 诊断脚本不是部署门禁，其读数不能替代上述测试或真实验收。
 

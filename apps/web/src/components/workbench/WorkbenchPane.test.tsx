@@ -47,6 +47,12 @@ vi.mock("@/lib/api", () => ({
         }),
       }
     }
+    if (url.includes("/workbench")) {
+      return {
+        ok: true,
+        json: async () => sampleWorkbench,
+      }
+    }
     return { ok: true, json: async () => ({}) }
   }),
 }))

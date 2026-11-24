@@ -10,19 +10,23 @@
 
 ### 1.1 当前资产边界
 
-只保留两类测试资产：
+测试体系按四层 Chat-Origin 金字塔组织（完整结构与命令见 `docs/TESTING.md`）：
 
-1. **用户主流程旅程矩阵**：`apps/api/test/journeys/chat.py` 的当前 `JOURNEYS` 注册表。各种用户经普通 HTTP Chat 多轮完成创作、修订与交付；文档不复制固定数量或编号。
-2. **核心 API/DB 确定性测试**：`apps/api/test/core/`，覆盖支付、上传、工具协议、权限、计费、作品数据、执行与交付等用户直接依赖的合同。
+1. **Layer 0 纯合同与 Py↔TS 一致性**：`apps/api/test/unit/`、`packages/video-spec/`、`packages/sound-engine/`（零 DB、零网络）。
+2. **Layer 1A Chat-Origin 集成套件**：`apps/api/test/chat_origin/`，覆盖 `/api/v1/chat` SSE/JSON、创作与动效块、风格与字幕编辑、实时观察与侧聊安全、多会话/压缩/Eval 反馈/工作台、Skill 蓝图与槽位预览、付费授权与导出竞态。
+3. **Layer 1B 基础设施与迁移一致性**：`apps/api/test/infra/`，覆盖应用启动与 Alembic `upgrade head` 表结构一致、Composition CAS 写口、存储适配器与作业删锁。
+4. **Layer 2 Web Studio 与 Render 服务**：`apps/web/src/**/*.test.*`（含 EN↔ZH i18n 一致性）、`apps/render/src/**/*.test.ts`。
+5. **Layer 3 真实视听评测 CLI**：`apps/api/scripts/eval_chat_e2e.py`（`make eval-chat`），在独立临时 PostgreSQL 与 `local://` 存储上运行真实 `/api/v1/chat` 场景并校验 SSE、工具效率、无内部 ID 泄漏及 1080p MP4 视听流。
 
-内部 helper、提示词文案、实现形态、重复 ToolLoop 机制和事故编号不另立永久测试。同一用户行为已有真实旅程证明时，不复制内部锁；重构使测试失去合同依据时逐案删除，不留注释尸体。
+内部 helper、提示词文案与实现形态不另立永久测试；重构使测试失去合同依据时直接删除，不留注释尸体。
 
 ### 1.2 当前验证层
 
-- 核心测试：`cd apps/api && uv run --extra dev python -m pytest test/core -q`。不调用真实模型、不执行付费制作；事务测试使用独立临时 PostgreSQL 数据库。
-- 真实旅程：`cd apps/api && uv run python test/journeys/chat.py`，或用 `--only <name>[,<name>]` 选择当前注册表子集。需要活 API、当前 migration、fresh dev worker 和模型配额；制作媒体的旅程须单独明确授权。
-- Web 按改动面运行 vitest 与 TypeScript 检查。旅程只锁用户可见结果及服务端/数据库真值，不锁 LLM 文案；打字机、remount、布局与最终视听仍归 Web 检查和真实 UI 验收。
-- 诊断脚本不是部署门禁，读数不能替代核心测试、真实旅程或人工验收，也不能为放行调整断言。
+- 快速纯合同门禁：`make test-fast`（Layer 0 API `unit` + `video-spec` + `sound-engine` + Web `tsc`）。
+- Chat-Origin 与全量 API 确定性测试：`make test-chat` / `make test-infra` / `make test-api`（不调用真实模型、不执行付费制作；会话级临时 PostgreSQL + 每测毫秒级表清理）。
+- Web 与 Render：`make test-web`、`make test-render`；整仓确定性总门禁：`make test-all`。
+- 真实视听评测（按需授权）：`make eval-chat SCENARIO=<name>`（列出场景：`make eval-list`）。需要模型配额；评测只锁用户可见结果、SSE 遥测、数据库真值与视听流，不锁 LLM 文案。
+- 诊断脚本不是部署门禁，读数不能替代确定性测试、真实评测或人工验收，也不能为放行调整断言。
 
 #### I8 普通编辑回合的定向验收
 
@@ -116,20 +120,19 @@ uv run python scripts/inspect_model_trace.py --id <project/conversation/turn/mod
 
 ## 2. 核心合同 ↔ 当前测试映射
 
-旅程名称只以 `test/journeys/chat.py` 的 `JOURNEYS` 注册表为准；下表不声明未运行项已通过。核心文件可以按领域拆分或合并，但不另建第二注册表。
+核心测试按四层目录与标记组织（详见 `docs/TESTING.md`）；下表仅映射归属位置，不声明未运行项已通过。
 
-| 用户依赖的合同 | 核心测试座 | 真实旅程 / 额外证据 |
+| 用户依赖的合同 | 确定性测试座 | 真实评测 / 额外证据 |
 |:---|:---|:---|
-| 应用组合根可启动 | `test/core/test_app_boot.py` | 活 API 健康检查与真实请求 |
-| 支付、积分、计量与报价 | `test_payments.py` / `test_metering.py` / `test_pricing.py` | `credits_boundary`；真实 webhook、费用确认与钱包台账 |
-| 执行身份、交付、渲染归属与产物检查 | `test_export_stop_races.py` / `test_project_job_deletion.py` / `test_delivery.py` / `test_render_probe.py` / `test_output_checks.py` / `test_staging.py` | 明确授权的制作旅程；worker 恢复、上传重试与真实媒体 |
-| 上传、媒体准备与导入 | `test_media_preparation.py` / `test_media_import.py` / `test_web_capture.py` | `material_to_clips` / `remix`；真实上传进度、失败与删除 |
-| 内置与外部 Skill、包权限和读取边界 | `test_skill_store.py` / `test_skill_packages.py` / `test_skill_catalog.py` | `builtin_promo_skill` / `external_skill`；恶意包与真实 Skill 多轮对话 |
-| Composition、版本、预览与 video-spec | `test_compositions.py` / `test_previews.py` / `test_video_spec.py` / `test_generator.py` | `temporal_revision` / `builtin_promo_skill`；浏览器预览、Scrub 与最终视听 |
-| Provider 工具协议与原始 trace | `test_provider_tools.py` | 各真实旅程的完整工具调用与 `inspect_model_trace.py` 取证 |
-| 官网证据、Brief、BrandProfile、集中问题组与 CreativeState | `test_website_promo_readiness.py` / `test_website_promo_wire.py` / `test_question_groups.py` / `test_compositions.py` | fake provider golden wire 与临时 PostgreSQL；真实模型、真实 LegitEvi 网页及连续视听另行授权 |
-
-真实旅程注册表还覆盖迷失用户、探索、无素材写作、研究、咨询、修订、访谈、时间编辑与能力拒绝等主流程。新增旅程必须来自真实用户需求；新增核心测试必须能指出其保护的用户合同，不能仅为内部实现形态提高覆盖率。
+| 应用组合根与 Alembic 迁移一致 | `test/infra/test_platform_boot_and_migrations.py` | 活 API 健康检查与迁移实测 |
+| 支付、积分、计量与报价 | `test/unit/test_billing_and_payments.py` | 真实 webhook、费用确认与钱包台账 |
+| 风格、字幕、动效块、音效与 video-spec Py↔TS 一致性 | `test/unit/test_composition_style_parity.py` / `test_text_style_parity.py` / `test_motion_blocks_and_sound.py` / `test/unit/test_video_spec_and_generator.py` | `packages/video-spec`、`packages/sound-engine` 与浏览器渲染 |
+| Chat-Origin 创作、编辑、音效、观察、侧聊、多会话与工作台 | `test/chat_origin/test_chat_creation_and_motion_blocks.py` / `test_chat_editing_and_audio.py` / `test_chat_observation_and_side_chat.py` / `test_chat_multiconv_compact_eval_workbench.py` | `make eval-chat` 真实 SSE 与视听流校验 |
+| Skill 蓝图、槽位预览、包安全与内置技能 | `test/unit/test_skills_and_packages.py` / `test/chat_origin/test_chat_blueprints_and_slot_promo.py` | 真实多幕复用与浏览器槽位预览 |
+| 付费授权、导出/停止竞态、交付与产物探针 | `test/chat_origin/test_chat_delivery_and_media_races.py` / `test/chat_origin/test_export_stop_races.py` / `test/unit/test_previews_and_probes.py` | 明确授权的制作与 worker 恢复 |
+| Composition CAS 写口、存储与作业删锁 | `test/infra/test_compositions_store.py` / `test/infra/test_storage_and_exports.py` / `test/infra/test_projects_and_jobs.py` / `test/infra/test_account_settings.py` | 真实并发写入、对象存储与发布回执 |
+| 网页采集、SSRF 策略、品牌就绪度与 Provider 协议 | `test/unit/test_web_capture.py` / `test/unit/test_website_readiness.py` / `test/unit/test_provider_protocol.py` / `test/unit/test_chat_turn_policy.py` | `inspect_model_trace.py` 与真实采集取证 |
+| 前端 Studio 交互、渲染器与 EN↔ZH 翻译一致 | `apps/web/src/**/*.test.*`（含 `src/lib/i18n/parity.test.ts`） / `apps/render/src/**/*.test.ts` | 真实浏览器交互与 1080p 动态视听 |
 
 ## 3. Job 与费用
 

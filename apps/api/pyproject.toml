@@ -58,3 +58,15 @@ select = ["E", "F", "I", "N", "W", "UP"]
 [tool.mypy]
 python_version = "3.11"
 strict = true
+
+[tool.pytest.ini_options]
+testpaths = ["test"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = "--strict-markers"
+markers = [
+    "unit: Layer 0 pure contracts & cross-runtime parity (zero DB, zero network)",
+    "chat_origin: Layer 1A deterministic Chat-Origin integration tests (ASGI /api/v1/chat + real PostgreSQL)",
+    "infra: Layer 1B infrastructure & platform contracts (CAS store, storage, Alembic migrations, jobs, settings)",
+    "parity: Cross-runtime Python <-> TypeScript parity contracts",
+]

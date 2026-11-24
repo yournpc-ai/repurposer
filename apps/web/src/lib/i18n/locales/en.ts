@@ -1393,8 +1393,8 @@ const en = {
       previewUnavailable: "Audio preview unavailable",
     },
     preparationProgress: {
-      pictureScene: "Preparing storyboard scene {{count}}…",
-      voiceScene: "Recording narration for scene {{count}}…",
+      pictureScene: "Preparing storyboard scene {{name}}…",
+      voiceScene: "Recording narration for scene {{name}}…",
       visual_assets: "Preparing storyboard images…",
       imagesProcessed: "Preparing storyboard images · {{count}} processed…",
       speech_media: "Recording scene narration…",
