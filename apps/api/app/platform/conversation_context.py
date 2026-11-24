@@ -2,10 +2,21 @@
 
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.tables import Conversation, Message
+
+
+def visible_conversation_message_filter():
+    """SQL predicate matching visible chat messages (excluding internal activity/forensics/partial rows)."""
+    return or_(
+        Message.intent.is_(None),
+        Message.intent["type"].astext.is_(None),
+        ~Message.intent["type"].astext.in_(
+            ("activity", "activity_forensics", "candidates_log", "partial")
+        ),
+    )
 
 
 async def find_conversation(

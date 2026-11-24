@@ -80,6 +80,7 @@ from app.pipeline.errors import user_error_line
 from app.platform.conversation_context import (
     find_conversation,
     latest_pending_question,
+    visible_conversation_message_filter,
 )
 from app.platform.project_context import get_output_for_user, get_project_for_user
 from app.providers.llm.base import LLMError
@@ -1168,7 +1169,7 @@ async def rename_chat_conversation(
     current_user: User = Depends(get_current_user_required),
 ) -> ProjectConversationSummary:
     """Rename an owned project conversation."""
-    from sqlalchemy import func, or_
+    from sqlalchemy import func
 
     conversation = await db.get(Conversation, conversation_id)
     if (
@@ -1187,12 +1188,7 @@ async def rename_chat_conversation(
             select(func.count(Message.id)).where(
                 Message.conversation_id == conversation.id,
                 Message.role.in_(("user", "assistant")),
-                or_(
-                    Message.intent.is_(None),
-                    ~Message.intent["type"].astext.in_(
-                        ("activity", "activity_forensics", "candidates_log", "partial")
-                    ),
-                ),
+                visible_conversation_message_filter(),
             )
         )
         or 0

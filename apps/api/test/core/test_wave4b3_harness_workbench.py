@@ -699,6 +699,25 @@ async def test_multi_conversation_compact_feedback_and_workbench_api(database, m
                     },
                 )
                 assert act_row is not None
+                # Also seed an activity_forensics row and a user intent lacking "type"
+                # (regression guard for PostgreSQL three-valued NULL NOT IN logic).
+                prep.user_message.intent = {
+                    "editor_commits": [
+                        {"request": "prior-req-id", "tool": "create_video", "fingerprint": "prior-fp"}
+                    ]
+                }
+                await _create_message(
+                    db,
+                    c1_id,
+                    "assistant",
+                    "",
+                    turn_id=prep.user_message.id,
+                    intent={
+                        "type": "activity_forensics",
+                        "ref": str(prep.user_message.id),
+                        "rejections": [],
+                    },
+                )
                 asst_msg = await _create_message(
                     db,
                     c1_id,
@@ -720,6 +739,23 @@ async def test_multi_conversation_compact_feedback_and_workbench_api(database, m
                 asst_id = asst_msg.id
                 user_msg_id = prep.user_message.id
 
+            # Verify message_count on BOTH GET /projects/{id}/conversations AND PATCH /chat/conversations/{id}:
+            # c1 has 2 visible messages (user w/ non-null intent lacking "type" + assistant w/ eval_meta/policy)
+            # and 2 internal rows (activity + activity_forensics) that must be excluded -> exact count == 2.
+            rl_after = await client.get(f"/api/v1/projects/{project_id}/conversations")
+            assert rl_after.status_code == 200
+            by_id_after = {item["id"]: item for item in rl_after.json()}
+            assert by_id_after[str(c1_id)]["message_count"] == 2
+            assert by_id_after[str(c2_id)]["message_count"] == 0
+
+            r_patch_c1 = await client.patch(
+                f"/api/v1/chat/conversations/{c1_id}",
+                json={"title": "Renamed Primary Cut"},
+            )
+            assert r_patch_c1.status_code == 200
+            assert r_patch_c1.json()["title"] == "Renamed Primary Cut"
+            assert r_patch_c1.json()["message_count"] == 2
+
             # Rename conversation c2 via PATCH
             r_patch = await client.patch(
                 f"/api/v1/chat/conversations/{c2_id}",
@@ -727,6 +763,7 @@ async def test_multi_conversation_compact_feedback_and_workbench_api(database, m
             )
             assert r_patch.status_code == 200
             assert r_patch.json()["title"] == "Deep Dark Cut"
+            assert r_patch.json()["message_count"] == 0
 
             # find_conversation with multiple rows never raises
             async with database() as db:

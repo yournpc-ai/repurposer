@@ -44,7 +44,10 @@ from app.pipeline.outputs import (
     output_to_response,
 )
 from app.platform.billing import settled_job_amounts
-from app.platform.conversation_context import get_project_prompt
+from app.platform.conversation_context import (
+    get_project_prompt,
+    visible_conversation_message_filter,
+)
 from app.platform.project_context import get_project_for_user
 from app.providers.storage import delete_file, delete_project_files, is_export_location, matches_export_location, resolve_stored_url
 from app.ui_locale import current_ui_language
@@ -381,12 +384,7 @@ async def list_project_conversations(
             .where(
                 Message.conversation_id.in_(conv_ids),
                 Message.role.in_(("user", "assistant")),
-                or_(
-                    Message.intent.is_(None),
-                    ~Message.intent["type"].astext.in_(
-                        ("activity", "activity_forensics", "candidates_log", "partial")
-                    ),
-                ),
+                visible_conversation_message_filter(),
             )
             .group_by(Message.conversation_id)
         )
