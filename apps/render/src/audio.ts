@@ -20,12 +20,20 @@ function resolveFfBinary(bin: "ffmpeg" | "ffprobe"): string {
   } else if (process.platform === "win32") {
     candidates.push("@remotion/compositor-win32-x64-msvc");
   }
-  for (const pkg of candidates) {
-    try {
-      const { dir } = require(pkg) as { dir: string };
-      return path.join(dir, process.platform === "win32" ? `${bin}.exe` : bin);
-    } catch {
-      // The host's PATH is the fallback for platforms without a compositor package.
+  const resolvers = [require];
+  try {
+    resolvers.push(createRequire(require.resolve("@remotion/renderer")));
+  } catch {
+    // Fallback to direct require / PATH when @remotion/renderer is not installed.
+  }
+  for (const resolve of resolvers) {
+    for (const pkg of candidates) {
+      try {
+        const { dir } = resolve(pkg) as { dir: string };
+        return path.join(dir, process.platform === "win32" ? `${bin}.exe` : bin);
+      } catch {
+        // The host's PATH is the fallback for platforms without a compositor package.
+      }
     }
   }
   return bin;

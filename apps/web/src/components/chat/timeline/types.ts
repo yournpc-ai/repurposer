@@ -151,6 +151,16 @@ export interface MusicSelectionReceipt {
   duration_seconds: number
 }
 
+export interface SkillSavedReceipt {
+  kind: "skill_saved"
+  skill_id: string
+  skill_version_id: string
+  name: string
+  version: number
+  acts_count: number
+  sfx_cues_count: number
+}
+
 export type ActivityReceipt =
   | VideoReviewReceipt
   | ComponentReceipt
@@ -159,6 +169,7 @@ export type ActivityReceipt =
   | SfxImportReceipt
   | MusicSearchReceipt
   | MusicSelectionReceipt
+  | SkillSavedReceipt
 
 /** Candidate Surface (Workspace 合同 v4.2 C8-c, 2026-09-26) — one candidate
  * member: the source range + the source-faithful excerpt (C4 锚链) + the

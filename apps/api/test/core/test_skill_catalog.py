@@ -120,8 +120,11 @@ async def test_managed_promo_reads_upstream_gallery_and_pins_release(tmp_path, m
 
     option = get_builtin_skill_option("promo-video")
     assert option.name == "video-shotcraft"
+    text_option = get_builtin_skill_option("text-animation", version="1.0.0")
+    assert text_option.reference.skill_id == "text-animation"
+    assert text_option.reference.version == "1.0.0"
     with pytest.raises(SkillResolutionError, match="unavailable"):
-        get_builtin_skill_option("text-animation", version="1.0.0")
+        get_builtin_skill_option("unknown-skill", version="1.0.0")
     with pytest.raises(SkillResolutionError, match="unavailable"):
         get_builtin_skill_option("promo-video", version="1.0.0")
     reader = open_builtin_skill_package("promo-video", option.reference.version)

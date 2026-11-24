@@ -640,6 +640,35 @@ const en = {
   // @-mention system (MENTIONS §4): picker copy and type names.
   skills: {
     external: "External Skill",
+    picker: {
+      creationModes: "Creation Modes",
+      templates: "Templates",
+      blueprintMeta: "{{acts}} acts · {{slots}} slots",
+      styles: {
+        institutional_dark: "Institutional",
+        swiss_paper: "Swiss",
+        vox_editorial: "Vox",
+        kinetic_anime: "Kinetic",
+      },
+    },
+    slotPreview: {
+      openAction: "Preview numbered slot promo",
+      title: "Numbered Slot Promo",
+      description: "Live preview of every [01]..[N] replaceable slot with original pacing and transitions.",
+      styleLabel: "Visual style",
+      localeLabel: "Slot copy language",
+      checklistTitle: "Slot Checklist ({{count}})",
+      durationMeta: "{{duration}}s · {{count}} slots",
+      copyChecklist: "Copy checklist",
+      copiedChecklist: "Slot checklist copied to clipboard",
+      exportMp4: "Export 1080p MP4",
+      exportingMp4: "Exporting MP4…",
+      exportSuccess: "1080p slot promo MP4 downloaded",
+      loadError: "Failed to load slot preview",
+      retry: "Retry",
+      receiptMeta: "{{acts}} acts · {{sfx}} SFX cues",
+      receiptCta: "Slot Promo",
+    },
     builtin: {
 // Skills are internal video creation methods, not user-installed products.
       "promo-video": {
@@ -653,9 +682,9 @@ const en = {
         description: "Shape real footage into a vertical video with timed captions.",
       },
       "text-animation": {
-        name: "Text animation video",
-        shortName: "Text animation",
-        description: "Turn your exact copy into editable native text motion.",
+        name: "Kinetic Text",
+        shortName: "Text",
+        description: "Beat-led kinetic typography driven by rhythm, style presets, motion blocks, and sound effects.",
       },
       "knowledge-explainer": {
         name: "Knowledge explainer video",

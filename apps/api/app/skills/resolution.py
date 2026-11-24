@@ -15,11 +15,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.schemas import (
     BuiltInSkillReference,
     ExternalSkillReference,
+    SkillBlueprintSummary,
     SkillOption,
     SkillReference,
 )
 from app.models.tables import SkillVersion, UserSkill
 from app.skills import SKILL_REGISTRY, SkillValidationError, _parse_skill_md
+from app.skills.blueprint import BLUEPRINT_CAPABILITY, load_blueprint_from_skill_version
+from app.skills.slot_preview import count_blueprint_slots
 from app.skills.store import get_skill_version
 
 # Only packs with a real create_video / current-Editor consumer are selectable video Skills.
@@ -33,6 +36,11 @@ _BUILTIN_VIDEO_CAPABILITIES = {
         "progressive_skill_package",
     ),
     "talking-head-video": ("mixed_real_video", "timed_captions"),
+    "text-animation": (
+        "native_motion_graphics",
+        "beat_led_typography",
+        "text_style_presets",
+    ),
     "knowledge-explainer": ("narration_alignment", "drawing_v1", "remotion_project"),
 }
 
@@ -70,6 +78,23 @@ def get_builtin_skill_option(skill_id: str, *, version: str | None = None) -> Sk
     )
 
 
+def _blueprint_summary_for_version(
+    version: SkillVersion, capabilities: list[str]
+) -> SkillBlueprintSummary | None:
+    if BLUEPRINT_CAPABILITY not in capabilities:
+        return None
+    try:
+        bp = load_blueprint_from_skill_version(version)
+        return SkillBlueprintSummary(
+            act_count=len(bp.acts),
+            slot_count=count_blueprint_slots(bp),
+            duration_s=round(sum(act.target_duration_s for act in bp.acts), 2),
+            style_preset=bp.style.preset_id if bp.style is not None else None,
+        )
+    except Exception:  # noqa: BLE001 - fault-tolerant picker metadata
+        return None
+
+
 def _external_option(skill: UserSkill, version: SkillVersion) -> SkillOption:
     from app.config import settings
 
@@ -79,13 +104,15 @@ def _external_option(skill: UserSkill, version: SkillVersion) -> SkillOption:
         if isinstance(item, str) and item
         and (settings.component_bake_enabled or item not in {"remotion_project", "runtime:remotion-source"})
     ]
+    resolved_caps = capabilities or ["progressive_skill_package"]
     return SkillOption(
         reference=ExternalSkillReference(kind="external", skill_version_id=version.id),
         skill_id=str(skill.id),
         name=skill.name,
         description=skill.description,
-        capabilities=capabilities or ["progressive_skill_package"],
+        capabilities=resolved_caps,
         version_number=version.version,
+        blueprint_summary=_blueprint_summary_for_version(version, resolved_caps),
     )
 
 

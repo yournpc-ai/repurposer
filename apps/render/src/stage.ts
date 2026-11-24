@@ -109,10 +109,43 @@ function transientStageFailure(error: unknown): boolean {
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+const DATA_URL_MIME_EXT: Record<string, string> = {
+  "image/png": ".png",
+  "image/jpeg": ".jpg",
+  "image/webp": ".webp",
+  "audio/wav": ".wav",
+  "audio/x-wav": ".wav",
+  "audio/mpeg": ".mp3",
+  "font/otf": ".otf",
+  "font/ttf": ".ttf",
+};
+
+async function stageDataUrl(url: string, expectedSha256?: string): Promise<string> {
+  const match = /^data:([^;,]+);base64,(.+)$/i.exec(url);
+  if (!match) return url;
+  const mime = match[1].toLowerCase();
+  const buf = Buffer.from(match[2], "base64");
+  const digest = createHash("sha256").update(buf).digest("hex");
+  if (expectedSha256 && digest !== expectedSha256) {
+    throw new Error("inline data source does not match its pinned sha256");
+  }
+  await fs.mkdir(CACHE_DIR, { recursive: true });
+  const ext = DATA_URL_MIME_EXT[mime] ?? "";
+  const hash = createHash("sha1").update(`data:${mime}:${digest}`).digest("hex");
+  const dest = path.join(CACHE_DIR, hash + ext);
+  const existing = await fs.stat(dest).catch(() => null);
+  if (!existing || existing.size !== buf.length) {
+    const tmp = `${dest}.part-${process.pid}-${Date.now()}`;
+    await fs.writeFile(tmp, buf);
+    await fs.rename(tmp, dest);
+  }
+  return toLoopbackUrl(dest);
+}
+
 /**
- * Stage a remote source URL into the local cache; returns its loopback URL.
- * Non-http(s) inputs are returned unchanged (already local). `cacheKey` is
- * the object-store key when the caller knows it (render payload's
+ * Stage a remote source URL (or inline base64 data: URL) into the local cache;
+ * returns its loopback URL. Other non-http(s) inputs are returned unchanged.
+ * `cacheKey` is the object-store key when the caller knows it (render payload's
  * `source_key`) — the api side's shared source cache is indexed by it, so a
  * hit costs zero network.
  */
@@ -121,6 +154,7 @@ export async function stageRemoteSource(
   cacheKey?: string,
   expectedSha256?: string,
 ): Promise<string> {
+  if (/^data:/i.test(url)) return stageDataUrl(url, expectedSha256);
   if (!/^https?:\/\//i.test(url)) return url;
   const requestKey = `${cacheKey ?? url}:${expectedSha256 ?? ""}`;
   const pending = inflight.get(requestKey);

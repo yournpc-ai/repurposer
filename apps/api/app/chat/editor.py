@@ -489,7 +489,7 @@ class SetKeyframeArgs(ClipArgs):
     )
 
 
-def _editor_tool(name, description, args, key):
+def _editor_tool(name, description, args, key, *, receipt_kind=None):
     return ChatTool(
         name,
         description,
@@ -502,6 +502,7 @@ def _editor_tool(name, description, args, key):
             kind="read",
             active_key="chat.activity." + key,
             done_key="chat.activity." + key + "Done",
+            receipt_kind=receipt_kind,
         ),
     )
 
@@ -521,6 +522,7 @@ EDITOR_TOOLS = (
         "save_composition_as_skill",
         "Save the current multi-act Composition as an owner-scoped reusable Skill (SKILL.md + privacy-stripped references/blueprint.json) that appears immediately in the / SkillPicker for future remakes.",
         SaveCompositionAsSkillArgs, "saveSkill",
+        receipt_kind="skill_saved",
     ),
     _editor_tool(
         "deliver_video", "Attach the reviewed MP4 to this conversation when ready to hand it to the user.",
@@ -1987,6 +1989,7 @@ async def execute_editor(turn, name, args):
                     valid_for_key=version_key,
                 )
             if name == "save_composition_as_skill":
+                from app.chat.activity_receipts import skill_saved_receipt
                 from app.chat.editor_recovery import editor_lock_key
                 from app.skills.blueprint import save_composition_as_skill
 
@@ -2007,7 +2010,11 @@ async def execute_editor(turn, name, args):
                     conversation_id=turn.conversation_id,
                     lock_on_session=False,
                 )
-                return ToolObservation(json.dumps(result), valid_for_key=version_key)
+                return ToolObservation(
+                    json.dumps(result),
+                    valid_for_key=version_key,
+                    receipt=skill_saved_receipt(result),
+                )
             if name == "deliver_video":
                 from app.chat.editor_media import deliver_video
 

@@ -92,6 +92,7 @@ from app.chat.activity_receipts import (
     SfxImportReceipt,
     SfxSearchReceipt,
     SkillReadReceipt,
+    SkillSavedReceipt,
     VideoReviewReceipt,
     VideoRevisionReceipt,
 )
@@ -142,6 +143,7 @@ _RECEIPT_TYPES = {
     "music_search": MusicSearchReceipt,
     "music_selection": MusicSelectionReceipt,
     "skill_read": SkillReadReceipt,
+    "skill_saved": SkillSavedReceipt,
 }
 
 

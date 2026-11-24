@@ -166,6 +166,16 @@ class MusicSelectionReceipt(BaseModel):
     duration_seconds: float = Field(gt=0, allow_inf_nan=False)
 
 
+class SkillSavedReceipt(BaseModel):
+    kind: Literal["skill_saved"] = "skill_saved"
+    skill_id: str = Field(min_length=1)
+    skill_version_id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    version: int = Field(ge=1)
+    acts_count: int = Field(ge=1)
+    sfx_cues_count: int = Field(ge=0)
+
+
 ActivityReceipt = (
     VideoReviewReceipt
     | ComponentReceipt
@@ -175,6 +185,7 @@ ActivityReceipt = (
     | MusicSearchReceipt
     | MusicSelectionReceipt
     | SkillReadReceipt
+    | SkillSavedReceipt
 )
 
 
@@ -340,6 +351,20 @@ def music_selection_receipt(
         return None
 
 
+def skill_saved_receipt(facts: Mapping[str, Any]) -> SkillSavedReceipt | None:
+    try:
+        return SkillSavedReceipt.model_validate({
+            "skill_id": str(facts["skill_id"]),
+            "skill_version_id": str(facts["skill_version_id"]),
+            "name": str(facts["name"]),
+            "version": int(facts["version"]),
+            "acts_count": int(facts["acts_count"]),
+            "sfx_cues_count": int(facts.get("sfx_cues_count", 0)),
+        })
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
 __all__ = [
     "ActivityReceipt",
     "ComponentClipReceipt",
@@ -348,6 +373,7 @@ __all__ = [
     "MusicSelectionReceipt",
     "SfxImportReceipt",
     "SfxSearchReceipt",
+    "SkillSavedReceipt",
     "VideoReviewReceipt",
     "VideoRevisionReceipt",
     "component_receipt",
@@ -355,6 +381,7 @@ __all__ = [
     "music_selection_receipt",
     "sfx_import_receipt",
     "sfx_search_receipt",
+    "skill_saved_receipt",
     "video_review_receipt",
     "video_revision_receipt",
 ]

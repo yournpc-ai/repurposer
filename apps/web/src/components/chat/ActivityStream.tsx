@@ -1,8 +1,8 @@
 /** User-visible work and receipts, projected from the original transcript. */
-import { useRef, useState } from "react"
+import { lazy, Suspense, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
-import { ChevronRight, TriangleAlert } from "lucide-react"
+import { ChevronRight, Film, TriangleAlert } from "lucide-react"
 
 import type {
   ActivityReceipt,
@@ -15,6 +15,7 @@ import type {
   MusicSelectionReceipt,
   SfxImportReceipt,
   SfxSearchReceipt,
+  SkillSavedReceipt,
   ToolCallStatus,
   VideoReviewReceipt,
   VideoRevisionReceipt,
@@ -25,6 +26,12 @@ import { useMessageScrollerViewportAnchor } from "@/components/chat/MessageScrol
 import { Button } from "@/components/ui/button-clean"
 import { ThinkingState, type ThinkingTrailStep } from "@/components/ui/thinking-state-clean"
 import { cn } from "@/lib/utils"
+
+const LazySlotPreviewDialog = lazy(() =>
+  import("@/components/skills/SlotPreviewDialog").then((m) => ({
+    default: m.SlotPreviewDialog,
+  })),
+)
 
 export type { NowRowPayload } from "./timeline/types"
 
@@ -328,6 +335,45 @@ function MusicSelectionEvidence({ receipt }: { receipt: MusicSelectionReceipt })
   )
 }
 
+function SkillSavedEvidence({ receipt }: { receipt: SkillSavedReceipt }) {
+  const { t } = useTranslation()
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+      <div className="text-xs text-muted-foreground">
+        <span className="font-medium text-foreground">
+          {receipt.name} v{receipt.version}
+        </span>
+        {" · "}
+        <span>
+          {t("skills.slotPreview.receiptMeta", {
+            acts: receipt.acts_count,
+            sfx: receipt.sfx_cues_count,
+          })}
+        </span>
+      </div>
+      <Button
+        size="sm"
+        variant="secondary"
+        icon={<Film className="size-3.5" />}
+        onClick={() => setOpen(true)}
+      >
+        {t("skills.slotPreview.receiptCta")}
+      </Button>
+      {open && (
+        <Suspense fallback={null}>
+          <LazySlotPreviewDialog
+            open={open}
+            onOpenChange={setOpen}
+            skillVersionId={receipt.skill_version_id}
+            skillName={receipt.name}
+          />
+        </Suspense>
+      )}
+    </div>
+  )
+}
+
 function ActivityEvidence({ receipt }: { receipt: ActivityReceipt }) {
   switch (receipt.kind) {
     case "video_review":
@@ -344,6 +390,8 @@ function ActivityEvidence({ receipt }: { receipt: ActivityReceipt }) {
       return <MusicSearchEvidence receipt={receipt} />
     case "music_selection":
       return <MusicSelectionEvidence receipt={receipt} />
+    case "skill_saved":
+      return <SkillSavedEvidence receipt={receipt} />
   }
 }
 
@@ -469,6 +517,7 @@ function trailStep(entry: WorkTrailEntry, live: boolean, t: TFunction, onOpen?: 
   }
   const chips: string[] = []
   if (receipt?.kind === "video_revision") chips.push(`v${receipt.version}`)
+  if (receipt?.kind === "skill_saved") chips.push(`${receipt.name} v${receipt.version}`)
   if (receipt?.kind === "music_selection" || receipt?.kind === "sfx_import") chips.push(receipt.title)
   if (receipt?.kind === "music_search" || receipt?.kind === "sfx_search") chips.push(receipt.topic)
   if (row.name && !label.includes(row.name) && !chips.includes(row.name)) chips.push(row.name)
@@ -486,7 +535,11 @@ function trailStep(entry: WorkTrailEntry, live: boolean, t: TFunction, onOpen?: 
       <>
         {row.error && row.error !== job?.error && <p>{row.error}</p>}
         {job && <JobDetails job={job} onOpen={onOpen} />}
-        {receipt && <CollapsibleReceipt receipt={receipt} />}
+        {receipt && (
+          receipt.kind === "skill_saved"
+            ? <SkillSavedEvidence receipt={receipt} />
+            : <CollapsibleReceipt receipt={receipt} />
+        )}
       </>
     ) : undefined,
   }

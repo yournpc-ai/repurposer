@@ -62,21 +62,22 @@ describe("skill option filtering", () => {
     expect(builtins.map((option) => option.reference)).toEqual([
       { kind: "builtin", skill_id: "promo-video", version: "bdd94be16d60fa8f" },
       { kind: "builtin", skill_id: "talking-head-video", version: "1.0.0" },
+      { kind: "builtin", skill_id: "text-animation", version: "1.0.0" },
       { kind: "builtin", skill_id: "knowledge-explainer", version: "1.0.0" },
     ])
     const names: Record<string, string> = {
       "skills.builtin.promo-video.name": "产品推广视频制作",
       "skills.builtin.talking-head-video.name": "口播动效视频制作",
-      "skills.builtin.text-animation.name": "文字动画视频制作",
+      "skills.builtin.text-animation.name": "动态文字",
       "skills.builtin.knowledge-explainer.name": "知识讲解视频制作",
-      "skills.builtin.text-animation.shortName": "文字动画",
+      "skills.builtin.text-animation.shortName": "文字",
     }
     const t = (key: string) => names[key] ?? key
-    const historical = skillOptionForReference({ kind: "builtin", skill_id: "text-animation", version: "1.0.0" }, builtins)
-    expect(skillDisplayName(historical, t)).toBe("文字动画视频制作")
-    expect(skillDisplayName(historical, t, "short")).toBe("文字动画")
-    expect(filterSkillOptions(builtins, "文字动画", (option) => skillDisplayName(option, t)))
-      .toEqual([])
+    const textSkill = skillOptionForReference({ kind: "builtin", skill_id: "text-animation", version: "1.0.0" }, builtins)
+    expect(skillDisplayName(textSkill, t)).toBe("动态文字")
+    expect(skillDisplayName(textSkill, t, "short")).toBe("文字")
+    expect(filterSkillOptions(builtins, "动态文字", (option) => skillDisplayName(option, t)))
+      .toEqual([builtins[2]])
     expect(filterSkillOptions(builtins, "口播", (option) => skillDisplayName(option, t)))
       .toEqual([builtins[1]])
   })

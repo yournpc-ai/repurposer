@@ -30,6 +30,7 @@ from app.pipeline.routes import (
 from app.platform.configs import reconcile_configs
 from app.platform.payment_routes import router as payment_router
 from app.platform.routes import auth_router, files_router, notifications_router, wallet_router
+from app.skills.routes import skills_router
 from app.ui_locale import capture_ui_language
 
 logger = logging.getLogger(__name__)
@@ -266,6 +267,7 @@ app.include_router(distribution_router, prefix="/api/v1", tags=["distribution"])
 app.include_router(notifications_router, prefix="/api/v1", tags=["notifications"])
 app.include_router(wallet_router, prefix="/api/v1", tags=["wallet"])
 app.include_router(payment_router, prefix="/api/v1/payments", tags=["payments"])
+app.include_router(skills_router, prefix="/api/v1/skills", tags=["skills"])
 
 
 @app.get("/health")

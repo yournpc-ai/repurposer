@@ -387,6 +387,17 @@ SkillReference = Annotated[
 ]
 
 
+class SkillBlueprintSummary(BaseModel):
+    """Lightweight read-only blueprint metadata attached to slot_blueprint_v1 SkillOptions."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    act_count: int = Field(ge=1)
+    slot_count: int = Field(ge=0)
+    duration_s: float = Field(gt=0)
+    style_preset: str | None = None
+
+
 class SkillOption(BaseModel):
     """Picker metadata around the exact reference sent by composer/Home."""
 
@@ -398,6 +409,7 @@ class SkillOption(BaseModel):
     description: str = ""
     capabilities: list[str] = Field(default_factory=list)
     version_number: int | None = None
+    blueprint_summary: SkillBlueprintSummary | None = None
 
 
 class FocusRef(BaseModel):

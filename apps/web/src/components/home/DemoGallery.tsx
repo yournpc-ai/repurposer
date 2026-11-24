@@ -7,13 +7,15 @@ import { IconButton } from "@/components/ui/icon-button-clean"
 import { SegmentedControl } from "@/components/ui/segmented-control-clean"
 
 import { LANDING_GALLERY } from "@/components/landing/content"
-import type { BuiltInSkillReference } from "@/lib/skills"
+import type { SkillReference } from "@/lib/skills"
 
 interface Demo {
   src: string
   poster?: string
   title: string
   prompt: string
+  styleLabel?: string
+  templateReference?: SkillReference
 }
 
 function showcase(id: string): Demo {
@@ -45,14 +47,12 @@ const families = [
           archivedDemo("product-promo-oxvalue-energy-arc", "6f210db6"),
         ],
       },
-      { id: "course-service", demos: [] },
     ],
   },
   {
     id: "talking-head",
     sections: [
       { id: "opinion-talking-head", demos: [showcase("talking-head")] },
-      { id: "course-lecture-teaser", demos: [] },
     ],
   },
   {
@@ -72,15 +72,11 @@ const families = [
           archivedDemo("knowledge-explainer-clear-expression", "73f4a743"),
         ],
       },
-      { id: "research-report", demos: [] },
     ],
   },
-].map((family) => ({
-  ...family,
-  sections: family.sections.filter(({ demos }) => demos.length > 0),
-}))
+]
 
-function DemoCard({ demo, onPrefill }: { demo: Demo; onPrefill: (key: string) => void }) {
+function DemoCard({ demo, onPrefill }: { demo: Demo; onPrefill: (demo: Demo) => void }) {
   const { t } = useTranslation()
   const video = useRef<HTMLVideoElement>(null)
 
@@ -150,7 +146,7 @@ function DemoCard({ demo, onPrefill }: { demo: Demo; onPrefill: (key: string) =>
         className="absolute inset-0 cursor-pointer rounded-[inherit] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-white"
         onClick={() => {
           if (video.current) video.current.muted = true
-          onPrefill(demo.prompt)
+          onPrefill(demo)
         }}
       >
         <span className="demo-preview__overlay absolute inset-0 grid place-items-center bg-black/35">
@@ -175,7 +171,7 @@ function DemoCard({ demo, onPrefill }: { demo: Demo; onPrefill: (key: string) =>
   )
 }
 
-function DemoShelf({ demos, onPrefill }: { demos: Demo[]; onPrefill: (key: string) => void }) {
+function DemoShelf({ demos, onPrefill }: { demos: Demo[]; onPrefill: (demo: Demo) => void }) {
   const { t } = useTranslation()
   const track = useRef<HTMLDivElement>(null)
   const drag = useRef<{ x: number; left: number } | null>(null)
@@ -274,7 +270,7 @@ export function DemoGallery({
   onPrefill,
 }: {
   scrollRef: RefObject<HTMLDivElement | null>
-  onPrefill: (key: string, skill: BuiltInSkillReference | null) => void
+  onPrefill: (key: string, skill: SkillReference | null) => void
 }) {
   const { t } = useTranslation()
   const [family, setFamily] = useState(families[0])
@@ -402,9 +398,9 @@ export function DemoGallery({
           )}
           <DemoShelf
             demos={demos}
-            onPrefill={(key) => {
+            onPrefill={(demo) => {
               const entry = LANDING_GALLERY.find((item) => item.id === family.id)
-              onPrefill(key, entry?.skill ?? null)
+              onPrefill(demo.prompt, demo.templateReference ?? entry?.skill ?? null)
             }}
           />
         </section>

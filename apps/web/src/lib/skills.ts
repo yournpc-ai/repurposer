@@ -1,4 +1,6 @@
-import { apiFetch } from "@/lib/api"
+import type { VideoSpec } from "@repurposer/video-spec"
+
+import { API_URL, apiFetch } from "@/lib/api"
 
 /** The exact versioned Skill binding accepted by POST /chat. Skills are a
  * dedicated creation binding, never an @mention or a hidden recipe id. */
@@ -15,6 +17,19 @@ export type ExternalSkillReference = {
 
 export type SkillReference = BuiltInSkillReference | ExternalSkillReference
 
+export type StylePresetId =
+  | "institutional_dark"
+  | "swiss_paper"
+  | "vox_editorial"
+  | "kinetic_anime"
+
+export interface SkillBlueprintSummary {
+  act_count: number
+  slot_count: number
+  duration_s: number
+  style_preset?: StylePresetId | string | null
+}
+
 export interface SkillOption {
   reference: SkillReference
   skill_id: string
@@ -22,10 +37,36 @@ export interface SkillOption {
   description: string
   capabilities: string[]
   version_number?: number | null
+  blueprint_summary?: SkillBlueprintSummary | null
 }
 
 export interface ChatSkillsResponse {
   items: SkillOption[]
+}
+
+export interface SlotManifestItem {
+  slot_number: number
+  code: string
+  act_index: number
+  act_id: string
+  block_id: string
+  slot_key: string
+  kind: "text" | "image" | "metric" | "chart_point" | "message" | "callout"
+  label_zh: string
+  label_en: string
+  example_value: string
+  aspect_ratio?: string | null
+}
+
+export interface SlotPreviewResponse {
+  skill_version_id: string
+  name: string
+  duration_s: number
+  style_preset: StylePresetId
+  locale: "zh" | "en"
+  video_spec: VideoSpec
+  slots: SlotManifestItem[]
+  copyable_checklist: string
 }
 
 /** Immutable first-version identities mirrored from the deployed built-in
@@ -34,6 +75,7 @@ export interface ChatSkillsResponse {
 export const BUILTIN_SKILL_VERSIONS = {
   "promo-video": "bdd94be16d60fa8f",
   "talking-head-video": "1.0.0",
+  "text-animation": "1.0.0",
   "knowledge-explainer": "1.0.0",
 } as const
 
@@ -132,4 +174,79 @@ export function skillDisplayName(
     })
   }
   return option.name || t("skills.external")
+}
+
+function absolutizeFontUrls(spec: VideoSpec): VideoSpec {
+  const base = API_URL.replace(/\/$/, "")
+  return {
+    ...spec,
+    fonts: spec.fonts.map((font) => ({
+      ...font,
+      url: font.url.startsWith("/") ? `${base}${font.url}` : font.url,
+    })),
+  }
+}
+
+export async function fetchSlotPreview(
+  skillVersionId: string,
+  params: {
+    stylePreset?: StylePresetId
+    accentColor?: string
+    locale?: "zh" | "en"
+  } = {},
+  signal?: AbortSignal,
+): Promise<SlotPreviewResponse> {
+  const search = new URLSearchParams()
+  if (params.stylePreset) search.set("style_preset", params.stylePreset)
+  if (params.accentColor) search.set("accent_color", params.accentColor)
+  if (params.locale) search.set("locale", params.locale)
+  const qs = search.toString()
+  const res = await apiFetch(
+    `/api/v1/skills/${encodeURIComponent(skillVersionId)}/slot-preview${qs ? `?${qs}` : ""}`,
+    {
+      method: "GET",
+      toast: false,
+      signal,
+    },
+  )
+  if (!res.ok) {
+    const body = await res.json().catch(() => null)
+    const detail =
+      body && typeof body.detail === "string" ? body.detail : `HTTP ${res.status}`
+    throw new Error(detail)
+  }
+  const data = (await res.json()) as SlotPreviewResponse
+  return {
+    ...data,
+    video_spec: absolutizeFontUrls(data.video_spec),
+  }
+}
+
+export async function exportSlotPreviewMp4(
+  skillVersionId: string,
+  body: {
+    style_preset?: StylePresetId
+    accent_color?: string
+    locale: "zh" | "en"
+    include_sfx?: boolean
+  },
+): Promise<{ blob: Blob; filename: string }> {
+  const res = await apiFetch(
+    `/api/v1/skills/${encodeURIComponent(skillVersionId)}/slot-preview/export`,
+    {
+      method: "POST",
+      body,
+    },
+  )
+  if (!res.ok) {
+    const err = await res.json().catch(() => null)
+    const detail =
+      err && typeof err.detail === "string" ? err.detail : `HTTP ${res.status}`
+    throw new Error(detail)
+  }
+  const disposition = res.headers.get("content-disposition") || ""
+  const match = /filename="([^"]+)"/.exec(disposition)
+  const filename = match?.[1] || `slot-promo-${body.locale}.mp4`
+  const blob = await res.blob()
+  return { blob, filename }
 }

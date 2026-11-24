@@ -117,6 +117,32 @@ app.post("/component-bake", express.json({ limit: "64mb" }), async (req, res) =>
   }
 });
 
+// Direct MP4 render for self-contained slot-promo exports (bounded by VIDEO_MAX_FRAMES).
+// Mounted before the 8mb default JSON parser so inline wireframe PNGs + WAVs fit comfortably.
+app.post("/render-mp4", express.json({ limit: "32mb" }), async (req, res) => {
+  const parsed = videoSpecSchema.safeParse(req.body?.spec);
+  if (!parsed.success || parsed.data.family !== "video") {
+    res.status(400).json({ error: "a valid video-spec is required" });
+    return;
+  }
+  if (parsed.data.duration_frames > VIDEO_MAX_FRAMES) {
+    res.status(400).json({
+      error: `video spec ${parsed.data.duration_frames} frames exceeds cap ${VIDEO_MAX_FRAMES}`,
+    });
+    return;
+  }
+  try {
+    const { videoPath } = await renderArtifacts(
+      { direct: parsed.data },
+      (outDir) => renderVideo(parsed.data, outDir, "video"),
+    );
+    res.type("video/mp4").sendFile(videoPath);
+  } catch (err) {
+    console.error("video_render_mp4_failed", { error: err });
+    res.status(500).json({ error: "Direct MP4 rendering failed" });
+  }
+});
+
 app.use(express.json({ limit: "8mb" }));
 
 const synthesizeSfxRequestSchema = z.object({

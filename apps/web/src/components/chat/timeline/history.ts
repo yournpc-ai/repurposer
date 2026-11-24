@@ -376,6 +376,27 @@ export function parseActivityReceipt(value: unknown): ActivityReceipt | undefine
         }
       : undefined
   }
+  if (root.kind === "skill_saved") {
+    const skillId = receiptString(root.skill_id)
+    const skillVersionId = receiptString(root.skill_version_id)
+    const name = receiptString(root.name)
+    const version = receiptNumber(root.version, true)
+    const actsCount = receiptNumber(root.acts_count, true)
+    const sfxCuesCount = receiptNumber(root.sfx_cues_count)
+    return skillId && skillVersionId && name && version !== undefined && Number.isInteger(version) &&
+      actsCount !== undefined && Number.isInteger(actsCount) &&
+      sfxCuesCount !== undefined && Number.isInteger(sfxCuesCount)
+      ? {
+          kind: "skill_saved",
+          skill_id: skillId,
+          skill_version_id: skillVersionId,
+          name,
+          version,
+          acts_count: actsCount,
+          sfx_cues_count: sfxCuesCount,
+        }
+      : undefined
+  }
   return undefined
 }
 

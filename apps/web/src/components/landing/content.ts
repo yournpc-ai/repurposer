@@ -30,7 +30,7 @@ export const LANDING_GALLERY: readonly LandingGalleryItem[] = [
   },
   {
     id: "text-animation",
-    skill: null,
+    skill: { kind: "builtin", skill_id: "text-animation", version: "1.0.0" },
     videoUrl:
       "https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/text-short-genesis-25aa61fa.mp4",
     posterUrl: "/gallery/text-short-genesis-25aa61fa.jpg",

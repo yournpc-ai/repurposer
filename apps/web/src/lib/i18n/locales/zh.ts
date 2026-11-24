@@ -615,6 +615,35 @@ const zh: Resources = {
   // @-提及系统（MENTIONS §4）：picker 文案与类型名。
   skills: {
     external: "外部 Skill",
+    picker: {
+      creationModes: "创作模式",
+      templates: "我的与精选模板",
+      blueprintMeta: "{{acts}} 幕 · {{slots}} 槽位",
+      styles: {
+        institutional_dark: "深墨权威",
+        swiss_paper: "瑞士纸面",
+        vox_editorial: "Vox 报刊",
+        kinetic_anime: "动能海报",
+      },
+    },
+    slotPreview: {
+      openAction: "预览编号槽位宣传片",
+      title: "编号槽位宣传片",
+      description: "按原模板节奏与转场实时预览全部 [01]..[N] 可替换槽位，支持一键切换风格与导出 1080p MP4。",
+      styleLabel: "视觉风格",
+      localeLabel: "槽位文案语言",
+      checklistTitle: "槽位清单（{{count}}）",
+      durationMeta: "{{duration}}s · {{count}} 个槽位",
+      copyChecklist: "复制社媒清单",
+      copiedChecklist: "已复制槽位清单到剪贴板",
+      exportMp4: "导出 1080p MP4",
+      exportingMp4: "正在渲染导出…",
+      exportSuccess: "1080p 编号槽位宣传片已开始下载",
+      loadError: "加载槽位预览失败",
+      retry: "重试",
+      receiptMeta: "{{acts}} 幕 · {{sfx}} 个音效点",
+      receiptCta: "编号槽位宣传片",
+    },
     builtin: {
       // 仅保留当前可调用的内部视频 Skill。
       "promo-video": {
@@ -628,9 +657,9 @@ const zh: Resources = {
         description: "把真实录像制作成带时间字幕的竖屏口播视频。",
       },
       "text-animation": {
-        name: "文字动画视频制作",
-        shortName: "文字动画",
-        description: "把你的原文制作成可继续编辑的原生文字动画。",
+        name: "动态文字",
+        shortName: "文字",
+        description: "以节拍为主时钟，组合风格包、动效幕、行业文字预设与音效，把观点或宣发文案做成高张力动态文字短片。",
       },
       "knowledge-explainer": {
         name: "知识讲解视频制作",

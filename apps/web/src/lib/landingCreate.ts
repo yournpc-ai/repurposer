@@ -30,7 +30,7 @@ export function consumeLandingCreate(): LandingCreateHandoff | null {
     ) {
       return null
     }
-    return { promptKey: value.promptKey, skill: value.skill?.skill_id === "text-animation" ? null : value.skill }
+    return { promptKey: value.promptKey, skill: value.skill ?? null }
   } catch {
     return null
   }

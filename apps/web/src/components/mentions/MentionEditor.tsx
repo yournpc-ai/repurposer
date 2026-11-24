@@ -1,6 +1,8 @@
 "use client"
 
 import {
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useImperativeHandle,
@@ -31,6 +33,12 @@ import {
   skillTriggerQuery,
   type SkillOption,
 } from "@/lib/skills"
+
+const LazySlotPreviewDialog = lazy(() =>
+  import("@/components/skills/SlotPreviewDialog").then((m) => ({
+    default: m.SlotPreviewDialog,
+  })),
+)
 
 /**
  * 提及编辑器 (MentionEditor) — the full-form mention input (docs/tasks/
@@ -580,6 +588,12 @@ export function MentionEditor({
     return () => document.removeEventListener("selectionchange", handler)
   }, [])
 
+  const [slotPreviewTarget, setSlotPreviewTarget] = useState<{
+    skillVersionId: string
+    name: string
+    defaultStylePreset?: string | null
+  } | null>(null)
+
   return (
     <>
       {picker?.kind === "mention" && (
@@ -600,7 +614,29 @@ export function MentionEditor({
           position={picker.rect}
           onSelect={selectSkill}
           onClose={() => setPicker(null)}
+          onPreviewSlotPromo={(option) => {
+            if (option.reference.kind !== "external") return
+            setPicker(null)
+            setSlotPreviewTarget({
+              skillVersionId: option.reference.skill_version_id,
+              name: option.name,
+              defaultStylePreset: option.blueprint_summary?.style_preset ?? null,
+            })
+          }}
         />
+      )}
+      {slotPreviewTarget && (
+        <Suspense fallback={null}>
+          <LazySlotPreviewDialog
+            open
+            onOpenChange={(nextOpen) => {
+              if (!nextOpen) setSlotPreviewTarget(null)
+            }}
+            skillVersionId={slotPreviewTarget.skillVersionId}
+            skillName={slotPreviewTarget.name}
+            defaultStylePreset={slotPreviewTarget.defaultStylePreset}
+          />
+        </Suspense>
       )}
       {/* React renders NO children here — the DOM owns text and inline chips. */}
       <div
