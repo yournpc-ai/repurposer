@@ -4,23 +4,35 @@
 
 ## 现役来源与操作
 
-后台已实现下列来源。普通编辑/创作轮已开放曲库候选投影、11 个活体验证 MiniMax `speech-2.6-hd` 音色、多 `effect` 轨避撞、库曲映射 `music` 轨与 `edit_audio_clip(clip_id, gain_db?, source_id?)` 单实例修订；Batch 2 在此基础上补充 `edit_audio_clip` 的 `audio.gain` 淡入淡出/分段闪避与 `swoosh_cut` 过渡配方。[工具注册](../apps/api/app/chat/turn_tools.py) · [每轮实际投影](../apps/api/app/chat/prompts.py) · [Batch 2 合同](tasks/batch2-multiscene-skill.md)
+后台已实现下列来源。普通编辑/创作轮已开放曲库候选投影、11 个活体验证 MiniMax `speech-2.6-hd` 音色、多 `effect` 轨避撞、库曲映射 `music` 轨与无断缝多段连续循环铺底（首段淡入、末段淡出，零协议新增字段）、以及 `edit_audio_clip(clip_id, gain_db?, source_id?, fade_in_seconds?, fade_out_seconds?, duck_windows?)` 单实例修订。[工具注册](../apps/api/app/chat/turn_tools.py) · [每轮实际投影](../apps/api/app/chat/prompts.py) · [Batch 2 合同](tasks/batch2-multiscene-skill.md)
 
 | 内容 | 如何取得来源 | 如何进入作品 |
 |---|---|---|
-| BGM 配乐 | 从可访问的 Music 库搜索，或用 `show_music_candidates` 试听、`select_music` 解析持久化的候选。需要原创配乐时，`generate_music` 经 MediaJob 将受控乐谱合成为 WAV | 库曲经 `prepare_video_materials(material_music_ids=…)` 固定音频并映射为 `music` 轨。程序化配乐保存乐谱引用、版本、音频摘要和项目快照。Agent 再用 `insert_audio` 指定入点、时长和增益 |
-| Voice 旁白 | `generate_voice` 经 MediaJob 调用现役 MiniMax `speech-2.6-hd`（支持 `en/zh/fr/de/es/it` 与多组精选商业/学术音色）合成语音，回执含固定音频、台词和对齐身份 | 独立录音可用 `insert_audio`。已有待配音 Clip 可用 `bind_clip_source` 绑定匹配来源，SpeechObject 保留台词和对齐语义 |
-| SFX 音效 | **主力来源**：洁净室共享纯 TS 分层引擎 `@repurposer/sound-engine` 经 `generate_sfx` 确定性合成 48 kHz 立体声 WAV 并固定为项目 `SourceSnapshot`（0 新 SQL 表）。**可选外部来源**：Freesound（`search_sfx` / `import_sfx`，CC0 复核） | 固定快照经 `insert_audio` 落入空闲 `effect` 轨（支持同幕多音效重叠不撞轨）；单实例调增益或仅替换目标音效音源走 `edit_audio_clip`，保留其他同源实例与旧版本 |
+| BGM 配乐 | 从可访问的 Music 库搜索，或用 `show_music_candidates` 试听、`select_music` 解析持久化的候选。需要原创配乐时，`generate_music` 经 MediaJob 将受控乐谱合成为 WAV | 库曲经 `prepare_video_materials(material_music_ids=…)` 固定音频并映射为 `music` 轨；短于作品总长的 BGM 自动按连续标准 `Clip` 无缝循环铺满，首段淡入、末段淡出（保存为 Skill 时保留首尾淡变）。旁白下 BGM 常规压低至 `−24 ~ −26 dB` |
+| Voice 旁白 | `generate_voice` 经 MediaJob 调用现役 MiniMax `speech-2.6-hd`（支持 `en/zh/fr/de/es/it` 与 11 组商业/学术音色）合成语音，回执含固定音频、台词和对齐身份 | 独立录音可用 `insert_audio`，多幕旁白留 `0.4–0.6s` 呼吸气口避免撞车。已有待配音 Clip 可用 `bind_clip_source` 绑定匹配来源，SpeechObject 保留台词和对齐语义 |
+| SFX 音效 | **主力来源**：洁净室共享纯 TS 分层引擎 `@repurposer/sound-engine` v2（`SOUND_ENGINE_VERSION = 2`，22 个配方）经 `generate_sfx` 确定性合成 48 kHz 立体声 WAV 并固定为项目 `SourceSnapshot`（0 新 SQL 表）。**可选外部来源**：Freesound（`search_sfx` / `import_sfx`，CC0 复核） | 固定快照经 `insert_audio` 落入空闲 `effect` 轨（支持同幕多音效重叠不撞轨）；单实例调增益或仅替换目标音效音源走 `edit_audio_clip`，保留其他同源实例与旧版本 |
 
-## 共享纯 TS 分层音效引擎（`@repurposer/sound-engine`）
+## 共享纯 TS 分层音效引擎（`@repurposer/sound-engine` v2）
 
-**现行架构（替代原独立 Python 脚本，0 新 SQL 表）。** 洁净室编写零 DOM、纯数学 TypeScript 共享包 `packages/sound-engine`，直接输出 48 kHz 双声道 `Float32Array` 与 PCM16 WAV：
+**现行架构（`SOUND_ENGINE_VERSION = 2`，0 新 SQL 表，零浏览器依赖）。** 洁净室编写纯数学 TypeScript 共享包 `packages/sound-engine`，直接输出 48 kHz 双声道 `Float32Array` 与 PCM16 WAV：
 
-- **前后端同构**：前端 React Studio（`apps/web`）直接导入 `@repurposer/sound-engine` 通过 `AudioContext.createBuffer()` 实时试听与调参；服务端通过现役 Node 服务 `apps/render` 的轻量内部端点 `/synthesize-sfx` 运行完全相同的 TS 代码，**无需 Headless Chrome 或 `OfflineAudioContext`**，前后端逐采样确定性一致。
-- **可演进分层模型**：内部采用声明式 `Layer[]` 合成图（oscillator + pitch envelope / seeded noise / biquad filter / ADSR / stereo pan / early reflections / limiter），对外暴露少量直觉化宏旋钮（`pitch`、`tone`、`length`/`duration`、`space`、`punch` 等）。首批内置 5 个洁净室原创配方：`whoosh`、`impact`、`click`、`riser`、`stinger`（吸收原声学研究参数经验，不复制任何外部代码或预设）。
-- **统一二级分类 Catalog 元数据**：每个配方声明 `domain`（`video` | `interface`）、`category`（`motion` / `impact` / `riser` / `stinger` / `transition` / `tap` / `select` / `toggle` / `feedback`）、`name`、`desc`、`use_for`、`avoid`、`suggested_duration_ms`、`sync_cue`（如 `energy_peak` / `onset`）。**发现与决策元数据绝不参与 WAV/spec 摘要哈希**，避免优化提示词文案导致音频缓存失效。
-- **持久身份与零新表**：`SourceSnapshot.meta.origin` 保存带版本的 Typed JSON（`schema_version`, `kind: "sound_recipe"`, `engine`, `recipe_id`, `recipe_version`, `params`, `seed`, `acoustics`, `wav_digest`）。`generate_sfx` 按 `owner/project/spec_digest` 单飞去重，本地零积分快速路径免付费确认弹窗，仍严格遵守 opening/call 幂等、Stop 边界与恢复契约。
-- **结构化声学特征（解决无原生音频理解模型的“聋子”问题）**：每个生成回执携带确定性声学指标（`duration_ms`、`peak_offset_ms`、`spectral_centroid_hz`、RMS/Peak）；`preview_range` 同步输出时间窗能量与旁白/音效重叠掩蔽提示，使当前 MiniMax 等无原生听觉模型也能准确卡点与控制电平。确定性指标不冒充主观听感，成片仍需人工或具备听觉能力的多模态模型听评。
+- **前后端同构与零降级 DSP**：前端与服务端（`apps/render` 内部端点 `/synthesize-sfx`）运行完全相同的纯 TS 代码，**无需 Headless Chrome 或 `OfflineAudioContext`**，同参数同 seed 逐字节一致。v2 DSP 内核包含：
+  - **抗混叠多声部振荡器**：`sine` / `triangle` / PolyBLEP 抗混叠 `sawtooth` & `square`，支持 `1..8` voices 微失谐（`detune`）与自动对称立体声展开、曲线频率斜坡；
+  - **三色确定性噪声**：高斯 `white`、Paul Kellet 7 态 `pink`、12 Hz 泄漏积分 `brown`；
+  - **滤波与多段包络**：Audio EQ Cookbook 5 模双二阶滤波器（`lowpass` / `highpass` / `bandpass` / `peaking` / `notch`）+ 总线高/低通，支持带曲率的 `attack / rise / hold / decay / release`；
+  - **立体声空间与母带**：左右声道独立互质延迟的 4 路阻尼梳状 + 2 级 Moorer 格型 Schroeder 全通算法混响（`predelayMs` / `decaySec` / `dampHz` / `mix`）+ M/S 立体声宽度（`width`）；ITU-R BS.1770-4 K 加权积分响度（`lufs`）+ 24-tap Blackman-sinc 4 倍过采样真峰值检测 + 2 ms 前瞻立体声联动柔和限幅（峰值精准归一至 `−2.0 dBFS`，真峰值 `≤ −1.8 dBTP`）+ 升余弦无爆音残余直流归零。
+- **22 个洁净室工作室配方（长影视 + 短交互全覆盖）**：
+  - 保留并升级的 6 个基础配方（5 参数 `length/pitch/tone/punch/space`）：`whoosh`、`impact`、`click`、`riser`、`stinger`、`swoosh_cut`；
+  - 新增 16 个面向知识专家与产品演示的克制配方（3 参数 `length/pitch/space`）：
+    - Risers：`sub_swell`、`shimmer_lift`
+    - Impacts & Drops：`deep_hit`、`sub_drop`、`kinetic_thud`
+    - Whooshes & Transitions：`velvet_pass`（零高音齿音，不抢人声）、`page_turn`
+    - Titles & Accents：`title_bloom`、`metric_chime`、`callout_ping`
+    - Ambience & Tension：`studio_air`、`pulse_bed`
+    - Interface 微交互：`soft_pop`、`toggle_on`、`select_tick`、`confirm_chime`
+- **统一二级分类 Catalog 与 TS↔Python 零漂移校验**：每个配方声明 `domain`（`video` | `interface`）、`category`、`name`、`desc`、`use_for`、`avoid`、`suggested_duration_ms`、`sync_cue`（`onset` / `energy_peak` / `end_peak`）。**发现元数据绝不参与 WAV/spec 摘要哈希**；核心测试通过一次 Node 子进程强制校验 TS 与 Python 侧全部 22 个目录项、边界舍入及 canonical JSON SHA-256 逐字节一致。
+- **商业级多轨声音堆叠规范**：避免 1 条平铺 BGM 配 2–3 声孤立滴答的单薄感；60 秒旗舰片与首页模板推荐按节拍分层叠加（`BGM 铺底 + 切点前 1.0–1.5s 长 Riser/Sub Swell 铺垫 + 切点第 0 帧 Deep Hit/转场音效砸点 + 幕内 Callout Ping/Metric Chime/Soft Pop 跟随字幕微点缀 + 痛点转折 Sub Drop 配合 BGM 短暂闪避留白`），旁白下常规点缀控制在 `−14 ~ −10 dB`。
+- **结构化声学特征（解决无原生听觉模型的盲剪问题）**：回执携带 `duration_ms`、`peak_offset_ms`、`peak_dbfs`、`rms_dbfs`、`lufs`、`spectral_centroid_hz` 与 32 段波形包络；`preview_range` 同步输出音频能量窗与掩蔽警告。确定性指标不冒充主观听感，成片仍须实听验收。
 
 ReactBits Sound Lab 仅作交互、分类与分层参数设计参考。其 MIT + Commons Clause 限制独立再分发声音包及托管实质相似工具，**严禁复制其源码、音效或预设进入生产**。原有 3 配方 Python 研究证据保留归档于 [audio-study](experiments/renderer-aac/audio-study/REPLAY.md)。已有乐谱合成、快照、播放器和导出按需复用，音效沿用同一音轨模型与 ToolLoop。[现有配乐合成](../apps/api/app/tools/music/score.py) · [固定音频及乐谱来源](../apps/api/app/tools/video/music_preparation.py)
 

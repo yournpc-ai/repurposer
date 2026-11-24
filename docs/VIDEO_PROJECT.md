@@ -294,19 +294,42 @@ Scene 只组织叙事范围，不限定为“文字幕/网页幕/视频幕”，
 
 视觉布局与时间编辑继续落到 Clip/Object；已有原声关联、字幕对齐等上游事实保留来源。原生对象可由后续 Inspector 编辑；生成或程序媒体只能编辑对外暴露的参数及布局/裁切等外部属性，不虚构内部元素可编辑性。
 
-### 4.3.2 双层视觉创作：`MotionBlockObject`（现役主力）与 `GeneratorObject`（受控烘焙）
+### 4.3.2 三层合流视觉架构：`engine/` 底座、`MotionBlockObject`（Layer 1）与 `GeneratorObject → Skill`（Layer 2）
 
-专业 MG 视觉采取**双层并存架构**，不把系统锁死为固定模板，也不为高频组件强行承担不可部署的沙箱与不透明烘焙成本：
+Rookie Cut 的视觉与模板体系采取**三层正交合流架构**，同时兼顾“99% 商业稳定性 / 零漂移单实例修改 / 一键换料传播”与“自由代码无限创意上限”：
 
-1. **Layer 1 · 原生参数化 `MotionBlockObject`（Path β，现役主力）**：
-   - 高频高完成度 MG（动态排版标题、产品 UI 展示卡、数据指标卡等）作为第一方审计组件进入共享 `@repurposer/video-remotion`，通过 `MotionBlockObject` 随 `CompositionVersion` 保存。
-   - 原生库含 13 块。标题、产品展示、独立指标与收尾沿用 `statement_hook`、`kinetic_title`、`product_showcase`、`metric_grid`、`closing_cta`。问答与双端截图用 `chat_demo`、`device_mockup`，机制、对照、步骤与能力分别用 `flow_diagram`、`split_compare`、`step_timeline`、`bento_features`，同单位数据与署名引文用 `data_chart`、`quote_proof`。
-   - Slot 蓝图保留样式、单幕切点后的秒数和分组内逐项节拍。换料按位置继承时间，新内容可显式覆盖。双端样机按主屏、手机顺序绑定新项目的 1–2 张固定截图。对话、数值、单位、引文及所有截图标识均由目标项目重新提供。
-   - **统一二级分类 Catalog 元数据**（0 新 SQL 表，静态注册表承载）：每个 Block 声明 `domain`（`text` | `product` | `visuals`）、`category`（如 `titles_and_phrases`、`interfaces`、`charts_and_numbers`、`agents_and_flows`、`endings_and_cta`）、`name`、`desc`、`use_for`、`avoid`、`supports_alpha`、`suggested_duration_s`、`required_slots` / `optional_slots`。**这些发现与决策元数据绝不进入 `content_digest` 或缓存哈希**，优化文案不破坏历史缓存。
+0. **Layer 0 · 渲染器中立的共享引擎底座（已完成）**：
+   - `packages/video-remotion/src/engine/`（仅 ~225 行，**零 Remotion 运行时依赖、零实时时钟与随机数**）提供全系共享的帧确定性数学曲线（`math.ts`）、4 种舞台氛围背景（`backdrop.tsx`：`ambient_mesh` / `architectural_grid` / `editorial_paper` / `clean`）、5 种 3D 透视与滚屏虚拟镜头（`camera.ts`：`flat` / `tilt_left` / `tilt_right` / `dolly_zoom` / `scroll_reveal`）、同平面 DOM 像素级虚拟光标与点击涟漪（`cursor.tsx`，误差 `< 1 px`）以及 5 种电影级转场（`transitions.ts`：`crossfade` / `whip_pan` / `wipe_reveal` / `zoom_through` / `iris_focus`）。
+   - 与 `video-spec` 多轨时间轴（支持并行 B-Roll `image`/`video` 轨、独立字幕 `TextPart` 轨与 `sound-engine` v2 多轨堆叠混音）解耦，未来更换底层渲染器无需重写动效与块层。
+1. **Layer 1 · 13 个原生参数化 `MotionBlockObject` + `slot_blueprint_v1`（现役主力，基础原语已封顶）**：
+   - 高频高完成度 MG 作为第一方审计组件模块化存放于 `packages/video-remotion/src/blocks/`（同样零 Remotion 运行时依赖，由 `MotionBlocks.tsx` 统一路由），通过 `MotionBlockObject` 随 `CompositionVersion` 保存，扛起 85% 商业产品/知识讲解刚需与零漂移单实例修订。
+   - 原生库共 13 块：`statement_hook`、`kinetic_title`、`product_showcase`（支持 3D 镜头、长页滚屏、虚拟光标与多步 DOM `callout_steps`）、`metric_grid`、`closing_cta`、`chat_demo`、`device_mockup`（桌面+手机双端截屏）、`flow_diagram`、`split_compare`、`step_timeline`、`bento_features`、`data_chart`、`quote_proof`。所有块均支持幕内时间节拍点（`reveal_at_s` / `at_s` / `highlight_at_s`）随旁白逐拍响应。
+   - **商业 Slot 模板闭环与“编号 Slot 预览生成工具”**：`save_composition_as_skill` 剥离全部源站品牌文案、数值、网址与 DOM 坐标，仅保留样式、转场、镜头、多轨声效与逐项节拍（支持最多 24 幕 / 48 音效 / 60 秒模板）；`instantiate_skill_blueprint` 按位置继承节拍并接受新项目素材、DOM `element_id` 与显式时间覆盖。**首页 Tabs Demo 仅展示最高质感成品大片 + hover `Use Prompt`**，不展示编号占位图；**数字编号 Slot 预览片（`[01]..[N]`）是面向 Template / Skill 的独立生成工具**，供创作者或官方将自己的模板渲染成带槽位编号的演示片发到社媒引流传播。
+   - **统一二级分类 Catalog 元数据**（0 新 SQL 表，静态注册表承载）：`domain` / `category` / `name` / `desc` / `use_for` / `avoid` / `supports_alpha` / `suggested_duration_s` / `required_slots` / `optional_slots`。**发现与决策元数据绝不进入 `content_digest` 或缓存哈希**，优化文案不破坏历史缓存。
    - 外部 21st.dev Video Blocks 仅作设计范式、动效曲线与分类体系参考；实际引入外部组件源码须逐件核对商业授权与依赖合规，不得将第一方原创组件冒充已集成 21st 源码。
-2. **Layer 2 · 可再生产 `GeneratorObject`（`draw-2d` / `image-generation` / 未来 Linux 沙箱下的 `remotion-project`）**：
-   - 复杂自由图形与模型生成画面仍使用 `GeneratorObject` 保留来源与参数，经上游固定为媒体参与合成。外层位置时间、已暴露参数、修改源码再烘焙属于三个独立编辑范围。
+2. **Layer 2 · 自由代码创意幕 `GeneratorObject` → 固化为可传播 Skill（创意天花板突破口）**：
+   - 复杂定制创意奇观（如聚光灯扫图揭秘、粒子爆发、定制 SVG/Canvas 视觉叙事）继续通过受控沙箱的 `GeneratorObject`（`draw-2d` / `image-generation` / `remotion-project`）生产，作为普通 Clip 接入 Layer 0 多轨时间轴，与原生文字、旁白、B-Roll 和多轨音效混编。
+   - **核心战略飞轮（Skill = 自由代码到稳定 Block 的编译器）**：自由代码单次生成受模型随机性与渲染环境影响（必须强制经过抽帧视觉 Eval 闭环自查修复）；一旦创作者或官方工作室在 Chat 中将其打磨验证通过，通过 `Skill` 将其源码摘要与 typed `props_schema` 冻结参数化为可换料 Slot，下游用户点击 `Use Prompt` 即可获得与 Layer 1 原生 Block 同等的 99% 确定性复现体验。
    - 自有薄渲染核心 C 保留研究结论，暂不替换生产 Renderer；现役写口、`video-spec` 和 Generator 隔离继续生效。候选证据与替换条件见 [Rendering §7](RENDERING.md#7-渲染器替换)。
+
+### 4.3.3 产品层与代码层概念边界（正交四层，禁止混用）
+
+| 层级 / 对外术语 | 代码层真实载体 | 面向用户的含义与职责 |
+|---|---|---|
+| **Workflow Skill（制片工种 / 创作方法论）** | 内置 `SKILL.md` 技能包（`promo-video`、`talking-head-video`、`knowledge-explainer`、`text-animation`） | 定义**这一品类如何从零制作**（如口播必须保留真人原声、宣传片先采集真实官网证据），不锁死固定幕数；在 `/` 菜单中作为「创作模式」存在 |
+| **Template / Blueprint（具象复刻模板）** | `UserSkill` + `SkillVersion`（含 `SKILL.md` + 脱敏 `references/blueprint.json`，`slot_blueprint_v1`） | 由一条打磨完毕的标杆作品固化的**可一键换料结构母版**（锁定幕数、节拍、转场与可替换槽位）；可由独立工具渲染**编号 Slot 宣传片**用于社媒分发，首页 Tabs 则只展示成品示范片 + hover `Use Prompt` |
+| **Style（一等公民视觉与声音风格包）** | `CompositionStyle`（计划挂在 `CompositionContent.settings.style` 与 `SkillBlueprintV1.style`，**0 新 SQL 表**） | **正交独立于叙事模板的美学属性**（如 `vox_editorial` / `institutional_dark` / `swiss_paper` / `kinetic_anime`）：统管调色、底纹、字体、字幕样式、默认运镜、转场偏好与音效色盘；单幕 Block 默认继承整片 Style，局部需要时覆盖。支持 `Template × Style` 自由组合（如「Vox 风格的产品宣传片模板」）与自然语言一键整片换装 |
+| **Block（原生镜头积木，系统内部原语）** | `MotionBlockObject`（13 个原生块）+ 未来固化后的自由代码 Skill 块 | 组成单个场景/幕的**最小可编辑画面单元**；普通用户无需学习 Block 名字，只通过自然语言修改具体一幕 |
+
+### 4.3.4 主时钟双管线（Beat Sheet）与视觉自检闭环（Eval Layer）
+
+所有视频创作遵循同一条大道至简的剪辑循环（`备料 → 确立主时钟与节拍骨架 → 多层上轨与属性编排 → 真实预览自检 → 迭代`），仅按片型区分**主时钟（Master Clock）**：
+- **旁白对齐轴（Narration-Led，如产品宣传片 / 知识科普 / 口播）**：先定讲稿并生成/对齐旁白 → 以实测句词时间轴与 `0.4–0.6s` 幕间气口为**节拍骨架（Beat Sheet）** → 围绕每句讲解编排 Motion Block、B-Roll 图文叠层与避让人声的多轨 BGM/音效；
+- **节拍/音乐网格轴（Beat-Led，如无旁白预告 / 高燃快剪 / 动态文字短片）**：先定配乐或视觉节奏锚点（如 `0.0s / 1.75s / 2.85s / 5.5s`）形成**节拍骨架** → 所有视觉切镜、文字冲击、转场与多轨长短音效严格对齐节拍锚点。
+
+自由代码与复杂多幕编排绝不“盲渲交卷”：
+- **确定性前置校验**：编译器与渲染前拦截非法 props、越界时间、转场透明漏底、DOM `element_id` 缺失、音频削波与真峰值超限；
+- **关键帧视觉回看闭环**：每完成关键编辑或自由代码渲染后，经 `preview_range` / `review_video` 抽取真实渲染帧（入场中段、幕内节拍点、定格态、转场中点）与音频窗口能量/掩蔽报告，由模型对照目标自行发现并修复黑屏、离屏 Canvas 丢帧、遮字、框选偏移或旁白撞车，验收通过后方进入正式交付。
 
 `draw-2d` 已冻结以下最小语义；后续消费者按实际需求扩展，不预建函数注册平台：
 
