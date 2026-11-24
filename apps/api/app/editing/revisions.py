@@ -62,8 +62,8 @@ from app.editing.text_presets import (
     TEXT_STYLE_PRESETS,
     TextBackgroundMode,
     TextStylePresetId,
-    copy_text_preset_token,
     default_caption_text_style,
+    resolve_text_preset_token,
     text_style_from_token,
     text_style_updates_from_token,
 )
@@ -1191,13 +1191,7 @@ def _resolve_text_style_for_insert(
     )
 
     if preset_id is not None:
-        token = copy_text_preset_token(TEXT_STYLE_PRESETS[preset_id])
-        if (
-            preset_id == "lower_third_tag"
-            and style_tokens is not None
-            and token["border"] is not None
-        ):
-            token["border"]["color"] = style_tokens["accent"]
+        token = resolve_text_preset_token(preset_id, style_tokens)
         style = text_style_from_token(
             token, font_size=eff_size, align=eff_align, line_height=1.3
         )
@@ -1894,13 +1888,7 @@ def edit_text_ops(
 
         style_updates: dict[str, Any] = {}
         if preset_id is not None:
-            token = copy_text_preset_token(TEXT_STYLE_PRESETS[preset_id])
-            if (
-                preset_id == "lower_third_tag"
-                and style_tokens is not None
-                and token["border"] is not None
-            ):
-                token["border"]["color"] = style_tokens["accent"]
+            token = resolve_text_preset_token(preset_id, style_tokens)
             style_updates.update(text_style_updates_from_token(token))
 
         if clear_background:

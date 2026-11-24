@@ -241,3 +241,26 @@ export function cloneTextStylePresetToken(token: TextStylePresetToken): TextStyl
     secondary_line_opacity: token.secondary_line_opacity,
   };
 }
+
+export interface TextPresetStyleContext {
+  theme: "dark" | "light";
+  ink: string;
+  canvas_bg: string;
+  accent: string;
+}
+
+export function resolveTextPresetToken(
+  presetId: TextStylePresetId,
+  styleTokens?: TextPresetStyleContext | null,
+): TextStylePresetToken {
+  const token = cloneTextStylePresetToken(TEXT_STYLE_PRESETS[presetId]);
+  if (!styleTokens) return token;
+  if (presetId === "lower_third_tag" && token.border !== null) {
+    token.border.color = styleTokens.accent;
+  } else if (presetId === "bilingual_cinema" && styleTokens.theme === "light") {
+    token.color = styleTokens.ink;
+    token.stroke = { color: styleTokens.canvas_bg, width: 3.5 };
+    token.shadow = null;
+  }
+  return token;
+}

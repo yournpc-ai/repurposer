@@ -337,6 +337,23 @@ def copy_text_preset_token(token: TextStylePresetToken) -> TextStylePresetToken:
     }
 
 
+def resolve_text_preset_token(
+    preset_id: TextStylePresetId,
+    style_tokens: dict[str, Any] | None = None,
+) -> TextStylePresetToken:
+    """Expand a static text preset with optional CompositionStyle theme/accent awareness."""
+    token = copy_text_preset_token(TEXT_STYLE_PRESETS[preset_id])
+    if style_tokens is None:
+        return token
+    if preset_id == "lower_third_tag" and token["border"] is not None:
+        token["border"]["color"] = style_tokens["accent"]
+    elif preset_id == "bilingual_cinema" and style_tokens.get("theme") == "light":
+        token["color"] = style_tokens["ink"]
+        token["stroke"] = {"color": style_tokens["canvas_bg"], "width": 3.5}
+        token["shadow"] = None
+    return token
+
+
 def text_style_updates_from_token(token: TextStylePresetToken) -> dict[str, Any]:
     """Convert a closed preset/caption token into TextStyle field updates."""
     from app.editing.schemas import TextBorder, TextShadow, TextStroke

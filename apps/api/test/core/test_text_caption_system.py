@@ -934,3 +934,96 @@ def test_catalog_prompt_index_exposes_all_11_text_style_presets():
         assert item["name"]
         assert item["use_for"]
         assert item["visual_signature"]
+
+
+def test_bilingual_cinema_theme_awareness_and_py_ts_resolver_parity():
+    from app.editing.edits import apply_ops
+    from app.editing.revisions import insert_text_ops
+    from app.editing.styles import resolve_style_tokens
+    from app.editing.text_presets import resolve_text_preset_token
+
+    def _make_content(style: CompositionStyle | None) -> CompositionContent:
+        bg = resolve_style_tokens(style)["canvas_bg"] if style else "#0A0F16"
+        return CompositionContent(
+            settings=VersionSettings(width=1920, height=1080, background=bg, style=style),
+            timeline=Timeline(tracks=[Track(track_id="trk_main", kind="visual", role="main", order=0, clips=[])]),
+        )
+
+    # 1. insert_text with bilingual_cinema on light themes -> dark ink + light canvas halo + shadow=None
+    for preset_id, expected_ink, expected_bg in (
+        ("vox_editorial", "#141413", "#F4EFE2"),
+        ("swiss_paper", "#111820", "#F6F5F0"),
+    ):
+        base = _make_content(CompositionStyle(preset_id=preset_id))
+        ops, _ = insert_text_ops(
+            base,
+            text="双语字幕清晰可读\nCrisp bilingual captions on light paper",
+            start=0,
+            end=180000,
+            clip_id="clp_bi",
+            object_id="obj_bi",
+            role="caption",
+            preset_id="bilingual_cinema",
+        )
+        updated = apply_ops(base, ops, {})
+        st = next(c for t in updated.timeline.tracks for c in t.clips if c.clip_id == "clp_bi").object.style
+        assert st.color == expected_ink
+        assert st.stroke == TextStroke(color=expected_bg, width=3.5)
+        assert st.shadow is None
+        assert st.weight == 700
+        assert st.background is None
+        assert st.secondary_line_scale == 0.72
+        assert st.secondary_line_opacity == 0.86
+
+        # edit_text produces the exact same light-theme bilingual_cinema style
+        re_styled, _ = edit_text(
+            updated, scope="clip", clip_id="clp_bi", preset_id="clean_broadcast"
+        )
+        re_bi, _ = edit_text(
+            re_styled, scope="clip", clip_id="clp_bi", preset_id="bilingual_cinema"
+        )
+        st2 = next(c for t in re_bi.timeline.tracks for c in t.clips if c.clip_id == "clp_bi").object.style
+        assert st2.color == expected_ink
+        assert st2.stroke == TextStroke(color=expected_bg, width=3.5)
+        assert st2.shadow is None
+
+    # 2. Dark theme and style=None keep white ink + dark halo + soft shadow
+    for style in (CompositionStyle(preset_id="institutional_dark"), None):
+        base = _make_content(style)
+        ops, _ = insert_text_ops(
+            base,
+            text="双语字幕\nBilingual on dark",
+            start=0,
+            end=180000,
+            clip_id="clp_bi_dark",
+            object_id="obj_bi_dark",
+            role="caption",
+            preset_id="bilingual_cinema",
+        )
+        updated = apply_ops(base, ops, {})
+        st = next(c for t in updated.timeline.tracks for c in t.clips if c.clip_id == "clp_bi_dark").object.style
+        assert st.color == "#FFFFFF"
+        assert st.stroke == TextStroke(color="#0A0F16", width=3.5)
+        assert st.shadow == TextShadow(color="#0A0F16", offset=(0.0, 2.0), blur=10.0)
+        assert st.secondary_line_scale == 0.72
+        assert st.secondary_line_opacity == 0.86
+
+    # 3. Verify Python <-> TS zero drift for resolve_text_preset_token across styles
+    cases = [
+        ("bilingual_cinema", None),
+        ("bilingual_cinema", resolve_style_tokens(CompositionStyle(preset_id="vox_editorial"))),
+        ("bilingual_cinema", resolve_style_tokens(CompositionStyle(preset_id="swiss_paper"))),
+        ("bilingual_cinema", resolve_style_tokens(CompositionStyle(preset_id="institutional_dark"))),
+        ("lower_third_tag", resolve_style_tokens(CompositionStyle(preset_id="vox_editorial"))),
+    ]
+    py_resolved = [resolve_text_preset_token(pid, tok) for pid, tok in cases]
+    ts_resolved = _node_eval_ts(
+        """
+import { readFileSync } from "node:fs";
+import { resolveTextPresetToken } from "../video-remotion/src/engine/textPresets.ts";
+const { cases } = JSON.parse(readFileSync(0, "utf8"));
+process.stdout.write(JSON.stringify({ results: cases.map(([id, tok]) => resolveTextPresetToken(id, tok)) }));
+""",
+        {"cases": cases},
+    )["results"]
+    assert ts_resolved == py_resolved

@@ -25,6 +25,8 @@ export {
 export {
   TEXT_STYLE_PRESETS,
   cloneTextStylePresetToken,
+  resolveTextPresetToken,
+  type TextPresetStyleContext,
   type TextStylePresetId,
   type TextBackgroundMode,
   type TextTransform,
