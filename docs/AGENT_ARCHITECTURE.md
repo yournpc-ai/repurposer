@@ -23,9 +23,12 @@
   3. **围绕节拍骨架多轨编排**：按每拍选择原生 Motion Block（13 块）或真实网页交互/B-Roll 图文叠层（支持幕内 `reveal_at_s` / `callout_steps` 逐拍响应），叠加 BGM 循环与 v2 多轨长短音效（底噪/起势 + 切点重击 + 幕内微点缀）及 5 种电影转场；
   4. **视觉与音频自检闭环（Eval）**：通过 `preview_range` / `review_video` 抽帧与检查音频能量窗/掩蔽提示，发现遮字、偏移或电平冲突立即单实例修订，验收无误再交付或固化为可复用 Template（必要时可由独立工具生成带数字编号的 Slot 宣传片）。
 
-## Chat 对话过程呈现契约（Turn 级无框工作轨）
+## Chat 对话过程呈现契约与视频编辑提示词组织
 
-- **前端投影（`apps/web/src/components/chat/timeline/` & `ActivityStream.tsx`）**：基于官方 `@affectui/thinking-state-clean` 无框组件，将同一轮（`turnId`）的后台工具调用与中间过渡句归拢为统一的工作轨迹，完成后平滑折叠为一行 `Worked for Xs ›` 置于最终回复正文上方；真实交互与交付实体（`ask_user` 决策卡、单层 `ApprovalCard` 付费授权、音频播放器、固定 Output 交付卡、孤立终态失败）始终留在主对话流中不被吞并。
+- **视频编辑系统提示词（`apps/api/app/prompts/chat/video_editor.j2`）**：`assemble_video_round` 复用共享的 `_identity_menu.j2`、`_interaction_constitution.j2` 与 `_markdown_speech.j2`，以 5 节结构化 Markdown 明确 5 步剪辑闭环、双主时钟 Beat Sheet、多轨声画与自检纪律、局部修订/Skill 规则及硬安全边界；所有工具参数语法、13 个 Motion Block 与 22 个 v2 音效配方归位到 `app/chat/editor.py` Schema 与 `creative_catalog`。
+- **脱敏中段播报与三段式无框工作轨（`tool_loop.py` + `timeline/liveState.ts` + `ActivityStream.tsx`）**：
+  - 服务端在存在 `editor_labels` 时保持关闭原始 `on_delta` 防内部 ID 泄露，同时保留经 `project_editor_reply` 脱敏后的阶段说明经 `on_interim_prose` 持久并实时下发；
+  - 前端以纯状态机 `timeline/liveState.ts` 统一驱动基于 `@affectui/thinking-state-clean` 的三段式体验：① **直播期（`live_working`）**默认展开，工具步骤（覆盖全部 46 个高频工具双语动词，详细回执按行折叠）与同事口吻阶段说明自然交替呈现；② **末段思考期（`live_post_tool_thinking`）**在工具全部结算后、最终回复吐字前平滑展示实时计时 `Thinking Xs` 状态行；③ **终态（`settled`）**自动将全过程收拢为单条无框 `Worked for Xs ›` 置于最终回复正文上方，点击可完整回溯。真实交互与交付实体（`ask_user` 决策卡、单层 `ApprovalCard`、音频候选、固定 Output 交付卡、孤立终态失败）始终独立留驻、不被吞并。
 - 费用批准、Stop、租约与原 opening 的续行仲裁由服务端执行。后台 Worker 分别认领素材、旁白对齐、MediaJob、ExportJob、社交发布及支付告警，并清理暂存对象。Publication 记录外部发帖是否已提交；无法核实的结果需要保留凭据。
 
 模型边界位于 `app/providers/llm`。工具的原生名称、参数 Schema、项目事实与消息回放在模型请求时装配。可复核的实测样本见[原生模型请求](tasks/agent-editor-evidence/iteration-6/6d-native-journey.json)。编辑器产品合同、专业剪辑扩展与阶段验收见[主合同](tasks/new-agent.md)。
