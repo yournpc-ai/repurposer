@@ -143,7 +143,10 @@ class SetTransitionArgs(BaseModel):
     model_config = ConfigDict(extra="forbid")
     from_clip_id: str = Field(min_length=1, max_length=64, description="Outgoing clip_id on the visual track.")
     to_clip_id: str = Field(min_length=1, max_length=64, description="Adjacent incoming clip_id on the same visual track.")
-    kind: TransitionKind = "crossfade"
+    kind: TransitionKind = Field(
+        default="crossfade",
+        description="Transition style: 'crossfade', 'whip_pan', 'wipe_reveal', 'zoom_through', or 'iris_focus'.",
+    )
     duration_seconds: float = Field(
         default=0.4, ge=0.1, le=2.0, allow_inf_nan=False,
         description="Centered transition overlap duration in seconds (typically 0.35-0.5s).",
@@ -153,13 +156,18 @@ class SetTransitionArgs(BaseModel):
 class InsertMotionBlockArgs(BaseModel):
     model_config = ConfigDict(extra="forbid")
     block_id: MotionBlockId = Field(
-        description="Native motion block ID from the motion catalog.",
+        description="Native motion block ID from creative_catalog.motion_blocks (13 blocks: statement_hook, product_showcase, device_mockup, chat_demo, flow_diagram, step_timeline, split_compare, bento_features, metric_grid, data_chart, quote_proof, kinetic_title, closing_cta).",
     )
     start_seconds: float = Field(ge=0, allow_inf_nan=False, description="Inclusive start time on timeline.")
     end_seconds: float = Field(gt=0, allow_inf_nan=False, description="Exclusive end time on timeline.")
     props: dict[str, Any] = Field(description=(
-        "Declarative props for the chosen motion block. A captured product_showcase view accepts "
-        "callout {element_id, label?} from its targets or {x, y, width, height, label?}. Use callout_steps (start_s/end_s/label + target) and cursor (click_at_s + element_id or x/y)."
+        "Declarative props for the chosen motion block. Stage options include backdrop_style "
+        "('ambient_mesh' | 'architectural_grid' | 'editorial_paper' | 'clean'), highlight_at_s, "
+        "and per-item items[].reveal_at_s in scene-local seconds. For product_showcase, set "
+        "camera_preset ('flat' | 'tilt_left' | 'tilt_right' | 'dolly_zoom' | 'scroll_reveal'), "
+        "scroll_from_y/scroll_to_y (0..1), real view target element_id for cursor (click_at_s) "
+        "and up to 4 sequential callout_steps (start_s, end_s, label, target), or callout "
+        "{element_id, label?} / {x, y, width, height, label?}."
     ))
     resources: list[UUID] | None = Field(
         default=None, max_length=16,
@@ -182,7 +190,7 @@ class UpdateMotionBlockArgs(BaseModel):
     clip_id: str = Field(min_length=1, max_length=64)
     props_patch: dict[str, Any] = Field(
         min_length=1,
-        description="Partial props to merge into this motion block only; unrelated clips stay untouched.",
+        description="Partial props to merge into this motion block only (e.g. entrance_duration_s, backdrop_style, camera_preset, callout_steps, cursor, highlight_at_s, items, theme); unrelated clips stay untouched.",
     )
 
 
@@ -312,7 +320,11 @@ def _editor_tool(name, description, args, key):
 
 
 EDITOR_TOOLS = (
-    _editor_tool("create_video", "Create the first editable version from ordered shots. A title card only needs headline, duration_seconds and text_color. Save without exporting.", CreateVideoArgs, "createVideo"),
+    _editor_tool(
+        "create_video",
+        "Create the first editable version from ordered shots (title cards, images, video, webpage captures, and optional narration). A title card only needs headline, duration_seconds, and text_color. Save an editable draft without exporting.",
+        CreateVideoArgs, "createVideo",
+    ),
     _editor_tool(
         "instantiate_skill_blueprint",
         "Instantiate a bound slot_blueprint_v1 Skill into a fresh editable multi-act Composition by filling every act's replaceable slots (fresh copy, metrics, webpage/image resources, and per-act narration). Adapts act durations to measured narration + breathing room and re-anchors SFX automatically.",
@@ -347,30 +359,30 @@ EDITOR_TOOLS = (
     ),
     _editor_tool(
         "edit_audio_clip",
-        "Update absolute gain_db, replace source_id, and/or set smooth fade_in_seconds, fade_out_seconds, or duck_windows (compiled to audio.gain keyframes) on one existing audio clip only, preserving object_id and all other clips. "
+        "Update absolute gain_db (e.g. -24 to -26 dB for BGM under narration, -14 to -10 dB for SFX accents), replace source_id, and/or set smooth fade_in_seconds, fade_out_seconds, or duck_windows (compiled to audio.gain keyframes) on one existing audio clip only, preserving object_id and all other clips. "
         "For relative gain requests (e.g. '-3 dB'), compute once from the pre-turn clip gain_db and check already_saved_this_turn so the delta is never applied twice.",
         EditAudioClipArgs, "editAudioClip",
     ),
     _editor_tool(
         "generate_sfx",
-        "Synthesize a deterministic 48 kHz stereo sound effect (whoosh, impact, click, riser, stinger, swoosh_cut) with zero credit cost. "
-        "Pass base_clip_id to revise an existing SFX clip while inheriting its recipe and seed. Returns acoustic metrics (duration_ms, peak_offset_ms, spectral_centroid_hz, peak_dbfs).",
+        "Synthesize a deterministic 48 kHz stereo sound effect with zero credit cost from 22 v2 recipes in creative_catalog.sound_recipes (UI ticks: click, soft_pop, toggle_on, select_tick, confirm_chime; motion/transitions: whoosh, swoosh_cut, velvet_pass, page_turn; impacts: impact, deep_hit, sub_drop, kinetic_thud; risers/swells: riser, sub_swell, shimmer_lift; stingers/accents: stinger, title_bloom, metric_chime, callout_ping; beds: studio_air, pulse_bed). "
+        "Pass base_clip_id to revise an existing SFX clip while inheriting its recipe and seed. Returns acoustic metrics (duration_ms, peak_offset_ms, spectral_centroid_hz, peak_dbfs); align peak_offset_ms with visual sync cues (typical peak ~-2 dBFS; place at -14 to -10 dB under narration).",
         GenerateSfxArgs, "generateSfx",
     ),
     _editor_tool(
         "insert_motion_block",
-        "Insert a native declarative motion block from the catalog onto the timeline below captions. "
-        "Pass captured webpage or image snapshot IDs in resources for product_showcase, device_mockup (primary then mobile), optional chat result or CTA logo.",
+        "Insert one of the 13 native declarative motion blocks from creative_catalog.motion_blocks onto the timeline below captions (statement_hook, product_showcase, device_mockup, chat_demo, flow_diagram, step_timeline, split_compare, bento_features, metric_grid, data_chart, quote_proof, kinetic_title, closing_cta). "
+        "Pass captured webpage or image snapshot IDs in resources for product_showcase, device_mockup (primary then mobile), optional chat result, or CTA logo.",
         InsertMotionBlockArgs, "insertMotionBlock",
     ),
     _editor_tool(
         "update_motion_block",
-        "Patch declarative props on one existing motion_block clip only (e.g. slower entrance_duration_s, theme, items), leaving all other tracks and clips unchanged.",
+        "Patch declarative props on one existing motion_block clip only (e.g. entrance_duration_s, backdrop_style, camera_preset, callout_steps, cursor, highlight_at_s, items[].reveal_at_s, theme), leaving all other tracks and clips unchanged. Check already_saved_this_turn props_before/after before relative adjustments.",
         UpdateMotionBlockArgs, "updateMotionBlock",
     ),
     _editor_tool(
         "set_transition",
-        "Add or update a centered transition between two adjacent full-canvas opaque clips (including opaque motion blocks with show_backdrop=True) on the same visual track.",
+        "Add or update a centered transition ('crossfade', 'whip_pan', 'wipe_reveal', 'zoom_through', or 'iris_focus') between two adjacent full-canvas opaque clips (including opaque motion blocks with show_backdrop=True) on the same visual track.",
         SetTransitionArgs, "setTransition",
     ),
     _editor_tool(
@@ -446,7 +458,7 @@ EDITOR_TOOLS = (
     ),
     _editor_tool(
         "preview_range",
-        "Play the current draft across all tracks and publish the selected window in Chat. Choose a local edit, a join, or the whole short film as needed. Recently edited clip windows are suggestions. Honor an explicitly requested range exactly. Use absolute seconds (up to 12 seconds per window).",
+        "Play the current draft across all tracks and publish the selected window in Chat with sampled visual frames plus audio_windows and masking_warnings (respect audio_available_to_model before claiming subjective audio impressions). Choose a local edit, a join, or the whole short film as needed. Recently edited clip windows are suggestions. Honor an explicitly requested range exactly. Use absolute seconds (up to 12 seconds per window).",
         VideoRangeScrubTarget,
         "previewRange",
     ),

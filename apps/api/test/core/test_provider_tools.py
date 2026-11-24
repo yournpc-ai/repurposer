@@ -1392,3 +1392,137 @@ async def test_failed_observations_stop_across_equivalent_arguments_and_other_re
     assert result.iterations == 3
     assert agent.client.requests == 3
     assert [event.tool_name for event in result.rejections] == ["preview_range", "preview_range"]
+
+
+def test_video_editor_prompt_renders_structured_director_template_with_shared_partials():
+    from app.agents.tool_loop import ContextSnapshot
+    from app.chat.intent import intent_router
+    from app.chat.prompts import assemble_video_round
+
+    work = _composition_resource()
+    assembly = assemble_video_round({
+        "tools": intent_router.tools,
+        "snapshot": ContextSnapshot("saved", resources=(("work", work),)),
+        "user_text": "把开场标题的节奏调紧凑一点并加上转场音效",
+    })
+    system = assembly.system
+    # Shared partials restored
+    assert "Rookie Cut" in system
+    assert "你给判断，用户做决定" in system
+    assert "Final Cut Pro" in system
+    # Structured 5-section Markdown & Dual Master-Clock Beat Sheet
+    for heading in ("## 1.", "## 2.", "## 3.", "## 4.", "## 5."):
+        assert heading in system
+    assert "旁白驱动型" in system and "节拍/音乐驱动型" in system
+    assert system.count("\n") >= 15
+
+    # Website promo passes website_evidence_rule cleanly via Jinja variable
+    promo = assemble_video_round({
+        "tools": intent_router.tools,
+        "snapshot": ContextSnapshot("empty"),
+        "user_text": "给 https://example.com 做一条产品宣传片",
+    })
+    assert "网站产品主张和画面取自当前来源" in promo.system
+
+
+def test_editor_tool_schemas_advertise_v2_sfx_and_motion_block_parameters():
+    from app.agents.tool_loop import tool_spec
+    from app.chat.editor import EDITOR_TOOLS
+
+    by_name = {tool.name: tool_spec(tool)["function"] for tool in EDITOR_TOOLS}
+    sfx_desc = by_name["generate_sfx"]["description"]
+    assert "22 v2" in sfx_desc
+    assert "48 kHz" in sfx_desc
+    assert "creative_catalog.sound_recipes" in sfx_desc
+    assert "peak_offset_ms" in sfx_desc
+    for recipe in ("title_bloom", "callout_ping", "velvet_pass", "sub_drop", "studio_air"):
+        assert recipe in sfx_desc
+
+    motion_fn = by_name["insert_motion_block"]
+    assert "13" in motion_fn["description"]
+    props_desc = motion_fn["parameters"]["properties"]["props"]["description"]
+    for token in ("camera_preset", "scroll_from_y", "callout_steps", "cursor", "backdrop_style", "reveal_at_s", "highlight_at_s"):
+        assert token in props_desc
+
+    transition_desc = by_name["set_transition"]["description"]
+    for kind in ("crossfade", "whip_pan", "wipe_reveal", "zoom_through", "iris_focus"):
+        assert kind in transition_desc
+
+    assert "audio_windows" in by_name["preview_range"]["description"]
+    assert "audio_available_to_model" in by_name["preview_range"]["description"]
+    assert "-24" in by_name["edit_audio_clip"]["description"]
+
+
+@pytest.mark.asyncio
+async def test_multistep_video_edit_emits_sanitized_interim_prose_without_raw_clip_ids():
+    from copy import copy
+    from types import SimpleNamespace
+    from app.agents.tool_loop import ContextSnapshot, ToolObservation
+    from app.chat.intent import intent_router
+    from app.chat.prompts import assemble_video_round
+    from app.providers.llm.base import ToolCall, ToolGeneration
+
+    work = _composition_resource()
+    snapshot = ContextSnapshot("saved", resources=(("work", work),))
+    editor_labels = {"clp_intro_01": ("0–4 秒的片段", "the 0–4 s clip")}
+    responses = [
+        ToolGeneration(
+            content="先检查 clp_intro_01 的参数，再同步调整动效和音效。",
+            tool_calls=[ToolCall(id="c1", name="inspect_clip", arguments={"clip_id": "clp_intro_01"})],
+        ),
+        ToolGeneration(
+            content="已完成 clp_intro_01 的检查并更新。",
+            tool_calls=[ToolCall(id="c2", name="answer", arguments={"pending_disposition": "none"})],
+        ),
+    ]
+
+    class StreamClient:
+        capabilities = SimpleNamespace(supports_native_tools=True, supports_streaming=True)
+
+        def __init__(self):
+            self.index = 0
+            self.on_delta_seen: list[bool] = []
+
+        async def generate_stream_with_tools(self, **kwargs):
+            gen = responses[self.index]
+            self.index += 1
+            self.on_delta_seen.append(kwargs.get("on_delta") is not None)
+            if kwargs.get("on_delta") is not None and gen.content:
+                kwargs["on_delta"](gen.content)
+            return gen
+
+        async def generate_with_tools(self, **kwargs):
+            return await self.generate_stream_with_tools(**kwargs)
+
+    agent = copy(intent_router)
+    agent.client = StreamClient()
+    deltas: list[str] = []
+    interim: list[str] = []
+    executed: list[str] = []
+
+    def assemble(**facts):
+        return assemble_video_round({
+            **facts,
+            "snapshot": snapshot,
+            "user_text": "把开场片段的动效调流畅一点",
+            "editor_labels": editor_labels,
+        })
+
+    async def execute(name, _params, _speech):
+        executed.append(name)
+        return ToolObservation('{"clip_id": "clp_intro_01"}') if name != "answer" else None
+
+    result = await agent.call_loop(
+        execute,
+        round_assembler=assemble,
+        message="把开场片段的动效调流畅一点",
+        on_delta=deltas.append,
+        on_interim_prose=interim.append,
+    )
+    # on_delta stays disabled while editor_labels is non-empty so raw clip_ids never leak mid-stream
+    assert deltas == []
+    # Sanitized interim prose emits before non-terminal tool execution with clip_id projected cleanly
+    assert interim == ["先检查 0–4 秒的片段 的参数，再同步调整动效和音效。"]
+    assert all("clp_intro_01" not in note for note in interim)
+    assert executed == ["inspect_clip", "answer"]
+    assert "0–4 秒的片段" in result.prose and "clp_intro_01" not in result.prose

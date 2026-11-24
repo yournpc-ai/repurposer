@@ -36,6 +36,7 @@ import type {
   SuggestionPill,
 } from "./timeline/types"
 import { buildConversationBlocks } from "./timeline/project"
+import type { ChatLiveMode } from "./timeline/liveState"
 import { deliveryOutputReveal, hasMessageOutputs, type VideoPresentationRecoveryFact } from "./timeline/reveal"
 
 
@@ -63,6 +64,8 @@ interface ChatConversationProps {
   presentationRecovery: VideoPresentationRecoveryFact | null
   currentActivityRowKeysRef: RefObject<Set<string>>
   liveWorkFoldKey: string | null
+  liveMode?: ChatLiveMode
+  postToolThinkingStartedAtMs?: number | null
   nowRow: NowRowPayload | null
   bottomNowRow: NowRowPayload | null
   activeTurnId: string | null
@@ -119,6 +122,8 @@ export function ChatConversation({
   presentationRecovery,
   currentActivityRowKeysRef,
   liveWorkFoldKey,
+  liveMode,
+  postToolThinkingStartedAtMs,
   nowRow,
   bottomNowRow,
   activeTurnId,
@@ -312,6 +317,13 @@ export function ChatConversation({
       currentActivityRowKeysRef.current.has(unit.rowKey)
     if (currentOpen && unit.rowKey !== liveWorkFoldKey) return null
     const live = unit.rowKey === liveWorkFoldKey
+    const postToolThinking =
+      live && liveMode === "live_post_tool_thinking"
+        ? {
+            label: chatStatusLabel ?? t("chat.thinking"),
+            startedAtMs: postToolThinkingStartedAtMs ?? unit.startedAtMs,
+          }
+        : null
     // An active-only host is a live seat, never an empty settled receipt.
     // Once that attempt is cancelled its visible row retires; a later retry
     // births its own host instead of leaving a struck-through failure row.
@@ -324,6 +336,7 @@ export function ChatConversation({
           onOpen={openOutputViewer}
           elapsedMs={unit.elapsedMs}
           liveLabel={live ? chatStatusLabel : null}
+          postToolThinking={postToolThinking}
           failure={unit.failure}
         />
       </MessageScrollerItem>

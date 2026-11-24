@@ -10,10 +10,12 @@ import type {
   ActivityRowFrame,
   ComponentClipReceipt,
   NativeJobReceipt,
+  NowRowPayload,
   MusicSearchReceipt,
   MusicSelectionReceipt,
   SfxImportReceipt,
   SfxSearchReceipt,
+  ToolCallStatus,
   VideoReviewReceipt,
   VideoRevisionReceipt,
 } from "./timeline/types"
@@ -22,17 +24,9 @@ import { formatElapsed } from "@/components/chat/workTiming"
 import { useMessageScrollerViewportAnchor } from "@/components/chat/MessageScroller"
 import { Button } from "@/components/ui/button-clean"
 import { ThinkingState, type ThinkingTrailStep } from "@/components/ui/thinking-state-clean"
-import type { ToolCallStatus } from "@/components/ui/tool-call-card-clean"
 import { cn } from "@/lib/utils"
 
-/** The live label payload: a wire milestone, or the frontend-synthesized
- * think empty state. "think" is NEVER on the wire and has no durable row of
- * its own; it simply gives the current work segment its base label. `seq`
- * is live-channel bookkeeping — array rows order by position and may omit
- * it. */
-export type NowRowPayload = Omit<ActivityRowFrame, "kind"> & {
-  kind: ActivityRowFrame["kind"] | "think"
-}
+export type { NowRowPayload } from "./timeline/types"
 
 export function activityText(activity: NowRowPayload, t: TFunction): string {
   const { status } = activity
@@ -43,7 +37,7 @@ export function activityText(activity: NowRowPayload, t: TFunction): string {
     }
   }
   if (activity.call_state === "queued") return t("agentReceipt.queued")
-  const action = activity.tool_name && toolActions[activity.tool_name]
+  const action = activity.tool_name && TOOL_ACTIONS[activity.tool_name]
   if (!activity.key && action && (status === "active" || status === "completed")) {
     return t(`chat.activity.${action}${status === "completed" ? "Done" : ""}`)
   }
@@ -384,14 +378,71 @@ function JobDetails({ job, onOpen }: { job: NativeJobReceipt; onOpen?: (id: stri
 }
 
 // Tool keys supply the verb even on thinner native frames with no copy key.
-const toolActions: Record<string, string | undefined> = {
-  capture_web: "videoCapturePlan", show_music_candidates: "musicSearch",
-  generate_voice: "recordVoice", generate_music: "generateMusic",
-  search_music: "musicSearch", select_music: "musicSelection",
-  generate_sfx: "generateSfx", edit_audio_clip: "editAudioClip",
-  insert_motion_block: "insertMotionBlock", update_motion_block: "updateMotionBlock",
-  set_transition: "setTransition", review_video: "videoReview", export_video: "exportVideo",
-  save_composition_as_skill: "saveSkill", instantiate_skill_blueprint: "instantiateSkill",
+export const TOOL_ACTIONS: Readonly<Record<string, string>> = {
+  // Composition creation & Skills
+  create_video: "createVideo",
+  save_composition_as_skill: "saveSkill",
+  instantiate_skill_blueprint: "instantiateSkill",
+  list_skill_shots: "skillRead",
+  read_skill_reference: "skillRead",
+  read_skill_demo: "skillRead",
+  get_skill_preview: "skillPreview",
+  // Timeline inspection & direct editing
+  inspect_timeline: "inspectClips",
+  inspect_clip: "inspectClip",
+  insert_motion_block: "insertMotionBlock",
+  update_motion_block: "updateMotionBlock",
+  set_transition: "setTransition",
+  insert_visual: "insertVisual",
+  insert_audio: "insertAudio",
+  edit_audio_clip: "editAudioClip",
+  remove_clip: "removeClip",
+  split_clip: "splitClip",
+  trim_clip: "trimClip",
+  move_clip: "moveClip",
+  set_keyframe: "setKeyframe",
+  translate: "translate",
+  scale: "scale",
+  extend_still: "extendStill",
+  bind_clip_source: "bindClipSource",
+  // Media generation & narration
+  generate_voice: "recordVoice",
+  generate_music: "generateMusic",
+  generate_image: "generateImage",
+  generate_sfx: "generateSfx",
+  align_recording: "narrationPrepare",
+  get_narration_alignment: "narrationRead",
+  annotate_narration: "narrationAnnotate",
+  // Materials, web capture, brand & music discovery
+  prepare_video_materials: "videoMaterials",
+  capture_web: "videoCapturePlan",
+  analyze_brand: "brandAnalyze",
+  search_music: "musicSearch",
+  show_music_candidates: "musicSearch",
+  select_music: "musicSelection",
+  list_project_media: "listProjectMedia",
+  get_asset: "inspectAsset",
+  get_understanding: "inspectUnderstanding",
+  search_transcript: "searchTranscript",
+  read_conversation_context: "readHistory",
+  // Preview, review, export & delivery
+  preview_range: "previewRange",
+  review_video: "videoReview",
+  export_video: "exportVideo",
+  deliver_video: "deliverVideo",
+}
+
+function CollapsibleReceipt({ receipt }: { receipt: ActivityReceipt }) {
+  const { t } = useTranslation()
+  return (
+    <details className="ui-thinkc__receipt">
+      <summary className="ui-thinkc__receipt-summary">
+        <ChevronRight aria-hidden className="ui-thinkc__receipt-chevron" />
+        <span>{t("chat.activityReceipt.details")}</span>
+      </summary>
+      <ActivityEvidence receipt={receipt} />
+    </details>
+  )
 }
 
 function trailStep(entry: WorkTrailEntry, live: boolean, t: TFunction, onOpen?: (id: string) => void): ThinkingTrailStep {
@@ -404,7 +455,7 @@ function trailStep(entry: WorkTrailEntry, live: boolean, t: TFunction, onOpen?: 
   const running = live && status === "running"
   const failed = status === "error" || status === "unknown"
   const tool = row.tool_name ?? job?.operation
-  const action = tool && toolActions[tool]
+  const action = tool && TOOL_ACTIONS[tool]
   const toolLabel = tool ? t(`chat.toolName.${tool}`, { defaultValue: t("agentReceipt.job") }) : t("agentReceipt.job")
   let label = tool ? toolLabel : activityText(row, t)
   if (success || running) {
@@ -423,25 +474,29 @@ function trailStep(entry: WorkTrailEntry, live: boolean, t: TFunction, onOpen?: 
   else if (status === "running" && !live) statusMeta = t("agentReceipt.unsettled")
   else if (status !== "success" && !running && !(failed && !tool && !job)) statusMeta = t(`agentReceipt.${status}`)
   const duration = row.duration_ms != null ? formatElapsed(row.duration_ms) : undefined
+  const hasDetail = Boolean((row.error && row.error !== job?.error) || job || receipt)
   return {
     id: entry.rowKey, label, chips, meta: [statusMeta, duration].filter(Boolean).join(" · "),
     kind: failed ? "error" : row.assetType === "web_page" || row.key?.includes("viewWebPage") || tool === "capture_web" ? "web" : "step",
     status: failed ? "error" : running ? "running" : "done",
-    detail: <>
-      {row.error && row.error !== job?.error && <p>{row.error}</p>}
-      {job && <JobDetails job={job} onOpen={onOpen} />}
-      {receipt && <ActivityEvidence receipt={receipt} />}
-    </>,
+    detail: hasDetail ? (
+      <>
+        {row.error && row.error !== job?.error && <p>{row.error}</p>}
+        {job && <JobDetails job={job} onOpen={onOpen} />}
+        {receipt && <CollapsibleReceipt receipt={receipt} />}
+      </>
+    ) : undefined,
   }
 }
 
 export function WorkSegmentRow({
-  trail = [], elapsedMs, startedAtMs, liveLabel, failure, onOpen,
+  trail = [], elapsedMs, startedAtMs, liveLabel, postToolThinking, failure, onOpen,
 }: {
   trail?: WorkTrailEntry[]
   elapsedMs?: number | null
   startedAtMs?: number | null
   liveLabel?: string | null
+  postToolThinking?: { label: string; startedAtMs: number | null } | null
   failure?: ActivityRowFrame | null
   onOpen?: (id: string) => void
 }) {
@@ -462,6 +517,15 @@ export function WorkSegmentRow({
     }
     return step
   })
+  if (live && postToolThinking) {
+    steps.push({
+      id: "__post_tool_thinking__",
+      kind: "thinking",
+      label: postToolThinking.label,
+      status: "running",
+      startedAtMs: postToolThinking.startedAtMs,
+    })
+  }
   if (failure) {
     error = trailStep({ kind: "activity", activity: failure, rowKey: failure.activity_id }, false, t, onOpen)
     steps.push(error)
@@ -472,13 +536,14 @@ export function WorkSegmentRow({
     : elapsed ? t("chat.activityFold.worked", { elapsed }) : t("chat.activityFold.workedWithoutTime"))
   const [override, setOverride] = useState<{ live: boolean; open: boolean } | null>(null)
   if (override && override.live !== live) setOverride(null)
+  const open = override?.live === live ? override.open : live
   return (
     <div ref={rowRef}>
       <ThinkingState steps={steps} live={live} headerLabel={header} startedAtMs={startedAtMs}
-        open={override?.live === live && override.open}
-        onOpenChange={open => {
+        open={open}
+        onOpenChange={nextOpen => {
           anchor(rowRef.current)
-          setOverride({ live, open })
+          setOverride({ live, open: nextOpen })
         }}
       />
     </div>

@@ -1223,9 +1223,9 @@ class ToolLoopAgent:
             # speech when the content channel stayed empty (读容忍, below).
             prose = result.content
             if assembled.project_reply:
+                # Keep on_delta disabled when stream_prose is False so raw IDs never leak mid-stream,
+                # while preserving sanitized prose here so on_interim_prose can emit clean progress notes.
                 prose = assembled.project_reply(prose)
-                if not assembled.stream_prose and any(not by_name[c.name].terminal for c in result.tool_calls if c.name in by_name):
-                    prose = ""  # The Activity owns pre-execution speech for editor operations.
             if (
                 len(result.tool_calls) == 1
                 and result.tool_calls[0].name == assembled.invitation_tool

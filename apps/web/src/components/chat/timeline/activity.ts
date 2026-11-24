@@ -31,12 +31,6 @@ const STORYBOARD_SPAN_KEYS = new Set([
   "chat.activity.videoReviseDone",
   "chat.activity.videoReview",
   "chat.activity.videoReviewDone",
-  "chat.activity.videoDraftScene",
-  "chat.activity.videoDraftSceneDone",
-  "chat.activity.videoDraftJoin",
-  "chat.activity.videoDraftJoinDone",
-  "chat.activity.videoDraftRecheck",
-  "chat.activity.videoDraftRecheckDone",
   "chat.activity.videoSave",
   "chat.activity.videoSaveDone",
 ])

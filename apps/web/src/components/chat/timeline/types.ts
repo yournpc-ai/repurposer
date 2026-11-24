@@ -526,6 +526,31 @@ export interface ProjectAsset {
   created_at?: string | null
 }
 
+export type ToolCallStatus =
+  | "accepted"
+  | "queued"
+  | "running"
+  | "success"
+  | "error"
+  | "cancelled"
+  | "unknown"
+  | "notExecuted"
+  | "pending"
+  | "denied"
+  | "approved"
+  | "versionSaved"
+  | "outputGenerated"
+  | "delivered"
+
+/** The live label payload: a wire milestone, or the frontend-synthesized
+ * think empty state. "think" is NEVER on the wire and has no durable row of
+ * its own; it simply gives the current work segment its base label. `seq`
+ * is live-channel bookkeeping — array rows order by position and may omit
+ * it. */
+export type NowRowPayload = Omit<ActivityRowFrame, "kind"> & {
+  kind: ActivityRowFrame["kind"] | "think"
+}
+
 /** Source row identities survive streaming updates and history hydration. */
 export type WorkTrailEntry =
   | { kind: "activity"; rowKey: string; activity: ActivityRowFrame }

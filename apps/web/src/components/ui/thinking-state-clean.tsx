@@ -14,11 +14,13 @@ import { formatElapsed, useNow } from "@/components/chat/workTiming";
 
 export interface ThinkingTrailStep {
   id: string;
-  kind: "web" | "step" | "note" | "error";
+  kind: "web" | "step" | "note" | "error" | "thinking";
   label: string;
   meta?: string;
   chips?: string[];
   status: "running" | "done" | "error";
+  /** Optional epoch ms start for an inline ticking timer (e.g. post-tool Thinking Xs). */
+  startedAtMs?: number | null;
   detail?: ReactNode;
 }
 
@@ -83,7 +85,7 @@ export function ThinkingState({
               return (
                 <li key={step.id} className="ui-thinkc__item" data-kind={step.kind} data-active={isActive || undefined}>
                   <span className="ui-thinkc__node" aria-hidden="true">
-                    {step.kind === "web" ? (
+                    {step.kind === "note" ? null : step.kind === "web" ? (
                       <svg viewBox="0 0 24 24" className="ui-thinkc__globe">
                         <path d="M22 12A10 10 0 1 0 12 22" />
                         <path d="M20 5.7c-.93.07-2.13.43-2.96 1.5-1.5 1.94-3 2.1-4 1.46-1.5-.97-.24-2.54-2-3.4-1.15-.56-1.31-2.07-.67-3.26" />
@@ -97,6 +99,12 @@ export function ThinkingState({
                   <div className="ui-thinkc__content">
                     <span className={isActive ? "ui-thinkc__label ui-thinkc__shimmer" : "ui-thinkc__label"}
                       data-text={step.label} dir="auto">{step.label}</span>
+                    {isActive && step.startedAtMs != null && (
+                      <>
+                        {" "}
+                        <Elapsed since={step.startedAtMs} />
+                      </>
+                    )}
                     {step.meta && <span className="ui-thinkc__time"> · {step.meta}</span>}
                     {!!step.chips?.length && (
                       <div className="ui-thinkc__sources">
@@ -186,7 +194,7 @@ const css = /* css */ `
   gap: 10px;
   max-width: 100%;
   height: 36px;
-  padding: 0 8px;
+  padding: 0 8px 0 0;
   border-radius: calc(var(--aui-radius, 7px) + 1px);
   text-align: left;
 }
@@ -227,7 +235,7 @@ const css = /* css */ `
   font-variant-numeric: tabular-nums;
   color: var(--aui-placeholder, var(--ui-tkc-faint));
 }
-/* The chevron sits right after the words and shows on hover (or keyboard focus) */
+/* The chevron sits right after the words so collapsed "Worked for Xm >" is always discoverable */
 .ui-thinkc__chevron {
   display: grid;
   place-items: center;
@@ -235,10 +243,11 @@ const css = /* css */ `
   height: 16px;
   margin-left: -4px;
   color: var(--ui-tkc-icon);
-  opacity: 0;
+  opacity: 0.5;
   transition: opacity 160ms ease;
 }
-.ui-thinkc__head:is(:hover, :focus-visible) .ui-thinkc__chevron { opacity: 0.6; }
+.ui-thinkc__head:is(:hover, :focus-visible) .ui-thinkc__chevron,
+.ui-thinkc__head[aria-expanded="true"] .ui-thinkc__chevron { opacity: 0.85; }
 .ui-thinkc__chevron svg {
   width: 16px;
   height: 16px;
@@ -275,7 +284,7 @@ const css = /* css */ `
 }
 .ui-thinkc__list {
   margin: 0;
-  padding: 8px 8px 0;
+  padding: 6px 0 0;
   list-style: none;
 }
 
@@ -328,6 +337,64 @@ const css = /* css */ `
   border-radius: 1.5px;
   background: var(--ui-tkc-accent);
   animation: ui-thinkc-pulse 1s ease-in-out infinite;
+}
+.ui-thinkc__item[data-kind="error"] .ui-thinkc__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--aui-danger, #dc2626);
+}
+/* Colleague interim prose: clean readable body copy with breathing room, zero heavy chrome */
+.ui-thinkc__item[data-kind="note"] {
+  padding-top: 2px;
+  padding-bottom: 14px;
+}
+.ui-thinkc__item[data-kind="note"]:not(:last-child)::before {
+  top: 0;
+  bottom: 0;
+}
+.ui-thinkc__item[data-kind="note"] .ui-thinkc__label {
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--ui-tkc-ink);
+}
+.ui-thinkc__item[data-kind="thinking"] {
+  padding-top: 2px;
+  padding-bottom: 6px;
+}
+.ui-thinkc__item[data-kind="thinking"] .ui-thinkc__label {
+  font-weight: 500;
+  color: var(--ui-tkc-muted);
+}
+/* Collapsible per-step receipt disclosure keeps verbose evidence compact by default */
+.ui-thinkc__receipt {
+  margin-top: 6px;
+}
+.ui-thinkc__receipt-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--ui-tkc-muted);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  transition: color 140ms ease;
+}
+.ui-thinkc__receipt-summary::-webkit-details-marker {
+  display: none;
+}
+.ui-thinkc__receipt-summary:hover {
+  color: var(--ui-tkc-ink);
+}
+.ui-thinkc__receipt-chevron {
+  width: 12px;
+  height: 12px;
+  transition: transform 200ms var(--ui-tkc-ease);
+}
+.ui-thinkc__receipt[open] > .ui-thinkc__receipt-summary .ui-thinkc__receipt-chevron {
+  transform: rotate(90deg);
 }
 .ui-thinkc__check {
   width: 16px;
@@ -539,8 +606,8 @@ a.ui-thinkc__source:hover {
 
 /* Narrow (phones) */
 @container (max-width: 360px) {
-  .ui-thinkc__head { padding: 0 8px; }
-  .ui-thinkc__list { padding: 8px 8px 0; }
+  .ui-thinkc__head { padding: 0 8px 0 0; }
+  .ui-thinkc__list { padding: 6px 0 0; }
 }
 /* Touch screens: bigger tap targets */
 @media (pointer: coarse) {

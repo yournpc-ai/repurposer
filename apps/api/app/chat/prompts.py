@@ -126,7 +126,7 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
     user_text = facts.get("user_text") or ""
     draft_requested = re.search(r"初稿|草稿|分镜|\b(?:draft|storyboard)\b", user_text, re.I)
     additional_work = re.search(
-        r"审片|检查|复看|修订|导出|交付|成片|\b(?:review|check|revise|render|export|deliver|mp4)\b",
+        r"审片|检查|复看|预览|播放|修订|导出|交付|成片|音效|配乐|动效|转场|\b(?:review|check|preview|play|revise|render|export|deliver|mp4|sfx|music|motion|transition)\b",
         re.sub(r"不(?:要|用|需要)?(?:导出|交付|制作成片)|(?:do not|don't) (?:export|deliver|render)", "", user_text, flags=re.I),
         re.I,
     )
@@ -409,27 +409,12 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
         media_ready = bool(facts.get("media_receipts")) or facts.get("new_result_tool") in {
             "generate_voice", "generate_music", "generate_image", "generate_sfx",
         }
+        system_prompt = jinja_env.get_template("chat/video_editor.j2").render(
+            website_evidence_rule=website_evidence_rule,
+        )
         return RoundAssembly(
             tools=tools,
-            system=("你是视频剪辑师，用用户的语言交流。检查本轮目标、所选作品、素材与已有回执。"
-                    "目标明确就编辑。多个素材符合描述且用户未指定全用时，写入前用 ask_user 让用户选定，以可辨特征或附件序号列出选项。分镜按需表达。"
-                    "保留未要求改变的画面、字幕、动画和声音。依赖新增对象或素材时先读取上一步返回的标识。"
-                    "专业 MG 画面优先使用 insert_motion_block，单实例修订用 update_motion_block。"
-                    "按证据选块：statement_hook 开场论点，product_showcase 展示网页局部，device_mockup 展示单双端截屏，chat_demo 演示真实问答。flow_diagram 讲机制，step_timeline 讲顺序，split_compare 对照方案，bento_features 陈列能力。metric_grid 呈现独立指标，data_chart 呈现同单位对比或趋势，quote_proof 呈现可归属引文。kinetic_title 做轻量角标，closing_cta 收尾。按旁白设置逐项节拍，避免复读截图中的标题。"
-                    "相邻同轨全画幅不透明幕用 set_transition，按镜头选择 crossfade、whip_pan、wipe_reveal、zoom_through 或 iris_focus。"
-                    "creative_catalog.shot_combinations 提供开箱即用的单镜方案；若用户未定风格或希望挑选方案，可在采集网页后用 ask_user 给出 2–3 个具名方案供点选。"
-                    "配乐可用 search_music / show_music_candidates / select_music 选曲并经 prepare_video_materials(material_music_ids=…) 导入后 insert_audio（旁白下 BGM 压低至 −24 ~ −26 dB），并用 edit_audio_clip 设置平滑 fade_in_seconds / fade_out_seconds 与必要 duck_windows。"
-                    "多幕旁白按幕留 0.4–0.6 秒自然呼吸气口，避免相邻旁白首尾撞车。"
-                    "product_showcase 可用 camera_preset=flat/tilt_left/tilt_right/dolly_zoom/scroll_reveal；滚屏用 scroll_from_y/scroll_to_y (0..1)。用所选视图的真实 element_id 绑定 cursor(click_at_s) 和最多四个依次出现的 callout_steps(start_s,end_s,label)。用 backdrop_style=ambient_mesh/architectural_grid/editorial_paper/clean 设舞台，以幕内秒数安排 highlight_at_s 和 items[].reveal_at_s。音效用 generate_sfx，按视觉节拍从目录的 22 个配方中选择。开场用 title_bloom 或 sub_swell，框选聚焦用 callout_ping，数据卡用 metric_chime，"
-                    "转场用 swoosh_cut、velvet_pass 或 page_turn，痛点转折用 sub_drop，收尾用 stinger。静态段落留白。音效峰值约 −2 dBFS，"
-                    "旁白下常规点缀放 −14 至 −10 dB。单实例调电平、淡入淡出或换音源用 edit_audio_clip。"
-                    "音效卡点结合 peak_offset_ms 与 sync_cue，对照 preview_range 的 audio_windows 与 masking_warnings 控电平；audio_available_to_model 为 false 时不声称主观听感。"
-                    "当用户要求把已打磨的多幕作品固化为可复用 Skill / 模板时，调用 save_composition_as_skill 保存脱敏蓝图（SKILL.md + references/blueprint.json）；当本轮绑定了含 slot_blueprint_v1 的外部 Skill（见 bound_skill_method 与 skill_reference.skill_version_id）且尚无作品时，先按新需求采集目标网页/素材与新语言旁白（以及可选 BGM），再一次性调用 instantiate_skill_blueprint 填入全部可替换 Slot 展开成可编辑作品，之后按常规单实例工具预览或微调。"
-                    "以本轮开始时的作品为基准，对照 already_saved_this_turn 的改动前后值（含 gain_delta_db 与 props_before/after）决定下一步；相对调整（如“减 3 dB”“慢一点”）每段只执行一次，禁止多轮重复叠加。按需选择是否预览和观看范围，用户点名的窗口要准确播放。"
-                    "结束时说明实际改动和尚未达成的目标。画面和声音判断以实际收到的对应媒体及其覆盖范围为限。"
-                    "不得擅改目标或追加未经许可的生成与导出。只预览的任务以播放为止。"
-                    "正式交付须审阅固定 Output，按原 opening 的回执报告费用与尚未满足的要求。"
-                    + website_evidence_rule),
+            system=system_prompt,
             context=json.dumps(context, ensure_ascii=False), include_project_context=False,
             opening_text=None if native_creation else user_text, enforce_offered_tools=True,
             stream_prose=not media_ready and (

@@ -36,6 +36,7 @@ import {
 } from "@/lib/chatStreamFrames"
 import { buildConversationUnits, closeWorkSegment } from "./timeline/project"
 import { foldActivityUnits } from "./timeline/activity"
+import { selectChatLiveState } from "./timeline/liveState"
 import {
   asCreditsInsufficient,
   type CreditsInsufficientDetail,
@@ -74,7 +75,6 @@ import {
   answeredQuestionText,
   answeredQuestionIdFromIntent,
   isNonRenderIntent,
-  activityAssetKey,
   deliveryOutputRefs,
   questionEcho,
   bareQuestion,
@@ -120,7 +120,6 @@ import {
 import {
   QuestionDock,
 } from "@/components/chat/QuestionDock"
-import { type NowRowPayload } from "@/components/chat/ActivityStream"
 import { ChatConversation } from "./ChatConversation"
 import { assetTypeIcon } from "./rows/UserMessage"
 import type { ChatAttachment, ChatOutputEntry, Output } from "@/lib/types"
@@ -2824,109 +2823,20 @@ export function AgentThread({
     [messages, liveTurnId],
   )
 
-  const openFold = conversationUnits.slice().reverse().find((unit) =>
-    unit.kind === "activityFold" && unit.openTail,
-  )
-  const workFold = openFold?.kind === "activityFold" ? openFold : undefined
-  // The now label is shared by the bottom seat (no current activity host
-  // yet) and the current open fold (from its FIRST active host onward).
-  // Thus previous-prose typing can hide the bottom Thinking seat, but it can
-  // never erase a newly-born activity's own timeline row. Buffered text
-  // alone does NOT hide the bottom seat: only a streaming row with actually-
-  // released non-whitespace content counts as visible prose. An unseen
-  // envelope tail cannot seal the segment or leave a blank status seat.
-  const visibleProseTyping =
-    proseActive &&
-    messages.some((m) => m.streaming && m.content.trim().length > 0)
-  const activeActivity = activities.find((a) => a.status === "active")
-  const processingAssets = assets.filter(
-    (a) =>
-      sentAssetIds.has(a.id) &&
-      (a.processing_status === "pending" ||
-        a.processing_status === "processing"),
-  )
-  const nowRow: NowRowPayload | null = (() => {
-    // Concrete film phases refine the generic plan activity. A terminal
-    // sweep normally removes active frames; the chatBusy gate is the second
-    // guarantee that a dead / recovered turn cannot keep shimmering.
-    if (chatBusy && activeActivity && !(activeActivity.kind === "draft" &&
-      ["capturing", "storyboarding", "storyboard_revision"].includes(thinkingPhase ?? ""))) {
-      return activeActivity
-    }
-    const think = (
-      key: string | null,
-      name?: string,
-      count?: number,
-    ): NowRowPayload => ({
-      activity_id: "__now__",
-      seq: 0,
-      kind: "think",
-      status: "active",
-      key,
-      name,
-      count,
-    })
-    if (workFold && recoveredJobTurn && workFold.turnId === recoveredJobTurn && workFold.liveActivity) return workFold.liveActivity
-    if (chatBusy && !thinkingPhase && workFold?.liveActivity &&
-      currentActivityRowKeysRef.current.has(workFold.rowKey)) {
-      return workFold.liveActivity
-    }
-    if (chatBusy) {
-      return think(thinkingPhase ? `chat.thinkingPhases.${thinkingPhase}` : null)
-    }
-    // 带计数 (2026-09-24 用户拍板): several files draining together read as
-    // "processing N files" (中性词 — 混合批次不知动谁), a lone one names
-    // itself with the verb fork (批「动词」2026-09-27: video=看 / audio=听).
-    if (processingAssets.length > 1) {
-      return think("chat.material.readingMany", undefined, processingAssets.length)
-    }
-    if (processingAssets.length === 1) {
-      const lone = processingAssets[0]
-      // 工序化 (ADR-095 §2): the chain's live stage speaks the user-language
-      // process truth — asr → transcribing, speaker_map/prosody →
-      // understanding (the same 转写/理解 vocabulary the run stepper
-      // shares). Unknown/absent stages (hash, extract, legacy rows without
-      // the key) fall back to the type-verb line below.
-      if (lone.processing_stage === "asr") {
-        return think("chat.material.transcribing", lone.title ?? undefined)
-      }
-      if (
-        lone.processing_stage === "speaker_map" ||
-        lone.processing_stage === "prosody"
-      ) {
-        return think("chat.material.understandingAsset", lone.title ?? undefined)
-      }
-      return think(
-        activityAssetKey("chat.material.reading", lone.type),
-        lone.title ?? undefined,
-      )
-    }
-    return null
-  })()
-
-  /** The last open fold born on THIS turn owns the live segment in the
-   * timeline. Host-row identity prevents a historical segment from reopening.
-   * A contiguous failure has already settled its own fold;
-   * only a later open fold can own the live seat. The single owner and the
-   * bottom seat are mutually exclusive. conversation/runStream read this
-   * SAME owner key. */
-  let liveWorkFoldKey: string | null = null
-  if (chatBusy) {
-    for (const unit of conversationUnits) {
-      if (
-        unit.kind === "activityFold" &&
-        unit.openTail &&
-        currentActivityRowKeysRef.current.has(unit.rowKey)
-      ) {
-        liveWorkFoldKey = unit.rowKey
-      }
-    }
-  }
-  if (workFold && recoveredJobTurn && workFold.turnId === recoveredJobTurn) liveWorkFoldKey = workFold.rowKey
-  const bottomNowRow =
-    liveWorkFoldKey == null && !visibleProseTyping && interimActivityGateCount === 0
-      ? nowRow
-      : null
+  const liveState = selectChatLiveState({
+    chatBusy,
+    proseActive,
+    messages,
+    conversationUnits,
+    activities,
+    thinkingPhase,
+    assets,
+    sentAssetIds,
+    currentActivityRowKeys: currentActivityRowKeysRef.current,
+    recoveredJobTurn,
+    interimActivityGateCount,
+  })
+  const { nowRow, liveWorkFoldKey, bottomNowRow } = liveState
 
   /** 点值改 (B3): an inferred slot's inline-edit commit IS a normal chat
    * send — the composed statement (「受众：X」 / "Audience: X") rides the one
@@ -2970,6 +2880,8 @@ export function AgentThread({
       presentationRecovery={presentationRecovery}
       currentActivityRowKeysRef={currentActivityRowKeysRef}
       liveWorkFoldKey={liveWorkFoldKey}
+      liveMode={liveState.mode}
+      postToolThinkingStartedAtMs={liveState.postToolThinkingStartedAtMs}
       nowRow={nowRow}
       bottomNowRow={bottomNowRow}
       activeTurnId={adoptCurrentTurnId() ?? null}
