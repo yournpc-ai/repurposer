@@ -671,15 +671,21 @@ def validate_content(content: CompositionContent, snapshots: SnapshotFacts) -> N
             if derivation.source_text_digest != speech_text_digest(speech.text):
                 _fail(problems, f"clip {clip.clip_id}: derived caption has stale speech text identity")
             if derivation.text_start is None:
-                if clip.object.text != speech.text:
+                primary_line = clip.object.text.split("\n", 1)[0]
+                if clip.object.text != speech.text and primary_line != speech.text:
                     _fail(problems, f"clip {clip.clip_id}: derived caption does not match its speech text")
             else:
                 text_end = derivation.text_end
+                expected_span = (
+                    speech.text[derivation.text_start:text_end]
+                    if text_end is not None and text_end <= len(speech.text)
+                    else None
+                )
+                primary_line = clip.object.text.split("\n", 1)[0]
                 if (
                     derivation.alignment != "faster-whisper-script-v1"
-                    or text_end is None
-                    or text_end > len(speech.text)
-                    or clip.object.text != speech.text[derivation.text_start:text_end]
+                    or expected_span is None
+                    or (clip.object.text != expected_span and primary_line != expected_span)
                 ):
                     _fail(problems, f"clip {clip.clip_id}: caption phrase does not match its exact speech span")
                 if clip.range.start < speech_clip.range.start or clip.range.end > speech_clip.range.end:

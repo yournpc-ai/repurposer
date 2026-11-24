@@ -15,8 +15,24 @@ from app.chat.editor_create import CreateVideoArgs
 from app.skills.blueprint import InstantiateSkillBlueprintArgs, music_clips_for_window
 from app.editing.catalog import MotionBlockId, SoundRecipeId, VoiceId
 from app.editing.edits import AddClip, AddTrack, BindSource, SetTransition, SplitClip, TemporalEdit, UpdateClip, UpdateScene
-from app.editing.schemas import Animation, ClipSource, EditTarget, MotionBlockObject, ProductShowcaseProps, TimeRange, Transition, TransitionKind
-from app.editing.styles import BackdropStyle, StylePresetId
+from app.editing.revisions import TextPosition
+from app.editing.schemas import (
+    Animation,
+    AudioObject,
+    CaptionDerivation,
+    ClipSource,
+    EditTarget,
+    MotionBlockObject,
+    ProductShowcaseProps,
+    SourceCaptionDerivation,
+    SpeechObject,
+    TimeRange,
+    Transition,
+    TransitionKind,
+    VideoObject,
+    speech_text_digest,
+)
+from app.editing.styles import BackdropStyle, StylePresetId, resolve_style_tokens
 from app.editing.text_presets import TextBackgroundMode, TextStylePresetId
 from app.editing.store import (
     RequestMismatch,
@@ -164,7 +180,7 @@ class InsertMotionBlockArgs(BaseModel):
     end_seconds: float = Field(gt=0, allow_inf_nan=False, description="Exclusive end time on timeline.")
     props: dict[str, Any] = Field(description=(
         "Declarative props for the chosen motion block. Stage options include backdrop_style "
-        "('ambient_mesh' | 'architectural_grid' | 'editorial_paper' | 'clean'), highlight_at_s, "
+        "('ambient_mesh' | 'architectural_grid' | 'editorial_paper' | 'kinetic_diagonal' | 'clean'), highlight_at_s, "
         "and per-item items[].reveal_at_s in scene-local seconds. For product_showcase, set "
         "camera_preset ('flat' | 'tilt_left' | 'tilt_right' | 'dolly_zoom' | 'scroll_reveal'), "
         "scroll_from_y/scroll_to_y (0..1), real view target element_id for cursor (click_at_s) "
@@ -228,7 +244,69 @@ class SetCompositionStyleArgs(BaseModel):
     )
 
 
-class ApplyTextStyleArgs(BaseModel):
+class InsertTextArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    text: str | None = Field(
+        default=None, min_length=1, max_length=600,
+        description="Direct text content (supports '\\n' for single-clip bilingual subtitles). Mutually exclusive with from_audio_clip_id.",
+    )
+    start_seconds: float | None = Field(
+        default=None, ge=0, allow_inf_nan=False,
+        description="Required in direct text mode: inclusive start time on timeline.",
+    )
+    end_seconds: float | None = Field(
+        default=None, gt=0, allow_inf_nan=False,
+        description="Required in direct text mode: exclusive end time on timeline.",
+    )
+    from_audio_clip_id: str | None = Field(
+        default=None, min_length=1, max_length=64,
+        description="Narration-aligned caption mode: existing audio/speech/video clip_id with READY/ALIGNED narration alignment or ASR words to generate a full derived caption track. Mutually exclusive with text.",
+    )
+    role: Literal["title", "caption"] = Field(
+        default="title",
+        description="Visual track role in direct text mode ('title' or 'caption'). Always 'caption' in from_audio_clip_id mode.",
+    )
+    position: TextPosition | None = Field(
+        default=None,
+        description="Safe-area placement ('bottom', 'top', 'center', 'bottom_left', 'top_left', 'bottom_right', 'top_right'). Defaults to 'bottom' for captions, 'bottom_left' for lower_third_tag, 'center' for titles.",
+    )
+    preset_id: TextStylePresetId | None = Field(
+        default=None,
+        description="Optional industry text/caption preset from creative_catalog.text_style_presets (clean_broadcast, cinema_glass, minimal_light, vox_label, vox_highlighter, creator_pop, kinetic_impact, editorial_callout, lower_third_tag, karaoke_focus, bilingual_cinema).",
+    )
+    font_size: int | None = Field(default=None, gt=0, le=400, description="Optional font size in canvas pixels.")
+    color: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$", description="Optional text fill hex color override.")
+    highlight_color: str | None = Field(
+        default=None, pattern=r"^#[0-9a-fA-F]{6}$",
+        description="Optional active-word highlight hex color for karaoke_focus (defaults to style accent or #FACC15).",
+    )
+    background: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$", description="Optional pill/chip background hex color.")
+    background_mode: TextBackgroundMode | None = Field(default=None, description="Optional background wrap mode ('box', 'pill', 'line').")
+    background_opacity: float | None = Field(default=None, ge=0.0, le=1.0, description="Optional background opacity in [0, 1].")
+    align: Literal["left", "center", "right"] | None = Field(default=None, description="Optional horizontal text alignment.")
+    secondary_line_scale: float | None = Field(
+        default=None, ge=0.4, le=1.0,
+        description="Optional scale factor for line 2+ in single-clip bilingual subtitles (e.g. 0.72).",
+    )
+
+    @model_validator(mode="after")
+    def _validate_mode(self):
+        has_text = self.text is not None
+        has_audio = self.from_audio_clip_id is not None
+        if has_text == has_audio:
+            raise ValueError("Provide either direct text (with start_seconds/end_seconds) or from_audio_clip_id, not both.")
+        if has_text:
+            if self.start_seconds is None or self.end_seconds is None:
+                raise ValueError("Direct text mode requires both start_seconds and end_seconds.")
+            if self.end_seconds <= self.start_seconds:
+                raise ValueError("end_seconds must exceed start_seconds.")
+        else:
+            if self.start_seconds is not None or self.end_seconds is not None:
+                raise ValueError("from_audio_clip_id mode derives cue timings automatically; omit start_seconds/end_seconds.")
+        return self
+
+
+class EditTextArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     scope: Literal["clip", "track", "all_derived_captions"] = Field(
         description="Target scope: 'clip' (single clip_id), 'track' (all TextObjects on track_id), or 'all_derived_captions' (all derived captions only, strictly protecting independent user-edited captions and non-caption text)."
@@ -240,6 +318,14 @@ class ApplyTextStyleArgs(BaseModel):
     track_id: str | None = Field(
         default=None, min_length=1, max_length=64,
         description="Required when scope='track'. Exact visual track ID.",
+    )
+    text: str | None = Field(
+        default=None, min_length=1, max_length=600,
+        description="Optional updated text content (scope='clip' only; supports '\\n' for bilingual subtitles). Automatically rebuilds karaoke word animations if active.",
+    )
+    keep_derived: bool = Field(
+        default=False,
+        description="When editing text on a derived caption, set false (default) to promote it to independent (protecting manual edits), or true to keep it derived (e.g. appending a bilingual translation line that still follows style switches).",
     )
     preset_id: TextStylePresetId | None = Field(
         default=None,
@@ -261,6 +347,10 @@ class ApplyTextStyleArgs(BaseModel):
         default=None, pattern=r"^#[0-9a-fA-F]{6}$",
         description="Optional background pill/chip hex color override.",
     )
+    clear_background: bool = Field(
+        default=False,
+        description="Set true to clear background fill, padding, radius, and border back to transparent defaults.",
+    )
     background_mode: TextBackgroundMode | None = Field(
         default=None,
         description="Optional background wrap mode: 'box' (full box), 'pill' (tight rounded pill), or 'line' (per-line tight sticker chips).",
@@ -277,6 +367,18 @@ class ApplyTextStyleArgs(BaseModel):
         default=None, ge=0.4, le=1.0,
         description="Optional scale factor for line 2+ in single-clip bilingual subtitles (e.g. 0.72).",
     )
+    position: TextPosition | None = Field(
+        default=None,
+        description="Optional safe-area position update ('bottom', 'top', 'center', 'bottom_left', 'top_left', 'bottom_right', 'top_right'); updates LayoutBox and resets static transform x/y to 0.",
+    )
+
+    @model_validator(mode="after")
+    def _validate_edit(self):
+        if self.text is not None and self.scope != "clip":
+            raise ValueError("Editing text content requires scope='clip'.")
+        if self.clear_background and self.background is not None:
+            raise ValueError("Provide either background or clear_background=True, not both.")
+        return self
 
 
 class SaveCompositionAsSkillArgs(BaseModel):
@@ -471,9 +573,14 @@ EDITOR_TOOLS = (
         SetCompositionStyleArgs, "setCompositionStyle",
     ),
     _editor_tool(
-        "apply_text_style",
-        "Atomically style native TextObjects or derived captions using one of the 11 industry presets in creative_catalog.text_style_presets (clean_broadcast, cinema_glass, minimal_light, vox_label, vox_highlighter, creator_pop, kinetic_impact, editorial_callout, lower_third_tag, karaoke_focus, bilingual_cinema) plus optional overrides. With scope='all_derived_captions', strictly preserves independent user-edited captions, non-caption text, and all audio tracks.",
-        ApplyTextStyleArgs, "applyTextStyle",
+        "insert_text",
+        "Insert a native TextObject title/overlay/caption clip (direct text with start_seconds/end_seconds, supporting '\\n' bilingual lines) OR generate a full aligned derived caption track from an existing aligned audio/speech/video clip (from_audio_clip_id). Supports safe-area position presets and all 11 industry presets in creative_catalog.text_style_presets (including karaoke_focus with word-level timings).",
+        InsertTextArgs, "insertText",
+    ),
+    _editor_tool(
+        "edit_text",
+        "Atomically edit native TextObject content (scope='clip'), safe-area position, and/or style/preset across scope='clip', 'track', or 'all_derived_captions' using the 11 industry presets in creative_catalog.text_style_presets. With scope='all_derived_captions', strictly preserves independent user-edited captions, non-caption text, and all audio tracks.",
+        EditTextArgs, "editText",
     ),
     _editor_tool(
         "set_transition",
@@ -565,7 +672,7 @@ WRITE_TOOLS = {
     if t.name == "remove_clip" or t.params_model in (
         SplitClipArgs, TrimClipArgs, MoveClipArgs, TranslateArgs, ScaleArgs, SetKeyframeArgs,
         InsertVisualArgs, InsertAudioArgs, EditAudioClipArgs, InsertMotionBlockArgs, UpdateMotionBlockArgs,
-        SetCompositionStyleArgs, ApplyTextStyleArgs, SetTransitionArgs, ExtendStillArgs, BindClipSourceArgs,
+        SetCompositionStyleArgs, InsertTextArgs, EditTextArgs, SetTransitionArgs, ExtendStillArgs, BindClipSourceArgs,
     )
 }
 
@@ -634,6 +741,243 @@ def validate_motion_block_translate(
         )
 
 
+def _composition_style_summary(content) -> dict[str, Any] | None:
+    if content.settings.style is None:
+        return None
+    tokens = resolve_style_tokens(content.settings.style)
+    return {
+        "preset_id": tokens["preset_id"],
+        "theme": tokens["theme"],
+        "backdrop_style": tokens["backdrop_style"],
+        "accent": tokens["accent"],
+        "canvas_bg": tokens["canvas_bg"],
+        "default_transition": tokens["default_transition"],
+    }
+
+
+async def _resolve_aligned_caption_cues(db, project, content, audio_clip) -> list[dict[str, Any]]:
+    """Resolve aligned sentence/word cues for insert_text(from_audio_clip_id=...)."""
+    from app.editing.alignment import NarrationPayload
+    from app.editing.source_selection import source_sentences
+    from app.editing.timing import seconds_to_ticks, source_ticks_to_output_ticks
+    from app.models.tables import NarrationAlignment, SourceSnapshot
+
+    obj = audio_clip.object
+    if not isinstance(obj, (AudioObject, SpeechObject, VideoObject)):
+        raise ValueError(
+            f"Clip {audio_clip.clip_id!r} is not an audio, speech, or video clip."
+        )
+    if audio_clip.source is None or audio_clip.source.source_range is None:
+        raise ValueError(
+            f"Clip {audio_clip.clip_id!r} has no bound source media window. "
+            "Align the recording first or pass direct text with start_seconds/end_seconds."
+        )
+    src = audio_clip.source
+    sr = src.source_range
+    timebase = content.settings.timebase
+
+    def _cues_from_narration_payload(
+        payload: NarrationPayload,
+        *,
+        alignment_row,
+        is_speech: bool,
+    ) -> list[dict[str, Any]]:
+        cues: list[dict[str, Any]] = []
+        for sentence in payload.sentences:
+            s_start = max(sr.start, sentence.start_tick)
+            s_end = min(sr.end, sentence.end_tick)
+            if s_end <= s_start:
+                continue
+            out_start = audio_clip.range.start + source_ticks_to_output_ticks(
+                s_start - sr.start, timebase
+            )
+            out_end = audio_clip.range.start + source_ticks_to_output_ticks(
+                s_end - sr.start, timebase
+            )
+            if out_end <= out_start:
+                continue
+            text = sentence.text.strip()
+            if not text:
+                continue
+            word_timings: list[dict[str, Any]] = []
+            for w in sentence.words:
+                ws = max(s_start, w.start_tick)
+                we = min(s_end, w.end_tick)
+                if we > ws:
+                    word_timings.append(
+                        {
+                            "start_s": (ws - s_start) / SOURCE_TIMEBASE,
+                            "end_s": (we - s_start) / SOURCE_TIMEBASE,
+                            "text_start": w.text_start - sentence.text_start,
+                            "text_end": w.text_end - sentence.text_start,
+                        }
+                    )
+            if is_speech and isinstance(obj, SpeechObject) and obj.alignment is not None:
+                if text == obj.text and out_start == audio_clip.range.start and out_end == audio_clip.range.end:
+                    caption = CaptionDerivation(
+                        speech_object_id=obj.object_id,
+                        source_text_digest=speech_text_digest(obj.text),
+                        alignment="faster-whisper-script-v1",
+                        state="derived",
+                        narration_alignment_id=obj.alignment.alignment_id,
+                        narration_content_digest=obj.alignment.content_digest,
+                        sentence_id=sentence.sentence_id,
+                    )
+                else:
+                    caption = CaptionDerivation(
+                        speech_object_id=obj.object_id,
+                        source_text_digest=speech_text_digest(obj.text),
+                        alignment="faster-whisper-script-v1",
+                        state="derived",
+                        narration_alignment_id=obj.alignment.alignment_id,
+                        narration_content_digest=obj.alignment.content_digest,
+                        sentence_id=sentence.sentence_id,
+                        text_start=sentence.text_start,
+                        text_end=sentence.text_end,
+                    )
+            else:
+                has_ready_provenance = (
+                    alignment_row.status == "READY" and bool(alignment_row.content_digest)
+                )
+                caption = SourceCaptionDerivation(
+                    snapshot_id=src.snapshot_id,
+                    snapshot_digest=src.snapshot_digest,
+                    sentence_id=sentence.sentence_id,
+                    source_range=TimeRange(start=s_start, end=s_end),
+                    source_text_digest=speech_text_digest(text),
+                    alignment=(
+                        alignment_row.algorithm
+                        if has_ready_provenance
+                        else "faster-whisper-source-v1"
+                    ),
+                    state="derived",
+                    narration_alignment_id=alignment_row.id if has_ready_provenance else None,
+                    narration_content_digest=(
+                        alignment_row.content_digest if has_ready_provenance else None
+                    ),
+                )
+            cues.append(
+                {
+                    "sentence_id": sentence.sentence_id,
+                    "text": text,
+                    "output_start": out_start,
+                    "output_end": out_end,
+                    "caption": caption,
+                    "word_timings": word_timings or None,
+                }
+            )
+        return cues
+
+    # 1. SpeechObject with explicit NarrationAlignmentRef
+    if isinstance(obj, SpeechObject):
+        if obj.alignment is None:
+            raise ValueError(
+                f"Speech clip {audio_clip.clip_id!r} has no narration alignment yet. "
+                "Call align_recording first or pass direct text with start_seconds/end_seconds."
+            )
+        alignment_row = await db.scalar(
+            select(NarrationAlignment).where(
+                NarrationAlignment.id == obj.alignment.alignment_id,
+                NarrationAlignment.owner_id == project.user_id,
+                NarrationAlignment.status.in_(("READY", "ALIGNED")),
+            )
+        )
+        if alignment_row is None or not alignment_row.payload:
+            raise ValueError(
+                f"Narration alignment for speech clip {audio_clip.clip_id!r} is not READY/ALIGNED yet."
+            )
+        payload = NarrationPayload.model_validate(alignment_row.payload)
+        return _cues_from_narration_payload(payload, alignment_row=alignment_row, is_speech=True)
+
+    # 2. Audio/Video clip with a READY or ALIGNED NarrationAlignment row for its snapshot
+    alignment_rows = list(
+        await db.scalars(
+            select(NarrationAlignment)
+            .where(
+                NarrationAlignment.owner_id == project.user_id,
+                NarrationAlignment.audio_snapshot_id == src.snapshot_id,
+                NarrationAlignment.status.in_(("READY", "ALIGNED")),
+            )
+            .order_by(NarrationAlignment.created_at.desc())
+        )
+    )
+    alignment_row = next(
+        (r for r in alignment_rows if r.status == "READY"),
+        alignment_rows[0] if alignment_rows else None,
+    )
+    if alignment_row is not None and alignment_row.payload:
+        payload = NarrationPayload.model_validate(alignment_row.payload)
+        cues = _cues_from_narration_payload(payload, alignment_row=alignment_row, is_speech=False)
+        if cues:
+            return cues
+
+    # 3. Fallback: SourceSnapshot.meta ASR words (uploaded video/audio ASR)
+    snapshot = await db.scalar(
+        select(SourceSnapshot).where(
+            SourceSnapshot.id == src.snapshot_id,
+            SourceSnapshot.owner_id == project.user_id,
+        )
+    )
+    raw_words = ((snapshot.meta or {}).get("words") if snapshot is not None else None) or []
+    if snapshot is not None and raw_words and snapshot.duration_ticks:
+        sentences = source_sentences(raw_words, duration_ticks=int(snapshot.duration_ticks))
+        cues = []
+        for sentence in sentences:
+            s_start = max(sr.start, seconds_to_ticks(sentence.start))
+            s_end = min(sr.end, seconds_to_ticks(sentence.end))
+            if s_end <= s_start:
+                continue
+            out_start = audio_clip.range.start + source_ticks_to_output_ticks(
+                s_start - sr.start, timebase
+            )
+            out_end = audio_clip.range.start + source_ticks_to_output_ticks(
+                s_end - sr.start, timebase
+            )
+            if out_end <= out_start:
+                continue
+            text = sentence.text.strip()
+            if not text:
+                continue
+            s_start_s = s_start / SOURCE_TIMEBASE
+            s_end_s = s_end / SOURCE_TIMEBASE
+            word_timings = [
+                (
+                    max(0.0, float(w["start"]) - s_start_s),
+                    max(0.01, min(s_end_s, float(w["end"])) - s_start_s),
+                )
+                for w in raw_words
+                if isinstance(w, dict)
+                and float(w.get("end", 0)) > s_start_s
+                and float(w.get("start", 0)) < s_end_s
+                and str(w.get("word") or "").strip()
+            ]
+            cues.append(
+                {
+                    "sentence_id": sentence.sentence_id,
+                    "text": text,
+                    "output_start": out_start,
+                    "output_end": out_end,
+                    "caption": SourceCaptionDerivation(
+                        snapshot_id=src.snapshot_id,
+                        snapshot_digest=src.snapshot_digest,
+                        sentence_id=sentence.sentence_id,
+                        source_range=TimeRange(start=s_start, end=s_end),
+                        source_text_digest=speech_text_digest(text),
+                        alignment="faster-whisper-source-v1",
+                        state="derived",
+                    ),
+                    "word_timings": word_timings or None,
+                }
+            )
+        if cues:
+            return cues
+
+    raise ValueError(
+        f"Clip {audio_clip.clip_id!r} has no READY/ALIGNED narration alignment or ASR word transcript. "
+        "Call align_recording first, or call insert_text with direct text and start_seconds/end_seconds."
+    )
+
+
 def _clip_facts(track, clip, content, snapshot_origins: dict[UUID, dict[str, Any]] | None = None):
     rate = content.settings.timebase
     obj = clip.object
@@ -646,6 +990,26 @@ def _clip_facts(track, clip, content, snapshot_origins: dict[UUID, dict[str, Any
         if obj.kind == "audio" and clip.source is not None
         else None
     )
+    text_fields: dict[str, Any] = {}
+    if obj.kind == "text":
+        text_fields = {
+            "text": obj.text[:400],
+            "style": {
+                "font_size": obj.style.font_size,
+                "color": obj.style.color,
+                "weight": obj.style.weight,
+                "align": obj.style.align,
+                "background": obj.style.background,
+                "background_mode": obj.style.background_mode,
+                "background_opacity": obj.style.background_opacity,
+                "secondary_line_scale": obj.style.secondary_line_scale,
+                "has_stroke": obj.style.stroke is not None and obj.style.stroke.width > 0,
+                "has_shadow": obj.style.shadow is not None,
+                "has_border": obj.style.border is not None and obj.style.border.width > 0,
+            },
+            "caption_state": obj.caption.state if obj.caption is not None else None,
+            "karaoke_active": any(a.animation_id.startswith("karaoke_") for a in clip.animations),
+        }
     return {
         "clip_id": clip.clip_id,
         "object_id": obj.object_id,
@@ -663,12 +1027,19 @@ def _clip_facts(track, clip, content, snapshot_origins: dict[UUID, dict[str, Any
         "transform": transform.model_dump() if transform else None,
         **({"fit": obj.fit} if hasattr(obj, "fit") else {}),
         "animated_properties": sorted({a.property for a in clip.animations if a.text_part is None}),
-        **({"gain_db": obj.gain_db} if obj.kind == "audio" else {}),
+        **(
+            {
+                "gain_db": obj.gain_db,
+                "has_gain_automation": any(a.property == "audio.gain" for a in clip.animations),
+            }
+            if obj.kind == "audio"
+            else {}
+        ),
         **({"sound_recipe": sound_recipe} if sound_recipe else {}),
         **({"block_id": obj.block_id, "block_version": obj.block_version, "props": obj.props,
             "resources": [r.model_dump(mode="json") for r in obj.resources]}
            if obj.kind == "motion_block" else {}),
-        **({"text": obj.text[:160]} if obj.kind == "text" else {}),
+        **text_fields,
         **({"text": obj.text, "language": obj.language, "voice_id": obj.voice_id,
             "alignment_id": str(obj.alignment.alignment_id) if obj.alignment else None}
            if obj.kind == "speech" else {}),
@@ -1044,27 +1415,87 @@ async def edit_clip(
             raise ValueError("The composition already uses this exact visual style.")
         extra["style_summary"] = summary
         extra["style"] = summary["style"]
-    elif isinstance(args, ApplyTextStyleArgs):
-        from app.editing.revisions import apply_text_style_ops
+    elif isinstance(args, InsertTextArgs):
+        from app.editing.revisions import insert_aligned_captions_ops, insert_text_ops
 
-        ops, summary = apply_text_style_ops(
+        if args.from_audio_clip_id is not None:
+            audio_target = clips.get(args.from_audio_clip_id)
+            if audio_target is None:
+                raise ValueError(f"Audio clip {args.from_audio_clip_id!r} does not exist in this version.")
+            cues = await _resolve_aligned_caption_cues(db, project, content, audio_target)
+            ops, summary = insert_aligned_captions_ops(
+                content,
+                audio_clip=audio_target,
+                cues=cues,
+                id_prefix=identity.hex[:10],
+                position=args.position,
+                preset_id=args.preset_id,
+                font_size=args.font_size,
+                color=args.color,
+                highlight_color=args.highlight_color,
+                background=args.background,
+                background_mode=args.background_mode,
+                background_opacity=args.background_opacity,
+                align=args.align,
+                secondary_line_scale=args.secondary_line_scale,
+            )
+            extra["text_summary"] = summary
+        else:
+            assert args.text is not None and args.start_seconds is not None and args.end_seconds is not None
+            start = _ticks(args.start_seconds, rate)
+            end = _ticks(args.end_seconds, rate)
+            duration = timeline_duration(content)
+            if duration > 0 and not (start < end <= duration):
+                raise ValueError("The text window must fit inside the composition's current duration.")
+            scene = next(
+                (s for s in content.scenes if s.range.start <= start and end <= s.range.end), None
+            )
+            ops, summary = insert_text_ops(
+                content,
+                text=args.text,
+                start=start,
+                end=end,
+                clip_id=f"clp_txt_{identity.hex[:12]}",
+                object_id=f"obj_txt_{identity.hex[:12]}",
+                scene_id=scene.scene_id if scene else None,
+                role=args.role,
+                position=args.position,
+                preset_id=args.preset_id,
+                font_size=args.font_size,
+                color=args.color,
+                highlight_color=args.highlight_color,
+                background=args.background,
+                background_mode=args.background_mode,
+                background_opacity=args.background_opacity,
+                align=args.align,
+                secondary_line_scale=args.secondary_line_scale,
+            )
+            extra["text_summary"] = summary
+    elif isinstance(args, EditTextArgs):
+        from app.editing.revisions import edit_text_ops
+
+        ops, summary = edit_text_ops(
             content,
             scope=args.scope,
             clip_id=args.clip_id,
             track_id=args.track_id,
+            text=args.text,
+            keep_derived=args.keep_derived,
             preset_id=args.preset_id,
             color=args.color,
             highlight_color=args.highlight_color,
             font_size=args.font_size,
             background=args.background,
+            clear_background=args.clear_background,
             background_mode=args.background_mode,
             background_opacity=args.background_opacity,
             align=args.align,
             secondary_line_scale=args.secondary_line_scale,
+            position=args.position,
         )
         if not ops:
-            raise ValueError("The target text already uses this exact style.")
-        extra["text_style_summary"] = summary
+            raise ValueError("The target text already has these exact values.")
+        extra["text_summary"] = summary
     elif isinstance(args, UpdateMotionBlockArgs):
         target = clips.get(args.clip_id)
         if target is None or not isinstance(target.object, MotionBlockObject):
@@ -1404,8 +1835,14 @@ async def execute_editor(turn, name, args):
                         entry["props"] = clip.get("props")
                     elif clip.get("kind") == "audio":
                         entry["gain_db"] = clip.get("gain_db")
+                        entry["has_gain_automation"] = clip.get("has_gain_automation")
                         if clip.get("source"):
                             entry["source_snapshot_id"] = clip["source"].get("snapshot_id")
+                    elif clip.get("kind") == "text":
+                        entry["text"] = clip.get("text")
+                        entry["style"] = clip.get("style")
+                        entry["caption_state"] = clip.get("caption_state")
+                        entry["karaoke_active"] = clip.get("karaoke_active")
                     focused[clip["clip_id"]] = entry
                 if name == "set_keyframe":
                     focused[args.clip_id]["transform_animations"] = result["transform_animations"]
@@ -1451,8 +1888,8 @@ async def execute_editor(turn, name, args):
                             receipt["fade_out_seconds"] = result.get("fade_out_seconds")
                     if name == "set_composition_style":
                         receipt["style_summary"] = result["style_summary"]
-                    if name == "apply_text_style":
-                        receipt["text_style_summary"] = result["text_style_summary"]
+                    if name in {"insert_text", "edit_text"}:
+                        receipt["text_summary"] = result["text_summary"]
                     if name == "set_transition":
                         receipt["transition"] = result["transition"]
                     if name == "split_clip":
@@ -1540,6 +1977,8 @@ async def execute_editor(turn, name, args):
                             "count": len(clips),
                             **scope,
                             "canvas_px": [content.settings.width, content.settings.height],
+                            "background": content.settings.background,
+                            "composition_style": _composition_style_summary(content),
                             "timebase": content.settings.timebase,
                             "source_timebase": SOURCE_TIMEBASE,
                             "clips": facts,

@@ -205,7 +205,10 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
         if selected:
             context.update(clip_count=selected.get("clip_count"), scene_count=selected.get("scene_count"),
                            timebase=selected.get("timebase"), duration_ticks=selected.get("duration_ticks"),
+                           composition_style=selected.get("composition_style"),
                            selected_region=hint.get("selected_region"))
+            if selected.get("background") is not None:
+                context["background"] = selected["background"]
             if selected.get("timebase") and selected.get("duration_ticks") is not None:
                 context["duration_seconds"] = selected["duration_ticks"] / selected["timebase"]
             if facts.get("version_saved") and selected.get("version") == 1:

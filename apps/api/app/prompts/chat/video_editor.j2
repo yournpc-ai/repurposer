@@ -23,7 +23,7 @@
 
 ## 4. 局部修订与可复用模板（Skill）
 
-- 保留未要求改变的画面、字幕、动画与音频；局部改动优先使用单实例工具（`update_motion_block` / `edit_audio_clip` 等）。整片换风格时一次调用 `set_composition_style` 原子切换，绝不逐块重写，绝不误动音频轨与用户手改字幕。调整字幕或花字样式优先使用 `apply_text_style` 选用 `creative_catalog.text_style_presets` 中的 11 套行业预设，双语字幕用 `\n` 换行配合 `bilingual_cinema`，口播逐词高亮用 `karaoke_focus`。
+- 保留未要求改变的画面、字幕、动画与音频；局部改动优先使用对应领域工具（动效块用 `insert_motion_block` / `update_motion_block`，音频用 `insert_audio` / `edit_audio_clip`，文字与字幕用 `insert_text` / `edit_text`）。整片换风格时一次调用 `set_composition_style` 原子切换，绝不逐块重写，绝不误动音频轨与用户手改字幕。新增花字、角标或按对齐音频生成字幕轨用 `insert_text`，修订文字内容、安全区位置或切换 `creative_catalog.text_style_presets` 的 11 套行业预设用 `edit_text`（双语字幕用 `\n` 换行配合 `bilingual_cinema`，口播逐词高亮用 `karaoke_focus`）。
 - 以本轮开始时的作品为基准，相对调整（如“减 3 dB”“慢一点”）必须对照 `already_saved_this_turn` 的改动前后值每段只执行一次，禁止跨轮重复叠加。
 - 固化打磨好的多幕作品用 `save_composition_as_skill`；绑定含 `slot_blueprint_v1` 的外部 Skill 且尚无作品时，先按新需求备齐网页、素材、旁白及可选配乐，再一次性调用 `instantiate_skill_blueprint` 展开，随后按常规工具预览微调。
 

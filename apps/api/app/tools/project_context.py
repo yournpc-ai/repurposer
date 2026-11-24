@@ -209,11 +209,27 @@ async def load_project_context(db, *, project_id: UUID, owner_id: UUID, skill_re
                 bound_snapshot_ids.add(UUID(str(source["snapshot_id"])))
         scenes = version.scenes or []
         tracks = (version.timeline or {}).get("tracks") or []
+        raw_settings = version.settings or {}
+        comp_style_summary = None
+        if raw_settings.get("style"):
+            from app.editing.styles import CompositionStyle, resolve_style_tokens
+
+            tokens = resolve_style_tokens(CompositionStyle.model_validate(raw_settings["style"]))
+            comp_style_summary = {
+                "preset_id": tokens["preset_id"],
+                "theme": tokens["theme"],
+                "backdrop_style": tokens["backdrop_style"],
+                "accent": tokens["accent"],
+                "canvas_bg": tokens["canvas_bg"],
+                "default_transition": tokens["default_transition"],
+            }
         resources.append((f"composition:{version.id}:{version.content_digest}", {
             "kind": "composition", "composition_id": str(composition.id), "name": composition.name,
             "version_id": str(version.id), "version": version.version, "content_digest": version.content_digest,
             "base_ref": {"composition_id": str(composition.id), "composition_version_id": str(version.id), "content_digest": version.content_digest},
-            "timebase": version.settings.get("timebase", 90000),
+            "timebase": raw_settings.get("timebase", 90000),
+            "background": raw_settings.get("background", "#000000"),
+            "composition_style": comp_style_summary,
             "clip_count": sum(len(track.get("clips") or []) for track in tracks),
             "scene_count": len(scenes),
             "duration_ticks": max((c["range"]["end"] for t in tracks for c in t.get("clips", [])), default=0),

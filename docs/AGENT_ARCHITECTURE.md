@@ -9,7 +9,7 @@
 | 图片、旁白、音乐 | MediaJob 复用媒体领域实现，固定 SourceSnapshot，结算已有钱包 | 项目、opening、call、Job、claim_token |
 | 音效合成 | `generate_sfx` 经 `apps/render` 调 `@repurposer/sound-engine` v2 零积分确定性合成 48 kHz WAV，固定为 SourceSnapshot | owner、project、spec_sha256、wav_digest |
 | 整片风格换装 | `set_composition_style` 经 `apply_composition_edits` 原子切换 `settings.style`、画布底色、Motion Block 继承与派生字幕（保护 `independent` 字幕与全部音频轨不动） | 原生调用、版本、风格回执 |
-| 文字与字幕样式 | `apply_text_style` 经 `apply_composition_edits` 按 `clip`/`track`/`all_derived_captions` 原子套用 11 套行业文字/字幕预设（含 `bilingual_cinema` 单 Clip 双语排版与 `karaoke_focus` 逐词 `TextPart` 动画），严格保护 `independent` 字幕、非字幕文字与音频轨 | 原生调用、版本、样式回执 |
+| 文字与字幕增改 | `insert_text`（直写花字/角标/双语字幕或由已对齐音频/ASR 生成派生字幕轨）与 `edit_text`（按 `clip`/`track`/`all_derived_captions` 原子编辑文案、安全区位置与 11 套行业预设，含 `karaoke_focus` 逐词动画自动重建与 `independent` 字幕/音频轨保护） | 原生调用、版本、文字回执 |
 | 模板固化与换料 | `save_composition_as_skill` 脱敏提取 `slot_blueprint_v1`（含 `blueprint.style`）；`instantiate_skill_blueprint` 按槽位与可选 `style_preset`/`accent_color` 跨风格换料并原子提交新版本 | SkillVersion、blueprint digest、CompositionVersion |
 | 正式导出 | ExportJob 锁定版本，Renderer 上传后核对 MP4，提交 Output、资金和回执 | 版本、Job、对象 key、实际字节摘要 |
 | 审阅、交付 | review_video 读取实际 Output，deliver_video 核对已审阅身份 | 持久消息、版本和 Output 引用 |
