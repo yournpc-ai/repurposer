@@ -2,53 +2,10 @@ import React from "react";
 import { Img } from "remotion";
 import type { VideoClip, VideoMotionBlockObject, VideoSpec } from "@repurposer/video-spec";
 
-function clamp01(value: number): number {
-  return Math.max(0, Math.min(1, value));
-}
-
-function easeOutQuart(t: number): number {
-  const u = 1 - clamp01(t);
-  return 1 - u * u * u * u;
-}
-
-function easeOutCubic(t: number): number {
-  const u = 1 - clamp01(t);
-  return 1 - u * u * u;
-}
-
-function easeOutExpo(t: number): number {
-  const x = clamp01(t);
-  return x >= 1 ? 1 : 1 - Math.pow(2, -10 * x);
-}
-
-function easeInOutSine(t: number): number {
-  return -(Math.cos(Math.PI * clamp01(t)) - 1) / 2;
-}
-
-/**
- * Closed-form damped harmonic spring evaluated purely from elapsed time `tSec`.
- * Zero state or rAF; deterministic frame-by-frame for Remotion & future Core C.
- */
-function springOut(tSec: number, omega = 13.0, zeta = 0.82): number {
-  if (tSec <= 0) return 0;
-  if (tSec > 2.5) return 1;
-  const decay = Math.exp(-zeta * omega * tSec);
-  if (zeta >= 1) {
-    return clamp01(1 - decay * (1 + omega * tSec));
-  }
-  const wd = omega * Math.sqrt(1 - zeta * zeta);
-  const val = 1 - decay * (Math.cos(wd * tSec) + (zeta / Math.sqrt(1 - zeta * zeta)) * Math.sin(wd * tSec));
-  return Math.max(0, Math.min(1.03, val));
-}
-
-function hexToRgba(hex: string, alpha: number): string {
-  const clean = hex.replace("#", "");
-  if (clean.length !== 6) return `rgba(13, 148, 136, ${alpha})`;
-  const r = parseInt(clean.slice(0, 2), 16);
-  const g = parseInt(clean.slice(2, 4), 16);
-  const b = parseInt(clean.slice(4, 6), 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
+import { clamp01, cueProgress, easeOutCubic, easeOutExpo, easeOutQuart, hexToRgba, springOut } from "./engine/math";
+import { StudioBackdrop, studioInk, type BackdropStyle } from "./engine/backdrop";
+import { evaluateCamera, type CameraPreset } from "./engine/camera";
+import { VirtualCursor, type CursorCue } from "./engine/cursor";
 
 function fontStack(fonts: VideoSpec["fonts"]): string {
   const pinned = Array.from(new Set(fonts.map((f) => JSON.stringify(f.family))));
@@ -96,37 +53,6 @@ function tokenizeLine(line: string): string[] {
   return chunks;
 }
 
-const StudioBackdrop: React.FC<{
-  isDark: boolean;
-  accent: string;
-  scaleUnit: number;
-  progressAll: number;
-}> = ({ isDark, accent, scaleUnit, progressAll }) => {
-  const bgColor = isDark ? "#070B11" : "#F5F7FA";
-  const gridColor = isDark ? "rgba(255, 255, 255, 0.036)" : "rgba(15, 23, 42, 0.045)";
-  const drift = Math.sin(progressAll * Math.PI) * 5;
-  return (
-    <>
-      <div style={{ position: "absolute", inset: 0, background: bgColor }} />
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          backgroundImage: `linear-gradient(to right, ${gridColor} 1px, transparent 1px), linear-gradient(to bottom, ${gridColor} 1px, transparent 1px)`,
-          backgroundSize: `${Math.round(56 * scaleUnit)}px ${Math.round(56 * scaleUnit)}px`,
-        }}
-      />
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          background: `radial-gradient(ellipse 68% 54% at ${50 + drift}% ${34 - drift * 0.4}%, ${hexToRgba(accent, isDark ? 0.16 : 0.10)}, transparent 72%)`,
-        }}
-      />
-    </>
-  );
-};
-
 interface ProductShowcaseCallout {
   x: number;
   y: number;
@@ -140,7 +66,8 @@ const ProductShowcaseBlock: React.FC<{
   fonts: VideoSpec["fonts"];
   fps: number;
   frame: number;
-}> = ({ clip, fonts, fps, frame }) => {
+  cueOffsetFrames: number;
+}> = ({ clip, fonts, fps, cueOffsetFrames, frame }) => {
   const obj = clip.object;
   const props = obj.props as {
     url_bar?: string | null;
@@ -152,8 +79,14 @@ const ProductShowcaseBlock: React.FC<{
     zoom_scale?: number;
     focus_x?: number;
     focus_y?: number;
+    camera_preset?: CameraPreset;
+    scroll_from_y?: number;
+    scroll_to_y?: number;
+    cursor?: CursorCue | null;
+    callout_steps?: (ProductShowcaseCallout & { start_s: number; end_s: number })[];
     callout?: ProductShowcaseCallout | null;
     accent_color?: string;
+    backdrop_style?: BackdropStyle;
     show_backdrop?: boolean;
   };
 
@@ -162,7 +95,6 @@ const ProductShowcaseBlock: React.FC<{
   const scaleUnit = Math.min(width / 1920, height / 1080);
   const durationFrames = Math.max(1, clip.end_frame - clip.start_frame);
   const tSec = frame / fps;
-  const progressAll = clamp01(frame / Math.max(1, durationFrames - 1));
 
   const theme = props.theme ?? "light";
   const isDark = theme === "dark";
@@ -175,18 +107,11 @@ const ProductShowcaseBlock: React.FC<{
   const focusX = Math.max(0.1, Math.min(0.9, props.focus_x ?? 0.5));
   const focusY = Math.max(0.1, Math.min(0.9, props.focus_y ?? 0.35));
 
-  const enterT = easeOutQuart(tSec / entranceDur);
-  const enterOpacity = easeOutCubic(tSec / Math.max(0.2, entranceDur * 0.65));
-
-  const tiltDeg = cameraMotion === "settle_tilt" ? (1 - enterT) * 6.5 : 0;
-  const risePx = cameraMotion === "static" ? 0 : (1 - enterT) * 38 * scaleUnit;
-  const frameScale = cameraMotion === "static" ? 1 : 0.945 + 0.055 * enterT;
-
-  const holdCurve = easeInOutSine(progressAll);
-  const innerZoom = cameraMotion === "static" ? 1 : 1 + (zoomScale - 1) * holdCurve;
-  const driftX = cameraMotion === "drift_focus" ? (0.5 - focusX) * 48 * scaleUnit * holdCurve : 0;
-  const driftY = cameraMotion === "drift_focus" ? (0.5 - focusY) * 32 * scaleUnit * holdCurve : 0;
-
+  const camera = evaluateCamera(
+    props.camera_preset ?? "flat", tSec, Math.max(1, durationFrames - 1) / fps,
+    focusX, focusY, zoomScale, props.scroll_from_y ?? 0, props.scroll_to_y ?? 1,
+    { motion: cameraMotion, entranceSec: entranceDur, unit: scaleUnit },
+  );
   const imageUrl = resolveResourceUrl(clip, obj, 0);
   const padX = Math.round((chromeMode === "frameless" ? 72 : 96) * scaleUnit);
   const padTop = Math.round((chromeMode === "frameless" ? 50 : 62) * scaleUnit);
@@ -199,11 +124,9 @@ const ProductShowcaseBlock: React.FC<{
   const borderColor = isDark ? "rgba(255, 255, 255, 0.12)" : "rgba(15, 23, 42, 0.11)";
   const dividerColor = isDark ? "rgba(255, 255, 255, 0.07)" : "rgba(15, 23, 42, 0.08)";
   const urlBg = isDark ? "rgba(255, 255, 255, 0.045)" : "rgba(15, 23, 42, 0.045)";
-  const urlText = isDark ? "rgba(226, 232, 240, 0.72)" : "rgba(30, 41, 59, 0.72)";
-  const dotColor = isDark ? "rgba(255, 255, 255, 0.22)" : "rgba(15, 23, 42, 0.18)";
+  const urlText = isDark ? "#BFCAD3" : "#3A474C";
 
-  const cropX = Math.round(focusX * 100);
-  const cropY = Math.round(clamp01((focusY - 0.35) / 0.55) * 100);
+  const { cropX, cropY } = camera;
   const sizeCapture = React.useCallback((image: HTMLImageElement) => {
     // Remotion calls this after decode, before releasing the frame for capture.
     if (image.parentElement && image.naturalWidth > 0 && image.naturalHeight > 0) {
@@ -211,9 +134,12 @@ const ProductShowcaseBlock: React.FC<{
     }
   }, []);
 
-  const callout = props.callout ?? null;
-  const calloutT = callout ? springOut(Math.max(0, tSec - entranceDur * 0.68), 11.5, 0.84) : 0;
-  const calloutAlpha = callout ? easeOutCubic((tSec - entranceDur * 0.68) / 0.42) : 0;
+  const cueSec = (frame - cueOffsetFrames) / fps;
+  const step = props.callout_steps?.find(s => s.start_s <= cueSec && cueSec < s.end_s);
+  const callout = props.callout_steps?.length ? step : props.callout;
+  const sinceReveal = step ? cueSec - step.start_s : tSec - entranceDur * 0.68;
+  const calloutT = callout ? springOut(Math.max(0, sinceReveal), 11.5, 0.84) : 0;
+  const calloutAlpha = callout ? easeOutCubic(sinceReveal / 0.42) : 0;
   const bracketLen = Math.round(18 * scaleUnit);
   const bracketThick = Math.max(2, Math.round(3 * scaleUnit));
 
@@ -229,7 +155,7 @@ const ProductShowcaseBlock: React.FC<{
       }}
     >
       {showBackdrop ? (
-        <StudioBackdrop isDark={isDark} accent={accent} scaleUnit={scaleUnit} progressAll={progressAll} />
+        <StudioBackdrop theme={isDark ? "dark" : "light"} accent={accent} scaleUnit={scaleUnit} style={props.backdrop_style} tSec={tSec} />
       ) : null}
 
       <div
@@ -242,7 +168,7 @@ const ProductShowcaseBlock: React.FC<{
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          perspective: `${Math.round(1800 * scaleUnit)}px`,
+          perspective: camera.perspective,
         }}
       >
         <div
@@ -254,8 +180,8 @@ const ProductShowcaseBlock: React.FC<{
             overflow: "hidden",
             border: `1px solid ${borderColor}`,
             background: chromeBg,
-            opacity: enterOpacity,
-            transform: `translateY(${risePx}px) scale(${frameScale}) rotateX(${tiltDeg}deg)`,
+            opacity: camera.opacity,
+            transform: camera.stage,
             transformOrigin: "50% 60%",
             boxShadow: isDark
               ? `0 ${Math.round(36 * scaleUnit)}px ${Math.round(90 * scaleUnit)}px rgba(0, 0, 0, 0.62), 0 ${Math.round(6 * scaleUnit)}px ${Math.round(20 * scaleUnit)}px rgba(0, 0, 0, 0.4)`
@@ -294,9 +220,9 @@ const ProductShowcaseBlock: React.FC<{
               }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: Math.round(7 * scaleUnit), width: "22%" }}>
-                <span style={{ width: dotSize, height: dotSize, borderRadius: "50%", background: dotColor }} />
-                <span style={{ width: dotSize, height: dotSize, borderRadius: "50%", background: dotColor }} />
-                <span style={{ width: dotSize, height: dotSize, borderRadius: "50%", background: dotColor }} />
+                {["#B8776B", "#B59963", "#739883"].map(color => (
+                  <span key={color} style={{ width: dotSize, height: dotSize, borderRadius: "50%", background: color }} />
+                ))}
               </div>
 
               {props.url_bar ? (
@@ -367,8 +293,9 @@ const ProductShowcaseBlock: React.FC<{
                 position: "absolute",
                 inset: 0,
                 containerType: "size",
-                transformOrigin: `${cropX}% ${Math.round(focusY * 100)}%`,
-                transform: `translate(${driftX}px, ${driftY}px) scale(${innerZoom})`,
+                transformOrigin: camera.origin,
+                filter: camera.blur > 0 ? `blur(${camera.blur}px)` : undefined,
+                transform: camera.viewport,
               }}
             >
               {/* Crop one source-sized plane so the image and its normalized box travel together. */}
@@ -385,6 +312,7 @@ const ProductShowcaseBlock: React.FC<{
                   <Img src={imageUrl} onImageFrame={sizeCapture} style={{ display: "block", width: "100%" }} />
                 ) : null}
 
+                {props.cursor && <VirtualCursor cue={props.cursor} tSec={cueSec} scaleUnit={scaleUnit} accent={accent} />}
                 {callout && calloutAlpha > 0.005 ? (
                   <div
                     style={{
@@ -394,10 +322,11 @@ const ProductShowcaseBlock: React.FC<{
                       width: `${callout.width * 100}%`,
                       height: `${callout.height * 100}%`,
                       borderRadius: Math.round(12 * scaleUnit),
+                      boxSizing: "border-box",
                       border: `1.5px solid ${hexToRgba(accent, 0.85)}`,
                       boxShadow: `0 0 0 9999px rgba(7, 11, 17, ${0.26 * calloutAlpha}), 0 0 ${Math.round(28 * scaleUnit)}px ${hexToRgba(accent, 0.32)}`,
                       opacity: calloutAlpha,
-                      transform: `scale(${0.96 + 0.04 * calloutT})`,
+                      transform: step ? undefined : `scale(${0.96 + 0.04 * calloutT})`,
                       pointerEvents: "none",
                       zIndex: 3,
                     }}
@@ -518,7 +447,7 @@ const KineticTitleBlock: React.FC<{
           flexDirection: "column",
           justifyContent,
           alignItems,
-          padding: `${Math.round(52 * scaleUnit)}px ${Math.round(96 * scaleUnit)}px`,
+          padding: `${Math.round((position === "top_left" ? 6 : 52) * scaleUnit)}px ${Math.round(96 * scaleUnit)}px`,
           boxSizing: "border-box",
         }}
       >
@@ -527,14 +456,14 @@ const KineticTitleBlock: React.FC<{
             display: "inline-flex",
             alignItems: "center",
             gap: Math.round(14 * scaleUnit),
-            padding: `${Math.round(13 * scaleUnit)}px ${Math.round(24 * scaleUnit)}px`,
+            padding: `${Math.round((position === "top_left" ? 6 : 13) * scaleUnit)}px ${Math.round(24 * scaleUnit)}px`,
             borderRadius: 999,
-            background: "rgba(9, 17, 24, 0.90)",
+            background: "rgba(9, 17, 24, 0.97)",
             backdropFilter: "blur(20px)",
             border: `1px solid ${hexToRgba(accent, 0.42)}`,
             boxShadow: `0 ${Math.round(18 * scaleUnit)}px ${Math.round(44 * scaleUnit)}px rgba(0, 0, 0, 0.36)`,
             opacity: pillOpacity,
-            transform: `translateY(${(1 - pillT) * 20 * scaleUnit + exitLift}px) scale(${0.96 + 0.04 * pillT})`,
+            transform: `translateY(${(1 - pillT) * (position === "top_left" ? -6 : 20) * scaleUnit + exitLift}px) scale(${0.96 + 0.04 * pillT})`,
             maxWidth: `${Math.round(1100 * scaleUnit)}px`,
           }}
         >
@@ -555,7 +484,7 @@ const KineticTitleBlock: React.FC<{
                 fontWeight: 700,
                 letterSpacing: "0.14em",
                 textTransform: "uppercase",
-                color: accent,
+                color: studioInk(accent, true),
                 flexShrink: 0,
               }}
             >
@@ -570,7 +499,7 @@ const KineticTitleBlock: React.FC<{
               fontSize: Math.max(16, Math.round(21 * scaleUnit)),
               fontWeight: 600,
               letterSpacing: "-0.01em",
-              color: textColor,
+              color: studioInk(textColor, true),
               lineHeight: 1.2,
             }}
           >
@@ -781,18 +710,21 @@ const StatementHookBlock: React.FC<{
   fonts: VideoSpec["fonts"];
   fps: number;
   frame: number;
-}> = ({ clip, fonts, fps, frame }) => {
+  cueOffsetFrames: number;
+}> = ({ clip, fonts, fps, cueOffsetFrames, frame }) => {
   const obj = clip.object;
   const props = obj.props as {
     headline: string;
     eyebrow?: string | null;
     highlight_phrase?: string | null;
+    highlight_at_s?: number | null;
     subheadline?: string | null;
     theme?: "light" | "dark";
     layout_variant?: "centered" | "editorial_left";
     accent_color?: string;
     entrance_duration_s?: number;
     exit_duration_s?: number;
+    backdrop_style?: BackdropStyle;
     show_backdrop?: boolean;
   };
 
@@ -802,7 +734,6 @@ const StatementHookBlock: React.FC<{
   const durationFrames = Math.max(1, clip.end_frame - clip.start_frame);
   const durationSec = durationFrames / fps;
   const tSec = frame / fps;
-  const progressAll = clamp01(frame / Math.max(1, durationFrames - 1));
 
   const isDark = (props.theme ?? "light") === "dark";
   const isCentered = (props.layout_variant ?? "centered") === "centered";
@@ -819,7 +750,7 @@ const StatementHookBlock: React.FC<{
   const exitLift = -exitProgress * 18 * scaleUnit;
 
   const inkPrimary = isDark ? "#F8FAFC" : "#0F172A";
-  const inkMuted = isDark ? "rgba(226, 232, 240, 0.72)" : "rgba(30, 41, 59, 0.72)";
+  const inkMuted = isDark ? "#BFCAD3" : "#3A474C";
   const ruleColor = isDark ? "rgba(255, 255, 255, 0.14)" : "rgba(15, 23, 42, 0.12)";
 
   const eyebrowT = springOut(tSec, 13.5, 0.84);
@@ -839,7 +770,8 @@ const StatementHookBlock: React.FC<{
   const tokenStep = Math.min(0.055, (entranceDur * 0.55) / Math.max(1, totalTokens));
   const subStart = entranceDur * 0.58;
   const subT = easeOutQuart((tSec - subStart) / Math.max(0.28, entranceDur * 0.6));
-  const highlightSweep = easeOutQuart((tSec - entranceDur * 0.52) / 0.55);
+  const highlightStart = props.highlight_at_s == null ? entranceDur * 0.52 : props.highlight_at_s + cueOffsetFrames / fps;
+  const highlightSweep = easeOutQuart(cueProgress(tSec, highlightStart, 0.55));
 
   return (
     <div
@@ -853,7 +785,7 @@ const StatementHookBlock: React.FC<{
       }}
     >
       {showBackdrop ? (
-        <StudioBackdrop isDark={isDark} accent={accent} scaleUnit={scaleUnit} progressAll={progressAll} />
+        <StudioBackdrop theme={isDark ? "dark" : "light"} accent={accent} scaleUnit={scaleUnit} style={props.backdrop_style} tSec={tSec} />
       ) : null}
 
       <div
@@ -898,7 +830,7 @@ const StatementHookBlock: React.FC<{
                   fontWeight: 600,
                   letterSpacing: "0.14em",
                   textTransform: "uppercase",
-                  color: accent,
+                  color: studioInk(accent, isDark),
                   opacity: clamp01(eyebrowT * 1.15),
                   transform: `translateY(${(1 - eyebrowT) * 20 * scaleUnit}px)`,
                 }}
@@ -971,7 +903,7 @@ const StatementHookBlock: React.FC<{
                               bottom: Math.round(6 * scaleUnit),
                               height: "36%",
                               borderRadius: Math.round(8 * scaleUnit),
-                              background: hexToRgba(accent, isDark ? 0.32 : 0.22),
+                              background: hexToRgba(accent, isDark ? 0.12 : 0.14),
                               transformOrigin: "left center",
                               transform: `scaleX(${highlightSweep})`,
                               pointerEvents: "none",
@@ -986,7 +918,7 @@ const StatementHookBlock: React.FC<{
                             fontWeight: 700,
                             lineHeight: 1.08,
                             letterSpacing: `${-0.032 + (1 - clamp01(s)) * 0.014}em`,
-                            color: inHighlight && highlightSweep > 0.35 ? accent : inkPrimary,
+                            color: inHighlight ? `color-mix(in srgb, ${studioInk(accent, isDark)} ${highlightSweep * 100}%, ${inkPrimary})` : inkPrimary,
                             opacity: op,
                             transform: `translateY(${(1 - s) * 108}%)`,
                           }}
@@ -1053,6 +985,7 @@ const StatementHookBlock: React.FC<{
 };
 
 interface MetricGridItem {
+  reveal_at_s?: number | null;
   value: string;
   label: string;
   detail?: string | null;
@@ -1069,7 +1002,8 @@ const MetricGridBlock: React.FC<{
   fonts: VideoSpec["fonts"];
   fps: number;
   frame: number;
-}> = ({ clip, fonts, fps, frame }) => {
+  cueOffsetFrames: number;
+}> = ({ clip, fonts, fps, cueOffsetFrames, frame }) => {
   const obj = clip.object;
   const props = obj.props as {
     eyebrow?: string | null;
@@ -1080,15 +1014,14 @@ const MetricGridBlock: React.FC<{
     accent_color?: string;
     stagger_s?: number;
     count_up?: boolean;
+    backdrop_style?: BackdropStyle;
     show_backdrop?: boolean;
   };
 
   const width = obj.layout.width;
   const height = obj.layout.height;
   const scaleUnit = Math.min(width / 1920, height / 1080);
-  const durationFrames = Math.max(1, clip.end_frame - clip.start_frame);
   const tSec = frame / fps;
-  const progressAll = clamp01(frame / Math.max(1, durationFrames - 1));
 
   const isDark = (props.theme ?? "light") === "dark";
   const accent = props.accent_color ?? "#0D9488";
@@ -1099,7 +1032,7 @@ const MetricGridBlock: React.FC<{
   const cols = items.length === 2 || items.length === 4 ? 2 : (props.columns ?? 3);
 
   const inkPrimary = isDark ? "#F8FAFC" : "#0F172A";
-  const inkSecondary = isDark ? "rgba(226, 232, 240, 0.72)" : "rgba(51, 65, 85, 0.78)";
+  const inkSecondary = isDark ? "#BFCAD3" : "#3A474C";
   const cardBg = isDark ? "rgba(15, 22, 33, 0.88)" : "rgba(255, 255, 255, 0.94)";
   const cardBorder = isDark ? "rgba(255, 255, 255, 0.10)" : "rgba(15, 23, 42, 0.09)";
 
@@ -1119,7 +1052,7 @@ const MetricGridBlock: React.FC<{
       }}
     >
       {showBackdrop ? (
-        <StudioBackdrop isDark={isDark} accent={accent} scaleUnit={scaleUnit} progressAll={progressAll} />
+        <StudioBackdrop theme={isDark ? "dark" : "light"} accent={accent} scaleUnit={scaleUnit} style={props.backdrop_style} tSec={tSec} />
       ) : null}
 
       <div
@@ -1156,7 +1089,7 @@ const MetricGridBlock: React.FC<{
                   fontWeight: 600,
                   letterSpacing: "0.16em",
                   textTransform: "uppercase",
-                  color: accent,
+                  color: studioInk(accent, isDark),
                 }}
               >
                 <span style={{ width: Math.round(24 * scaleUnit * clamp01(headerT)), height: Math.max(2, Math.round(2.5 * scaleUnit)), background: accent, borderRadius: 2 }} />
@@ -1189,7 +1122,7 @@ const MetricGridBlock: React.FC<{
           }}
         >
           {items.map((item, idx) => {
-            const cardDelay = 0.22 + idx * stagger;
+            const cardDelay = item.reveal_at_s == null ? 0.22 + idx * stagger : item.reveal_at_s + cueOffsetFrames / fps;
             const localT = Math.max(0, tSec - cardDelay);
             const settle = springOut(localT, 12.2, 0.80);
             const alpha = easeOutCubic(localT / 0.34);
@@ -1251,7 +1184,7 @@ const MetricGridBlock: React.FC<{
                           borderRadius: 999,
                           background: hexToRgba(accent, isDark ? 0.16 : 0.11),
                           border: `1px solid ${hexToRgba(accent, 0.30)}`,
-                          color: accent,
+                          color: studioInk(accent, isDark),
                           fontSize: Math.max(11, Math.round(12.5 * scaleUnit)),
                           fontWeight: 600,
                           letterSpacing: "0.04em",
@@ -1318,6 +1251,7 @@ const ClosingCtaBlock: React.FC<{
     accent_color?: string;
     entrance_duration_s?: number;
     logo_surface?: "light_pill" | "raw";
+    backdrop_style?: BackdropStyle;
     show_backdrop?: boolean;
   };
 
@@ -1336,7 +1270,7 @@ const ClosingCtaBlock: React.FC<{
   const logoUrl = resolveResourceUrl(clip, obj, 0);
 
   const inkPrimary = isDark ? "#F8FAFC" : "#0F172A";
-  const inkMuted = isDark ? "rgba(226, 232, 240, 0.76)" : "rgba(51, 65, 85, 0.78)";
+  const inkMuted = isDark ? "#BFCAD3" : "#3A474C";
   const tickColor = isDark ? "rgba(255, 255, 255, 0.16)" : "rgba(15, 23, 42, 0.16)";
 
   const brandT = springOut(tSec, 12.0, 0.82);
@@ -1363,7 +1297,7 @@ const ClosingCtaBlock: React.FC<{
       }}
     >
       {showBackdrop ? (
-        <StudioBackdrop isDark={isDark} accent={accent} scaleUnit={scaleUnit} progressAll={progressAll} />
+        <StudioBackdrop theme={isDark ? "dark" : "light"} accent={accent} scaleUnit={scaleUnit} style={props.backdrop_style} tSec={tSec} />
       ) : null}
 
       {/* Faint institutional studio corner registration marks */}
@@ -1535,7 +1469,7 @@ const ClosingCtaBlock: React.FC<{
                   fontSize: Math.round(18 * scaleUnit),
                   fontWeight: 600,
                   letterSpacing: "0.02em",
-                  color: accent,
+                  color: studioInk(accent, true),
                 }}
               >
                 {props.cta_label}
@@ -1584,17 +1518,18 @@ export const MotionBlockView: React.FC<{
   fonts: VideoSpec["fonts"];
   fps: number;
   frame: number;
+  cueOffsetFrames?: number;
   containerStyle: React.CSSProperties;
-}> = ({ clip, fonts, fps, frame, containerStyle }) => {
+}> = ({ clip, fonts, fps, cueOffsetFrames = 0, frame, containerStyle }) => {
   const id = clip.object.block_id;
   return (
     <div style={containerStyle}>
       {id === "product_showcase" ? (
-        <ProductShowcaseBlock clip={clip} fonts={fonts} fps={fps} frame={frame} />
+        <ProductShowcaseBlock cueOffsetFrames={cueOffsetFrames} clip={clip} fonts={fonts} fps={fps} frame={frame} />
       ) : id === "statement_hook" ? (
-        <StatementHookBlock clip={clip} fonts={fonts} fps={fps} frame={frame} />
+        <StatementHookBlock cueOffsetFrames={cueOffsetFrames} clip={clip} fonts={fonts} fps={fps} frame={frame} />
       ) : id === "metric_grid" ? (
-        <MetricGridBlock clip={clip} fonts={fonts} fps={fps} frame={frame} />
+        <MetricGridBlock cueOffsetFrames={cueOffsetFrames} clip={clip} fonts={fonts} fps={fps} frame={frame} />
       ) : id === "closing_cta" ? (
         <ClosingCtaBlock clip={clip} fonts={fonts} fps={fps} frame={frame} />
       ) : (

@@ -15,7 +15,7 @@ from app.chat.editor_create import CreateVideoArgs
 from app.skills.blueprint import InstantiateSkillBlueprintArgs, music_clips_for_window
 from app.editing.catalog import MotionBlockId, SoundRecipeId, VoiceId
 from app.editing.edits import AddClip, AddTrack, BindSource, SetTransition, SplitClip, TemporalEdit, UpdateClip, UpdateScene
-from app.editing.schemas import Animation, ClipSource, EditTarget, MotionBlockObject, ProductShowcaseCallout, TimeRange, Transition
+from app.editing.schemas import Animation, ClipSource, EditTarget, MotionBlockObject, ProductShowcaseProps, TimeRange, Transition, TransitionKind
 from app.editing.store import (
     RequestMismatch,
     StaleBase,
@@ -143,10 +143,10 @@ class SetTransitionArgs(BaseModel):
     model_config = ConfigDict(extra="forbid")
     from_clip_id: str = Field(min_length=1, max_length=64, description="Outgoing clip_id on the visual track.")
     to_clip_id: str = Field(min_length=1, max_length=64, description="Adjacent incoming clip_id on the same visual track.")
-    kind: Literal["crossfade"] = "crossfade"
+    kind: TransitionKind = "crossfade"
     duration_seconds: float = Field(
         default=0.4, ge=0.1, le=2.0, allow_inf_nan=False,
-        description="Centered crossfade overlap duration in seconds (typically 0.35-0.5s).",
+        description="Centered transition overlap duration in seconds (typically 0.35-0.5s).",
     )
 
 
@@ -159,7 +159,7 @@ class InsertMotionBlockArgs(BaseModel):
     end_seconds: float = Field(gt=0, allow_inf_nan=False, description="Exclusive end time on timeline.")
     props: dict[str, Any] = Field(description=(
         "Declarative props for the chosen motion block. A captured product_showcase view accepts "
-        "callout {element_id, label?} from its targets or {x, y, width, height, label?}."
+        "callout {element_id, label?} from its targets or {x, y, width, height, label?}. Use callout_steps (start_s/end_s/label + target) and cursor (click_at_s + element_id or x/y)."
     ))
     resources: list[UUID] | None = Field(
         default=None, max_length=16,
@@ -370,7 +370,7 @@ EDITOR_TOOLS = (
     ),
     _editor_tool(
         "set_transition",
-        "Add or update a centered crossfade transition between two adjacent full-canvas opaque clips (including opaque motion blocks with show_backdrop=True) on the same visual track.",
+        "Add or update a centered transition between two adjacent full-canvas opaque clips (including opaque motion blocks with show_backdrop=True) on the same visual track.",
         SetTransitionArgs, "setTransition",
     ),
     _editor_tool(
@@ -888,7 +888,7 @@ async def edit_clip(
                 if not chosen_view:
                     raise ValueError("The captured webpage has no rendered views.")
                 if idx == 0 and args.block_id == "product_showcase":
-                    props = ProductShowcaseCallout.resolve_props(props, views, chosen_view)
+                    props = ProductShowcaseProps.resolve_props(props, views, chosen_view)
                 snap = await register_web_view_snapshot(
                     db, owner_id=project.user_id, web_snapshot=snap, view_id=chosen_view,
                 )

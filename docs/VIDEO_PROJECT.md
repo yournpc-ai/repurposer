@@ -342,7 +342,7 @@ Transition
 └── easing / params
 ```
 
-Transition 属于同一 Track 上相邻 Clips 的编辑关系；单 Object 的 fade、slide、zoom 仍是 Animation。当前首个消费者为 crossfade + center：同轨相邻、全画幅 cover、无外部视觉 transform/opacity 动画的不透明固定 image/web/video；不移动切点或总长。编译围绕切点扩展两侧覆盖窗，视频使用真实前后 source handles，余量不足明确冲突；VideoObject 内原声同时交叉淡化，独立文字和音乐不连带。单独关联 AudioClip 的转场淡化、透明层及其他转场仍未声明支持，不做转场画廊。
+Transition 属于同一 Track 上相邻 Clips 的编辑关系；单 Object 的 fade、slide、zoom 仍是 Animation。居中转场支持 crossfade（默认）、whip_pan、wipe_reveal、zoom_through 和 iris_focus。相邻片段须同轨、全画幅 cover 且不透明，可用固定 image/web/video 或带舞台背景的 MotionBlock；切点、总长与外部视觉 transform/opacity 约束保持一致。编译围绕切点扩展两侧覆盖窗，视频使用真实前后 source handles，余量不足明确冲突；VideoObject 内原声同时交叉淡化，独立文字和音乐不连带。独立 AudioClip 淡化和透明层转场仍待实现。
 
 ## 5. Animation 与 TextPart
 

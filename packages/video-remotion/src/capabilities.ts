@@ -1,5 +1,6 @@
 import {
   LAYOUT_VERSION,
+  transitionKinds,
   SEGMENTATION_VERSION,
   type VideoSpec,
 } from "@repurposer/video-spec";
@@ -32,7 +33,7 @@ export const VIDEO_CAPABILITIES = {
     "audio.gain",
   ],
   easings: ["linear", "hold", "cubic_bezier"],
-  transitions: ["crossfade"] as string[],
+  transitions: transitionKinds,
   fractional_fps: false,
 } as const;
 
@@ -43,6 +44,11 @@ export function assertVideoSupported(spec: VideoSpec): void {
     throw new VideoCapabilityError(
       `fractional fps ${spec.fps.num}/${spec.fps.den} is not supported by this adapter`,
     );
+  }
+  for (const transition of spec.transitions ?? []) {
+    if (!VIDEO_CAPABILITIES.transitions.includes(transition.kind)) {
+      throw new VideoCapabilityError(`transition kind ${transition.kind} unsupported`);
+    }
   }
   const fontKeys = new Set<string>();
   for (const font of spec.fonts) {

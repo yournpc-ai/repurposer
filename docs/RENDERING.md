@@ -29,6 +29,8 @@ export_video 在事务内固定版本、digest、授权上限与原生回执。W
 
 **网页状态仍是 WebObject**：CapturePlan 的 populated/full/cutout/blank_plate/hero 制品冻结为同一 web SourceSnapshot 下的独立 `view_id`；普通网页层仍由 `WebObject + view_id` 引用。受控 Generator 的显式派生 image Snapshot 资源由上游准备层校验 owner、原 web/view 与精确 digest，不能直接将 web 清单当 image 使用。共享相机的 RGBA cutout 按配对目标盒无缩放补齐透明全画布，保存原裁切与配对 digest；renderer 只消费固定 Generator 视频与独立原生文字，不拼采集坐标。selected 特写使用冻结元素盒与既有相机数学，before/after 使用普通 centered crossfade，原生 plate/cutout 使用普通 opacity/transform 动画；video-spec 不新增网页状态或 renderer 字段。
 
+Motion Block 的节拍按幕内秒数声明。居中转场扩展的入幕预卷参与镜头入场，旁白高光、卡片揭示、光标点击和多步框选以原切点为零。截图、光标和框选共用一个原尺寸比例平面，镜头对整个平面求值。Skill 蓝图保存镜头、舞台、转场和节拍时间，实例化时用新视图的元素重新解算坐标。每个蓝图最多 24 幕、48 条音效提示。
+
 ## 4. 预览
 
 分镜默认静态。显式局部 Scrub 使用确切版本、digest 和目标窗口，经过同一媒体与动画求值边界。浏览器预览只产生该版本的预览观察；连续视听与正式交付各自取证。
@@ -36,7 +38,7 @@ export_video 在事务内固定版本、digest、授权上限与原生回执。W
 ## 5. 传输与缓存
 
 - **上传与恢复**：源下载的响应头/空闲等待为 300 秒；上传的响应头、空闲等待与单次尝试上限均为 600 秒，每个文件最多尝试 4 次，共享 720 秒总预算（包含退避）。连接重置/断管/临时网络错误/超时及 HTTP 5xx/408/429 可重试；每次重建连接池，指数退避带抖动并遵守 `Retry-After`，等待超出剩余预算则结束。鉴权、证书及未知错误不盲重试；错误日志不含预签名 URL。API 请求默认上限 1800 秒，上传签名至少有效 3600 秒。生成、上传与恢复错误分别返回 `stage=render|upload|recovery`；上传失败提示已生成但未交付，缓存失效只要求重新渲染，不伪装成重传。
-- **成片缓存**：`artifacts.ts` 按 Output 身份、规范化 spec 和渲染器缓存版本定位，完整生成后原子写 ready marker，保留 24 小时。候选的 v2 键包含锁定 Renderer 的音频补丁 SHA-256。切换前由原 Renderer 和原缓存卷排空已 prepare 的上传。上传结果未知时先按原上传身份核对对象并保留预占。变更 spec 或缓存版本需重新生成；签名改变不导致 miss。
+- **成片缓存**：`artifacts.ts` 按 Output 身份、规范化 spec 和渲染器缓存版本定位，完整生成后原子写 ready marker，保留 24 小时。v3 键区分当前视觉引擎，并包含锁定 Renderer 的音频补丁 SHA-256。切换前由原 Renderer 和原缓存卷排空已 prepare 的上传。上传结果未知时先按原上传身份核对对象并保留预占。变更 spec 或缓存版本需重新生成；签名改变不导致 miss。
 - **代理**：`dev.sh` 按显式 `RENDER_PROXY` → 已导出 HTTP(S) 代理 → macOS 系统 HTTPS 代理 → 本地 6152 默认值选择；`RENDER_PROXY=off` 明确关闭。探测失败保留配置并提示，不自动回退直连；选择结果写 render 日志。
 
 ## 6. 渲染与交付约束

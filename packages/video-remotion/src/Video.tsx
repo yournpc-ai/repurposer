@@ -23,6 +23,7 @@ import {
   type VideoTextObject,
   type VideoTextPart,
 } from "@repurposer/video-spec";
+import { evaluateTransition } from "./engine/transitions";
 import { MotionBlockView } from "./MotionBlocks";
 
 function scalar(v: AnimValue | undefined, fallback: number): number {
@@ -416,7 +417,8 @@ const VisualObjectView: React.FC<{
   fonts: VideoSpec["fonts"];
   fps: number;
   gain: number;
-}> = ({ clip, fonts, fps, gain }) => {
+  cueOffsetFrames: number;
+}> = ({ clip, fonts, fps, gain, cueOffsetFrames }) => {
   const frame = useCurrentFrame();
   const obj = clip.object;
   if (obj.kind === "audio") return null;
@@ -436,6 +438,7 @@ const VisualObjectView: React.FC<{
         fonts={fonts}
         fps={fps}
         frame={frame}
+        cueOffsetFrames={cueOffsetFrames}
         containerStyle={wholeObjectStyle(clip, frame)}
       />
     );
@@ -486,14 +489,16 @@ export const Video: React.FC<{
   onFontsError?: () => void;
 }> = ({ spec, onFontsReady, onFontsError }) => {
   const frame = useCurrentFrame();
-  const dissolve = (clipId: string) => {
-    let opacity = 1, gain = 1;
+  const cueOffsets = new Map((spec.transitions ?? []).map(t => [t.to_clip_id, t.cut_frame - t.start_frame]));
+  const transitionAt = (clipId: string) => {
     for (const transition of spec.transitions ?? []) {
-      const progress = Math.max(0, Math.min(1, (frame-transition.start_frame) / (transition.end_frame-transition.start_frame-1)));
-      if (clipId === transition.to_clip_id) { opacity *= progress; gain *= progress; }
-      if (clipId === transition.from_clip_id) gain *= 1-progress;
+      if (frame < transition.start_frame || frame >= transition.end_frame) continue;
+      const incoming = clipId === transition.to_clip_id;
+      if (!incoming && clipId !== transition.from_clip_id) continue;
+      const p = (frame - transition.start_frame) / (transition.end_frame - transition.start_frame - 1);
+      return { style: evaluateTransition(transition.kind, incoming, p), gain: incoming ? p : 1 - p };
     }
-    return { opacity, gain };
+    return { style: {}, gain: 1 };
   };
   const visualTracks = spec.tracks
     .filter((track) => track.kind === "visual")
@@ -507,22 +512,26 @@ export const Video: React.FC<{
         onError={onFontsError}
       />
       {visualTracks.flatMap((track) =>
-        track.clips.map((clip) => (
-          <Sequence
-            key={clip.clip_id}
-            from={clip.start_frame}
-            durationInFrames={clip.end_frame - clip.start_frame}
-          >
-            <AbsoluteFill style={{ opacity: dissolve(clip.clip_id).opacity }}>
-              <VisualObjectView
-                clip={clip}
-                fonts={spec.fonts}
-                fps={spec.fps.num / spec.fps.den}
-                gain={dissolve(clip.clip_id).gain}
-              />
-            </AbsoluteFill>
-          </Sequence>
-        )),
+        track.clips.map((clip) => {
+          const { style, gain } = transitionAt(clip.clip_id);
+          return (
+            <Sequence
+              key={clip.clip_id}
+              from={clip.start_frame}
+              durationInFrames={clip.end_frame - clip.start_frame}
+            >
+              <AbsoluteFill style={style}>
+                <VisualObjectView
+                  clip={clip}
+                  fonts={spec.fonts}
+                  fps={spec.fps.num / spec.fps.den}
+                  cueOffsetFrames={cueOffsets.get(clip.clip_id) ?? 0}
+                  gain={gain}
+                />
+              </AbsoluteFill>
+            </Sequence>
+          );
+        }),
       )}
       {audioTracks.flatMap((track) =>
         track.clips.map((clip) => (

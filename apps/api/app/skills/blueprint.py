@@ -38,9 +38,10 @@ from app.editing.schemas import (
     Clip,
     ClipSource,
     CompositionContent,
+    CueSecond,
     LayoutBox,
     MotionBlockObject,
-    ProductShowcaseCallout,
+    ProductShowcaseProps,
     RemotionResource,
     Scene,
     SourceBinding,
@@ -48,6 +49,7 @@ from app.editing.schemas import (
     Timeline,
     Track,
     Transition,
+    TransitionKind,
     VersionSettings,
 )
 from app.editing.store import (
@@ -89,24 +91,24 @@ BLUEPRINT_CAPABILITY = "slot_blueprint_v1"
 _CONTENT_PROP_KEYS: dict[str, set[str]] = {
     "statement_hook": {"eyebrow", "headline", "highlight_phrase", "subheadline"},
     "kinetic_title": {"eyebrow", "headline", "subheadline"},
-    "product_showcase": {"url_bar", "badge", "callout"},
+    "product_showcase": {"url_bar", "badge", "callout", "callout_steps", "cursor"},
     "metric_grid": {"eyebrow", "title", "items"},
     "closing_cta": {"brand_name", "tagline", "cta_label", "url_text"},
 }
 
 _STYLE_PROP_KEYS: dict[str, set[str]] = {
-    "statement_hook": {"theme", "layout_variant", "accent_color", "entrance_duration_s", "exit_duration_s", "show_backdrop"},
+    "statement_hook": {"backdrop_style", "highlight_at_s", "theme", "layout_variant", "accent_color", "entrance_duration_s", "exit_duration_s", "show_backdrop"},
     "kinetic_title": {"align", "position", "entrance_duration_s", "exit_duration_s", "accent_color", "text_color", "surface_style"},
-    "product_showcase": {"theme", "chrome_mode", "camera_motion", "entrance_duration_s", "zoom_scale", "focus_x", "focus_y", "accent_color", "show_backdrop"},
-    "metric_grid": {"columns", "theme", "accent_color", "stagger_s", "count_up", "show_backdrop"},
-    "closing_cta": {"theme", "accent_color", "entrance_duration_s", "logo_surface", "show_backdrop"},
+    "product_showcase": {"camera_preset", "backdrop_style", "scroll_from_y", "scroll_to_y", "theme", "chrome_mode", "camera_motion", "entrance_duration_s", "zoom_scale", "focus_x", "focus_y", "accent_color", "show_backdrop"},
+    "metric_grid": {"backdrop_style", "columns", "theme", "accent_color", "stagger_s", "count_up", "show_backdrop"},
+    "closing_cta": {"backdrop_style", "theme", "accent_color", "entrance_duration_s", "logo_surface", "show_backdrop"},
 }
 
 
 class BlueprintTransition(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    kind: Literal["crossfade"] = "crossfade"
-    duration_s: float = Field(gt=0.05, le=2.0)
+    kind: TransitionKind = "crossfade"
+    duration_s: float = Field(gt=0, allow_inf_nan=False)
 
 
 class BlueprintOverlay(BaseModel):
@@ -134,6 +136,29 @@ class BlueprintAct(BaseModel):
     has_narration: bool = False
     transition_after: BlueprintTransition | None = None
     overlays: list[BlueprintOverlay] = Field(default_factory=list)
+
+    # Timing survives a remake. Only the replacement slot supplies geometry or copy.
+    cursor_click_at_s: CueSecond | None = None
+    callout_windows_s: list[tuple[CueSecond, CueSecond]] = Field(default_factory=list, max_length=4)
+    metric_reveals_s: list[CueSecond | None] = Field(default_factory=list, max_length=4)
+
+    def bind_props(self, replacement: dict[str, Any]) -> dict:
+        props = {**self.style_defaults, **replacement}
+        if isinstance(props.get("cursor"), dict) and self.cursor_click_at_s is not None:
+            props["cursor"] = {"click_at_s": self.cursor_click_at_s, **props["cursor"]}
+        if isinstance(props.get("callout_steps"), list):
+            steps = list(props["callout_steps"])
+            for i, (step, (start, end)) in enumerate(zip(steps, self.callout_windows_s)):
+                if isinstance(step, dict):
+                    steps[i] = {"start_s": start, "end_s": end, **step}
+            props["callout_steps"] = steps
+        if isinstance(props.get("items"), list):
+            items = list(props["items"])
+            for i, (item, reveal) in enumerate(zip(items, self.metric_reveals_s)):
+                if isinstance(item, dict) and reveal is not None:
+                    items[i] = {"reveal_at_s": reveal, **item}
+            props["items"] = items
+        return props
 
 
 class BlueprintAudioProfile(BaseModel):
@@ -163,9 +188,9 @@ class SkillBlueprintV1(BaseModel):
     schema_version: Literal[1] = 1
     source_composition_uri: str | None = None
     canvas: dict[str, Any]
-    acts: list[BlueprintAct] = Field(min_length=1, max_length=12)
+    acts: list[BlueprintAct] = Field(min_length=1, max_length=24)
     audio_profile: BlueprintAudioProfile = Field(default_factory=BlueprintAudioProfile)
-    sfx_cues: list[BlueprintSfxCue] = Field(default_factory=list, max_length=24)
+    sfx_cues: list[BlueprintSfxCue] = Field(default_factory=list, max_length=48)
 
 
 def normalize_skill_slug(raw: str) -> str:
@@ -245,7 +270,7 @@ def _render_skill_md(name: str, description: str, bp: SkillBlueprintV1) -> str:
         "",
         "## Reusable Multi-Act Structure (`references/blueprint.json`)",
         "",
-        "This reusable Skill preserves the visual cadence, motion blocks, crossfades, "
+        "This reusable Skill preserves the visual cadence, motion blocks, transitions, "
         "BGM envelope, and sound-effect cues of the saved master composition while keeping "
         "all copy, metrics, screenshots, language, and narration as replaceable slots.",
         "",
@@ -280,6 +305,7 @@ def _render_skill_md(name: str, description: str, bp: SkillBlueprintV1) -> str:
         "1. Gather fresh target materials (`capture_web` / `prepare_video_materials` for screenshots, `search_music` + `prepare_video_materials` for BGM if desired).",
         "2. Generate fresh per-act narration (`generate_voice`) in the user's requested language and angle.",
         "3. Call `instantiate_skill_blueprint` once with `skill_version_id` from `skill_reference.skill_version_id` and the ordered `acts` slot values (`act_id`, `props`, `resources`/`view_id`, `narration_snapshot_id`, optional `overlay_props`) plus optional `bgm_snapshot_id`. Replace ALL headlines, copy, metrics, URLs, and voiceovers with the new target brief.",
+        "For each visual cue in the blueprint, bind a fresh target from the chosen capture. Match callout steps and metric items in order to inherit their timing.",
         "4. The instantiated work is a normal editable `CompositionVersion` — preview and continue refining any individual act, audio clip, or transition in Chat.",
     ])
     return "\n".join(lines) + "\n"
@@ -301,6 +327,11 @@ def extract_skill_draft_from_composition(
         raise ValueError("Provide a short description for the saved Skill.")
 
     tb = content.settings.timebase
+    fps = content.settings.fps
+
+    def frame_time(ticks: int) -> float:
+        return ticks_to_frames(ticks, tb, fps.num, fps.den) * fps.den / fps.num
+
     main_blocks = sorted(
         (
             clip
@@ -359,9 +390,9 @@ def extract_skill_draft_from_composition(
     for idx, clip in enumerate(main_blocks):
         obj = clip.object
         assert isinstance(obj, MotionBlockObject)
-        s_s = clip.range.start / tb
-        e_s = clip.range.end / tb
-        dur_s = round(e_s - s_s, 3)
+        s_s = frame_time(clip.range.start)
+        e_s = frame_time(clip.range.end)
+        dur_s = e_s - s_s
         act_ranges_s.append((s_s, e_s))
 
         allowed_style = _STYLE_PROP_KEYS.get(obj.block_id, set())
@@ -379,7 +410,7 @@ def extract_skill_draft_from_composition(
         trn_after = None
         trn = transitions_by_from.get(clip.clip_id)
         if trn is not None and idx + 1 < len(main_blocks) and trn.to_clip_id == main_blocks[idx + 1].clip_id:
-            trn_after = BlueprintTransition(kind="crossfade", duration_s=round(trn.duration / tb, 3))
+            trn_after = BlueprintTransition(kind=trn.kind, duration_s=trn.duration / tb)
 
         # Anchor overlapping title overlays to this main act
         overlays: list[BlueprintOverlay] = []
@@ -388,8 +419,8 @@ def extract_skill_draft_from_composition(
                 ov_obj = ov.object
                 assert isinstance(ov_obj, MotionBlockObject)
                 ov_style = {k: v for k, v in ov_obj.props.items() if k in _STYLE_PROP_KEYS["kinetic_title"]}
-                rel_start = round(max(0.0, ov.range.start / tb - s_s), 3)
-                rel_end = round(min(dur_s, ov.range.end / tb - s_s), 3)
+                rel_start = max(0.0, frame_time(ov.range.start) - s_s)
+                rel_end = min(dur_s, frame_time(ov.range.end) - s_s)
                 if rel_end > rel_start + 0.2:
                     overlays.append(BlueprintOverlay(
                         overlay_id=f"act_{idx + 1}_overlay_{ov_idx + 1}",
@@ -409,6 +440,9 @@ def extract_skill_draft_from_composition(
             style_defaults=style_defaults,
             required_slots=req_slots,
             optional_slots=opt_slots,
+            callout_windows_s=[(s["start_s"], s["end_s"]) for s in obj.props.get("callout_steps", [])],
+            cursor_click_at_s=(obj.props.get("cursor") or {}).get("click_at_s"),
+            metric_reveals_s=[item.get("reveal_at_s") for item in obj.props.get("items", [])],
             has_narration=has_narr,
             transition_after=trn_after,
             overlays=overlays,
@@ -639,7 +673,7 @@ class BlueprintActSlotInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     act_id: str | None = Field(default=None, max_length=64, description="Optional act_id matching blueprint order.")
-    props: dict[str, Any] = Field(description="Replacement content props. For a captured product_showcase view, callout can use {element_id, label?} from its targets.")
+    props: dict[str, Any] = Field(description="Replacement content props. Bind callout, callout_steps and cursor to fresh captured element_ids. Step windows, click and metric reveal times inherit by position unless overridden.")
     resources: list[UUID] | None = Field(
         default=None, max_length=16,
         description="Pinned image or captured webpage snapshot IDs (required for product_showcase acts).",
@@ -667,7 +701,7 @@ class InstantiateSkillBlueprintArgs(BaseModel):
 
     skill_version_id: UUID = Field(description="Immutable SkillVersion UUID of the saved slot_blueprint_v1 Skill.")
     name: str = Field(min_length=1, max_length=120, description="Name for the new editable Composition.")
-    acts: list[BlueprintActSlotInput] = Field(min_length=1, max_length=12, description="Ordered slot values matching blueprint acts.")
+    acts: list[BlueprintActSlotInput] = Field(min_length=1, max_length=24, description="Ordered slot values matching blueprint acts.")
     bgm_snapshot_id: UUID | None = Field(
         default=None,
         description="Optional fixed music snapshot; looped or trimmed to the adapted total duration with blueprint fade-in/out.",
@@ -792,6 +826,15 @@ async def instantiate_skill_blueprint(
                 f"Blueprint expects {len(bp.acts)} acts ({[a.act_id for a in bp.acts]}), got {len(args.acts)}."
             )
 
+        fps_num = int(bp.canvas.get("fps_num", 30))
+        fps_den = int(bp.canvas.get("fps_den", 1))
+        settings_obj = VersionSettings(
+            width=int(bp.canvas.get("width", 1920)),
+            height=int(bp.canvas.get("height", 1080)),
+            fps={"num": fps_num, "den": fps_den},
+            background=str(bp.canvas.get("background", "#070B11")),
+        )
+
         legacy_asset = select(Asset.id).where(Asset.user_id == owner, Asset.project_id == project)
         ext_map = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp"}
 
@@ -801,7 +844,7 @@ async def instantiate_skill_blueprint(
         for idx, (bp_act, slot) in enumerate(zip(bp.acts, args.acts)):
             if slot.act_id and slot.act_id != bp_act.act_id:
                 raise ValueError(f"Act #{idx + 1} expected act_id={bp_act.act_id!r}, got {slot.act_id!r}.")
-            merged_props = {**bp_act.style_defaults, **slot.props}
+            merged_props = bp_act.bind_props(slot.props)
 
             # Resolve visual resources (supports image snapshots & captured webpage views)
             act_resources: list[RemotionResource] = []
@@ -820,7 +863,7 @@ async def instantiate_skill_blueprint(
                     if not chosen_view:
                         raise ValueError(f"Act {bp_act.act_id}: captured webpage has no rendered views.")
                     if r_idx == 0 and bp_act.block_id == "product_showcase":
-                        merged_props = ProductShowcaseCallout.resolve_props(merged_props, views, chosen_view)
+                        merged_props = ProductShowcaseProps.resolve_props(merged_props, views, chosen_view)
                     snap = await register_web_view_snapshot(
                         db, owner_id=owner, web_snapshot=snap, view_id=chosen_view,
                     )
@@ -861,11 +904,20 @@ async def instantiate_skill_blueprint(
                 }
                 bound_snapshots[nsnap.id] = nsnap.digest
 
+            main_obj = MotionBlockObject(
+                kind="motion_block",
+                object_id=f"obj_bp_act_{idx + 1}",
+                block_id=bp_act.block_id,
+                block_version=bp_act.block_version,
+                props=merged_props,
+                resources=act_resources,
+                layout=LayoutBox(x=0, y=0, width=settings_obj.width, height=settings_obj.height),
+                fit="cover" if bp_act.block_id != "kinetic_title" else "contain",
+            )
             resolved_acts.append({
                 "bp": bp_act,
                 "slot": slot,
-                "props": merged_props,
-                "resources": act_resources,
+                "object": main_obj,
                 "narration": narr_info,
             })
 
@@ -911,14 +963,6 @@ async def instantiate_skill_blueprint(
         bound_snapshots[snap_uuid] = snap_digest
 
     # ── Phase 2: Pure deterministic adaptive timeline assembly ──
-    fps_num = int(bp.canvas.get("fps_num", 30))
-    fps_den = int(bp.canvas.get("fps_den", 1))
-    settings_obj = VersionSettings(
-        width=int(bp.canvas.get("width", 1920)),
-        height=int(bp.canvas.get("height", 1080)),
-        fps={"num": fps_num, "den": fps_den},
-        background=str(bp.canvas.get("background", "#070B11")),
-    )
     tb = settings_obj.timebase
     breathing_s = args.breathing_seconds if args.breathing_seconds is not None else bp.audio_profile.breathing_s
 
@@ -952,26 +996,15 @@ async def instantiate_skill_blueprint(
         cursor = end
         scene_id = f"scene_{idx + 1}"
         clip_id = f"clp_bp_act_{idx + 1}"
-        obj_id = f"obj_bp_act_{idx + 1}"
         act_windows.append((start, end, clip_id))
         scenes.append(Scene(scene_id=scene_id, range=TimeRange(start=start, end=end)))
 
-        main_obj = MotionBlockObject(
-            kind="motion_block",
-            object_id=obj_id,
-            block_id=bp_act.block_id,
-            block_version=bp_act.block_version,
-            props=item["props"],
-            resources=item["resources"],
-            layout=LayoutBox(x=0, y=0, width=settings_obj.width, height=settings_obj.height),
-            fit="cover" if bp_act.block_id != "kinetic_title" else "contain",
-        )
         main_clips.append(Clip(
             clip_id=clip_id,
             range=TimeRange(start=start, end=end),
             scene_id=scene_id,
             source=None,
-            object=main_obj,
+            object=item["object"],
             animations=[],
         ))
 
@@ -1028,7 +1061,7 @@ async def instantiate_skill_blueprint(
 
     total_ticks = cursor
 
-    # Re-attach crossfade transitions between adjacent opaque main acts
+    # Re-attach transitions between adjacent opaque main acts
     transitions: list[Transition] = []
     for idx, item in enumerate(resolved_acts):
         bp_act: BlueprintAct = item["bp"]
@@ -1040,15 +1073,21 @@ async def instantiate_skill_blueprint(
             main_clips[idx].object.props.get("show_backdrop", False)
             and main_clips[idx + 1].object.props.get("show_backdrop", False)
         ):
-            max_trn_s = 0.4 * min((cur_end - cur_start) / tb, (nxt_end - nxt_start) / tb)
-            trn_s = min(bp_act.transition_after.duration_s, max_trn_s)
-            trn_ticks = quantize_up_ticks(trn_s)
-            if trn_ticks >= frames_to_ticks(2, tb, fps_num, fps_den):
+            trn_s = bp_act.transition_after.duration_s
+            # A shortened replacement act must leave space for both adjacent cuts.
+            for length, original in (
+                (cur_end - cur_start, bp_act.target_duration_s),
+                (nxt_end - nxt_start, bp.acts[idx + 1].target_duration_s),
+            ):
+                if length / tb < original - 1e-9:
+                    trn_s = min(trn_s, length / tb)
+            trn_ticks = seconds_to_ticks(trn_s, tb)
+            if ticks_to_frames(trn_ticks, tb, fps_num, fps_den) >= 2:
                 transitions.append(Transition(
                     transition_id=f"trn_bp_{idx + 1}",
                     from_clip_id=from_cid,
                     to_clip_id=to_cid,
-                    kind="crossfade",
+                    kind=bp_act.transition_after.kind,
                     duration=trn_ticks,
                     alignment="center",
                 ))
