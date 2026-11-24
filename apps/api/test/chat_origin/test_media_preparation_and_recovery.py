@@ -18,7 +18,6 @@ from app.models.schemas import AssetType,AssetStatus
 from app.tools.video import design
 
 
-pytestmark=pytest.mark.asyncio
 
 
 async def test_pending_webpage_is_requested_and_reused_without_duplicate_asset(database,monkeypatch):

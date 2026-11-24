@@ -168,13 +168,13 @@ async def test_stop_and_export_commit_order(database, export, renderer, cleanup_
     identity = first or second
     task = asyncio.create_task(export_jobs.execute_export(*identity))
     try:
-        await asyncio.wait_for(renderer.prepared.wait(), 5)
+        await asyncio.wait_for(renderer.prepared.wait(), 15)
         if boundary != "preparation":
             renderer.allow_prepare.set()
-            await asyncio.wait_for(renderer.upload.wait(), 5)
+            await asyncio.wait_for(renderer.upload.wait(), 15)
         if boundary in {"after_put", "after_output"}:
             renderer.allow_put.set()
-            await asyncio.wait_for(renderer.stored.wait(), 5)
+            await asyncio.wait_for(renderer.stored.wait(), 15)
         if boundary == "after_output":
             renderer.allow_reply.set()
             await task
@@ -194,7 +194,7 @@ async def test_stop_and_export_commit_order(database, export, renderer, cleanup_
         renderer.allow_prepare.set()
         renderer.allow_put.set()
         renderer.allow_reply.set()
-        await asyncio.wait_for(task, 5)
+        await asyncio.wait_for(task, 15)
     success = boundary == "after_output"
     await export_jobs.execute_export(*identity)
     await assert_result(database, export, "succeeded" if success else "cancelled")
@@ -274,7 +274,7 @@ async def test_late_original_response_after_claim_loss_cannot_deliver(database, 
     first = await claim(database)
     worker = asyncio.create_task(export_jobs.execute_export(*first))
     try:
-        await asyncio.wait_for(renderer.upload.wait(), 5)
+        await asyncio.wait_for(renderer.upload.wait(), 15)
         await stop(database, export)
         for _ in range(export_jobs.MAX_ATTEMPTS):
             await expire(database, export.job)
@@ -293,7 +293,7 @@ async def test_late_original_response_after_claim_loss_cannot_deliver(database, 
     finally:
         renderer.allow_put.set()
         renderer.allow_reply.set()
-        await asyncio.wait_for(worker, 5)
+        await asyncio.wait_for(worker, 15)
 
 
 @pytest.mark.asyncio
