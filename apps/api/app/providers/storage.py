@@ -37,6 +37,29 @@ _s3_client: Any | None = None
 _s3_download_client: Any | None = None
 
 
+def is_local_storage() -> bool:
+    """True only when explicitly configured with a ``local:///...`` endpoint for dev/E2E."""
+    return (settings.s3_endpoint_url or "").startswith("local://")
+
+
+def local_storage_root() -> Path:
+    raw = (settings.s3_endpoint_url or "").removeprefix("local://")
+    if not raw:
+        raise ValueError("local:// storage endpoint must include a directory path.")
+    return Path(raw).expanduser().resolve()
+
+
+def local_storage_path(key: str) -> Path:
+    root = local_storage_root()
+    normalized = _normalize_key(key)
+    target = (root / normalized).resolve()
+    try:
+        target.relative_to(root)
+    except ValueError as exc:
+        raise ValueError("Storage key escapes local storage root.") from exc
+    return target
+
+
 def _get_s3_client() -> boto3.client:
     """Return a cached boto3 S3 client configured for Volcengine TOS.
 
@@ -290,6 +313,9 @@ async def presign_upload(
     upload_id: str | None = None,
 ) -> str:
     """Generate a presigned PUT URL for direct upload to object storage."""
+    if is_local_storage():
+        base = settings.s3_public_url.rstrip("/")
+        return f"{base}/{_normalize_key(key)}"
     client = _get_s3_client()
     params = {
         "Bucket": _bucket(key),
@@ -322,6 +348,9 @@ async def presign_download(
     ``Content-Disposition: attachment; filename*=UTF-8''<name>`` so the browser
     downloads instead of playing inline (the plain public URL cannot do this).
     """
+    if is_local_storage():
+        base = settings.s3_public_url.rstrip("/")
+        return f"{base}/{_normalize_key(key)}"
     client = _get_s3_client()
     params: dict[str, str] = {
         "Bucket": _bucket(key),
@@ -343,8 +372,22 @@ async def presign_download(
 
 async def save(key: str, data: bytes | BinaryIO, content_type: str | None = None) -> str:
     """Upload bytes or a file-like object to object storage and return the key."""
-    client = _get_s3_client()
     body = data if isinstance(data, bytes) else data.read()
+    if is_local_storage():
+        def _write_local() -> None:
+            dest = local_storage_path(key)
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            tmp = dest.with_name(f"{dest.name}.part-{os.getpid()}")
+            try:
+                tmp.write_bytes(body)
+                tmp.replace(dest)
+            except Exception:
+                tmp.unlink(missing_ok=True)
+                raise
+
+        await asyncio.to_thread(_write_local)
+        return key
+    client = _get_s3_client()
     params: dict[str, object] = {
         "Bucket": _bucket(key),
         "Key": _normalize_key(key),
@@ -401,6 +444,8 @@ async def save_output(
 
 async def read(key: str) -> bytes:
     """Read an object's bytes from storage."""
+    if is_local_storage():
+        return await asyncio.to_thread(local_storage_path(key).read_bytes)
     client = _get_s3_download_client()
     response = await asyncio.to_thread(
         client.get_object,
@@ -419,10 +464,19 @@ async def download_to_temp(key: str | None) -> Path | None:
     """
     if not key:
         return None
-    client = _get_s3_download_client()
     suffix = Path(key).suffix or ""
     fd, tmp_path = tempfile.mkstemp(suffix=suffix)
     os.close(fd)
+    if is_local_storage():
+        import shutil
+
+        try:
+            await asyncio.to_thread(shutil.copyfile, local_storage_path(key), tmp_path)
+            return Path(tmp_path)
+        except Exception:
+            Path(tmp_path).unlink(missing_ok=True)
+            raise
+    client = _get_s3_download_client()
     try:
         await asyncio.to_thread(
             client.download_file,
@@ -500,15 +554,25 @@ async def download_to_cache(key: str | None) -> Path | None:
 async def _populate_source_cache(normalized: str, dest: Path) -> Path | None:
     SOURCE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_name(f"{dest.name}.part-{os.getpid()}")
-    client = _get_s3_download_client()
-    try:
-        await asyncio.to_thread(
-            client.download_file, _bucket(normalized), _normalize_key(normalized), str(tmp)
-        )
-        tmp.rename(dest)
-    except Exception:
-        tmp.unlink(missing_ok=True)
-        raise
+    if is_local_storage():
+        import shutil
+
+        try:
+            await asyncio.to_thread(shutil.copyfile, local_storage_path(normalized), str(tmp))
+            tmp.rename(dest)
+        except Exception:
+            tmp.unlink(missing_ok=True)
+            raise
+    else:
+        client = _get_s3_download_client()
+        try:
+            await asyncio.to_thread(
+                client.download_file, _bucket(normalized), _normalize_key(normalized), str(tmp)
+            )
+            tmp.rename(dest)
+        except Exception:
+            tmp.unlink(missing_ok=True)
+            raise
     try:
         await _evict_source_cache()
     except Exception as e:  # noqa: BLE001 — eviction is best-effort
@@ -538,6 +602,9 @@ async def delete(key: str | None) -> None:
     """Delete a single object by key."""
     if not key:
         return
+    if is_local_storage():
+        await asyncio.to_thread(local_storage_path(key).unlink, True)
+        return
     client = _get_s3_client()
     await asyncio.to_thread(
         client.delete_object,
@@ -553,6 +620,19 @@ async def delete_file(key: str | None) -> None:
 
 async def _list_keys(prefix: str) -> list[str]:
     """List all object keys under a prefix."""
+    if is_local_storage():
+        def _walk() -> list[str]:
+            root = local_storage_root()
+            if not root.exists():
+                return []
+            norm = _normalize_key(prefix)
+            return sorted(
+                rel
+                for p in root.rglob("*")
+                if p.is_file() and (rel := p.relative_to(root).as_posix()).startswith(norm)
+            )
+
+        return await asyncio.to_thread(_walk)
     client = _get_s3_client()
     paginator = client.get_paginator("list_objects_v2")
     keys: list[str] = []
@@ -573,6 +653,19 @@ async def list_objects_with_age(prefix: str) -> list[tuple[str, float]]:
     delete-prefix callers; age decisions must never be derived from key
     timestamps embedded in filenames.
     """
+    if is_local_storage():
+        def _walk_age() -> list[tuple[str, float]]:
+            root = local_storage_root()
+            if not root.exists():
+                return []
+            norm = _normalize_key(prefix)
+            return sorted(
+                (rel, p.stat().st_mtime)
+                for p in root.rglob("*")
+                if p.is_file() and (rel := p.relative_to(root).as_posix()).startswith(norm)
+            )
+
+        return await asyncio.to_thread(_walk_age)
     client = _get_s3_client()
     paginator = client.get_paginator("list_objects_v2")
     objects: list[tuple[str, float]] = []
@@ -590,6 +683,10 @@ async def delete_prefix(prefix: str) -> None:
     """Delete all objects under a prefix."""
     keys = await _list_keys(prefix)
     if not keys:
+        return
+    if is_local_storage():
+        for k in keys:
+            await delete(k)
         return
     client = _get_s3_client()
     # S3 delete_objects accepts up to 1000 keys per call.
@@ -637,6 +734,19 @@ async def object_head(key: str | None) -> dict | None:
     """HEAD one exact key. Only a missing object is represented by None."""
     if not key:
         return None
+    if is_local_storage():
+        def _stat() -> dict | None:
+            path = local_storage_path(key)
+            if not path.is_file():
+                return None
+            st = path.stat()
+            ctype, _ = mimetypes.guess_type(str(path))
+            return {
+                "ContentLength": st.st_size,
+                "ContentType": ctype or "application/octet-stream",
+            }
+
+        return await asyncio.to_thread(_stat)
     client = _get_s3_client()
     try:
         return await asyncio.to_thread(client.head_object, Bucket=_bucket(key), Key=_normalize_key(key))

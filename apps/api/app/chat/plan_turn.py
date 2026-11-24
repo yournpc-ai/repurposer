@@ -161,6 +161,9 @@ class PlanTurn:
         # message (never into self.text — the gates and keyword detectors
         # read the user's own words only).
         self.suggestion_note: str | None = None
+        # Latest sanitized checklist steps from update_steps + lightweight eval metadata.
+        self._latest_steps: list[dict[str, str]] | None = None
+        self._last_eval_meta: dict[str, Any] = {}
 
     # ---- assembly (the retired _plan_turn's pre-call block, verbatim) ------
 
@@ -563,6 +566,13 @@ class PlanTurn:
 
         if name == "update_focus":
             return ToolObservation("Focus updated.", ok=True, context_lifetime="call", persist=False)
+        if name == "update_steps":
+            from app.chat.activity import sanitize_steps
+
+            sanitized = sanitize_steps(getattr(params, "steps", None))
+            if sanitized:
+                self._latest_steps = sanitized
+            return ToolObservation("Steps updated.", ok=True, context_lifetime="call", persist=False)
         if name in EDITOR_NAMES:
             return await execute_editor(self, name, params)
         if name == "read_conversation_context":
@@ -950,17 +960,59 @@ class PlanTurn:
         self.outcome = (assistant_message, self.settled_pending)
         return None
 
+    def _stamp_turn_metadata(self, message: Message | None, *, completed: bool) -> None:
+        """Stamp finalized steps and lightweight eval_meta onto the settled assistant row."""
+        if message is None or message.role != "assistant":
+            return
+        from app.chat.activity import finalize_steps
+
+        intent = dict(message.intent or {})
+        final_steps = finalize_steps(self._latest_steps, completed=completed)
+        if final_steps:
+            intent["steps"] = final_steps
+        eval_meta = dict(self._last_eval_meta)
+        base_ref = getattr(self, "_video_base_ref", None) or {}
+        pending_pres = self._video_presentation_pending or {}
+        comp_id = (
+            pending_pres.get("composition_id")
+            or base_ref.get("composition_id")
+            or eval_meta.get("composition_id")
+        )
+        ver_id = (
+            pending_pres.get("composition_version_id")
+            or base_ref.get("composition_version_id")
+            or eval_meta.get("composition_version_id")
+        )
+        if comp_id:
+            eval_meta["composition_id"] = str(comp_id)
+        if ver_id:
+            eval_meta["composition_version_id"] = str(ver_id)
+        if self.skill is not None and "skill_reference" not in eval_meta:
+            eval_meta["skill_reference"] = (
+                self.skill.model_dump(mode="json")
+                if hasattr(self.skill, "model_dump")
+                else self.skill
+            )
+        if eval_meta:
+            intent["eval_meta"] = eval_meta
+        if intent != (message.intent or {}):
+            message.intent = intent
+
     # ---- the outcome mapping -------------------------------------------------
 
     async def finish(self, result) -> PlanTurnOutcome:
         """LoopResult → the caller's 4-tuple. An accepted execution stashed
         its outcome already; the bare reply and the exhaustion degrade land
         here (an honest degrade, never a fabricated success)."""
+        normal_completion = (
+            not result.exhausted and result.ended_by is None and result.no_progress_tool is None
+        )
         if self.outcome is not None:
             # 呈现关联 (2026-10-18 裁决): a design beat this turn owes its
             # presentation — the TERMINAL row IS the presentation message;
             # stamp its provenance now that the row persisted.
             await self._stamp_presentation(self.outcome[0])
+            self._stamp_turn_metadata(self.outcome[0], completed=normal_completion)
             return self.outcome
         # The degrade paths land their own message — resolve any still-armed
         # queue FIRST so its frames precede the envelope: a clean bare reply
@@ -991,6 +1043,7 @@ class PlanTurn:
             if partial:
                 message = await _create_message(self.db, self.conversation_id, "assistant", partial, turn_id=self.turn_id)
                 await self._stamp_video_presentation(message)
+                self._stamp_turn_metadata(message, completed=False)
                 return message, self.settled_pending
         if result.no_progress_tool is not None:
             video_read = self._video_presentation_pending
@@ -1009,6 +1062,7 @@ class PlanTurn:
             # A direct video save is real even when its later correction stops.
             # Present those saved facts and attach the normal review receipt.
             await self._stamp_video_presentation(assistant_message)
+            self._stamp_turn_metadata(assistant_message, completed=False)
             return assistant_message, self.settled_pending
         if result.ended_by is not None:
             # A deterministic refusal ends the loop without another model
@@ -1030,6 +1084,7 @@ class PlanTurn:
                 "assistant",
                 content,
             )
+            self._stamp_turn_metadata(assistant_message, completed=False)
             return assistant_message, self.settled_pending
         if not result.exhausted:
             # The bare final reply (no tool called) — the read-tolerant
@@ -1050,6 +1105,7 @@ class PlanTurn:
             # The bare reply IS the presentation when the model closed a
             # design beat without a further call — same association seat.
             await self._stamp_presentation(assistant_message)
+            self._stamp_turn_metadata(assistant_message, completed=True)
             return assistant_message, self.settled_pending
         # Exhaustion can follow successful reads and failed submissions.
         # A latched begin refusal speaks
@@ -1247,7 +1303,13 @@ async def run_plan_turn(
         for m in recent or ()
     )
 
+    compact_summary = (getattr(conversation, "context", None) or {}).get("compact_summary")
+
     def assemble_round(**facts):
+        import hashlib
+        from app.chat.service import INTERACTION_POLICY_VERSION
+        from app.providers.llm import get_llm_client
+
         target_hint = mention_target
         current_pending = turn._current_pending()
         source_text = (
@@ -1282,14 +1344,27 @@ async def run_plan_turn(
             "material_pending": bool(urls_in_text(request.message) or request.attachments or request.mentions),
             "creative_state": creative_state_for_pending(current_pending),
             "package_sessions": turn.__dict__.setdefault("_skill_package_sessions", {}),
+            "compact_summary": compact_summary,
         })
         turn._video_base_ref = (
             (assembly.caller_state or {}).get("video_target") or {}
         ).get("base_ref")
+        try:
+            model_name = get_llm_client().model
+        except Exception:  # noqa: BLE001
+            model_name = None
+        turn._last_eval_meta = {
+            "model_name": model_name,
+            "system_prompt_sha256": hashlib.sha256((assembly.system or "").encode("utf-8")).hexdigest(),
+            "interaction_policy_version": INTERACTION_POLICY_VERSION,
+            "composition_id": (turn._video_base_ref or {}).get("composition_id"),
+            "composition_version_id": (turn._video_base_ref or {}).get("composition_version_id"),
+            "assembled_context_excerpt": (assembly.context or "")[:2000],
+        }
         return assembly
 
     speech_language = conversation_speech_language(recent or [])
-    dialogue = conversation_messages(recent or [])
+    dialogue = conversation_messages(recent or [], compact_summary=compact_summary)
     if authorized_media is not None:
         dialogue = [{"role": "user", "content": request.message}]
         if authorized_media.intent["media_result"].get("status") == "declined":

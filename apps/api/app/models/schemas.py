@@ -278,6 +278,59 @@ class ConversationResponse(BaseModel):
     updated_at: datetime | None = None
     pending_question: ChatMessageResponse | None = None
     context: dict[str, Any] | None = None
+    compact_summary: dict[str, Any] | None = None
+
+
+class ProjectConversationSummary(BaseModel):
+    """Summary item for a project's multi-conversation list."""
+
+    id: UUID
+    project_id: UUID
+    title: str | None = None
+    created_at: datetime
+    updated_at: datetime | None = None
+    message_count: int = 0
+    has_active_job: bool = False
+    compacted: bool = False
+    compacted_at: str | None = None
+
+
+class CreateConversationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    title: str | None = Field(default=None, max_length=120)
+
+
+class RenameConversationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    title: str = Field(min_length=1, max_length=120)
+
+
+class CompactConversationResponse(BaseModel):
+    conversation_id: UUID
+    summary: str
+    key_decisions: list[str] = Field(default_factory=list)
+    compacted_through_seq: int
+    compacted_at: str
+    message_count: int
+
+
+class MessageFeedbackSummary(BaseModel):
+    rating: Literal["good", "bad"]
+    reason: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    updated_at: datetime | None = None
+
+
+class MessageFeedbackRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    rating: Literal["good", "bad"] | None = None
+    reason: str | None = Field(default=None, max_length=1000)
+    tags: list[str] = Field(default_factory=list, max_length=10)
+
+
+class MessageFeedbackResponse(BaseModel):
+    message_id: UUID
+    feedback: MessageFeedbackSummary | None = None
 
 
 class MessageRole(StrEnum):
@@ -673,6 +726,10 @@ class ChatMessageResponse(BaseModel):
     # Transcript 数组位置 (ADR-108): per-conversation monotonic; the client
     # renders in seq order and never re-derives interleaving from clocks.
     seq: int | None = None
+    # Persisted finalized step checklist (populated from intent["steps"] on assistant rows).
+    steps: list[dict[str, str]] | None = None
+    # Current user's feedback on this assistant reply (hydrated by conversation messages API).
+    feedback: MessageFeedbackSummary | None = None
     created_at: datetime
     updated_at: datetime | None = None
 
@@ -680,6 +737,10 @@ class ChatMessageResponse(BaseModel):
     @model_validator(mode="after")
     def _editor_media_projection(self):
         intent = self.intent or {}
+        if self.role == MessageRole.ASSISTANT and self.steps is None:
+            raw_steps = intent.get("steps")
+            if isinstance(raw_steps, list) and raw_steps:
+                self.steps = raw_steps
         if "editor_media" in intent or "media_permission" in intent:
             self.intent = {key: intent[key] for key in (
                 "native_call_id", "media_job", "export_job", "media_result",
@@ -689,7 +750,13 @@ class ChatMessageResponse(BaseModel):
                 if "media_result" not in intent:
                     self.intent["media_status"] = "accepted"
         elif "resumed_media" in intent:
-            self.intent = {k: v for k, v in intent.items() if k not in {"resumed_media", "export_resume_attempts", "media_resume_attempts"}}
+            self.intent = {
+                k: v
+                for k, v in intent.items()
+                if k not in {"resumed_media", "export_resume_attempts", "media_resume_attempts", "eval_meta"}
+            }
+        elif "eval_meta" in intent:
+            self.intent = {k: v for k, v in intent.items() if k != "eval_meta"}
         return self
 
 
@@ -697,6 +764,7 @@ class MessageListResponse(BaseModel):
     """List of chat messages in a session."""
 
     items: list[ChatMessageResponse]
+    compact_summary: dict[str, Any] | None = None
 
 
 class QuestionProposal(BaseModel):
@@ -1520,6 +1588,7 @@ class ChatRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     project_id: UUID
+    conversation_id: UUID | None = None
     first_message: bool = False
     message: str
     attachments: list[ChatAttachment] = Field(default_factory=list)

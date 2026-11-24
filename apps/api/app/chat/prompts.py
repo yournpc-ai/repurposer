@@ -87,9 +87,10 @@ def _native_creation_tools(tools, *, facts):
                     description += " 旁白音频已固定，先保存画面版本，再用 insert_audio 放入原音。"
                 if not aligned_voice:
                     hidden.update({"narration_snapshot_id", "narration_alignment_id"})
-                shot = parameters["$defs"]["FirstShot"]
-                for field in hidden:
-                    shot["properties"].pop(field, None)
+                if "FirstShot" in (parameters.get("$defs") or {}):
+                    shot = parameters["$defs"]["FirstShot"]
+                    for field in hidden:
+                        shot["properties"].pop(field, None)
                 parameters = prune_wire_parameters(parameters, set())
                 if not external:
                     description += "未绑定外部 Skill，不使用 skill_resource。"
@@ -156,6 +157,8 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
             context="当前视频轮次（目标和状态由服务端提供）：\n" + json.dumps(present_ctx, ensure_ascii=False),
             stage="version_present", include_project_context=False,
             include_observation_media=False, observation_tools=frozenset({"create_video", "instantiate_skill_blueprint"}),
+            stream_prose=not facts.get("editor_labels"),
+            project_reply=lambda text: project_editor_reply(text, facts.get("editor_labels", {}), user_text),
             allow_bare_reply=True,
         )
 
@@ -249,7 +252,7 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
         if selected and last_preview.get("version_id") == selected["version_id"]:
             context["observed_preview"] = last_preview
         names = set(EDITOR_NAMES) | {
-            "update_focus", "read_conversation_context", "answer", "ask_user", "list_project_media",
+            "update_focus", "update_steps", "read_conversation_context", "answer", "ask_user", "list_project_media",
             "review_video", "align_recording", "get_narration_alignment", "annotate_narration",
             "search_music", "show_music_candidates", "select_music",
         }
@@ -425,6 +428,13 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
                 context["authorized_deliverable"] = "The user approved the exact Output above. Review it and deliver that version when it meets the request. Respect instructions to retain the edit. Report defects if it cannot be delivered."
         if pending and (pending_ctx := _pending_question_context(pending)):
             context["pending_question"] = pending_ctx
+        if compact := facts.get("compact_summary"):
+            if isinstance(compact, dict) and compact.get("summary"):
+                context["compacted_conversation_summary"] = {
+                    "summary": compact.get("summary"),
+                    "key_decisions": compact.get("key_decisions") or [],
+                    "compacted_through_seq": compact.get("compacted_through_seq"),
+                }
         media_ready = bool(facts.get("media_receipts")) or facts.get("new_result_tool") in {
             "generate_voice", "generate_music", "generate_image", "generate_sfx",
         }
@@ -436,11 +446,10 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
             system=system_prompt,
             context=json.dumps(context, ensure_ascii=False), include_project_context=False,
             opening_text=None if native_creation else user_text, enforce_offered_tools=True,
-            stream_prose=not media_ready and (
-                native_creation or bool(selected and not facts.get("editor_labels") and not facts.get("authorized_media"))
+            stream_prose=not media_ready and not facts.get("editor_labels") and (
+                native_creation or bool(selected and not facts.get("authorized_media"))
             ),
-            project_reply=(None if native_creation and not media_ready else
-                           lambda text: project_editor_reply(text, facts.get("editor_labels", {}), user_text)),
+            project_reply=lambda text: project_editor_reply(text, facts.get("editor_labels", {}), user_text),
             caller_state={"video_target": selected},
             invitation_tool="ask_user" if any(t.name == "ask_user" for t in tools) else None,
             allow_bare_reply=True,

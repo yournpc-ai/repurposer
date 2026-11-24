@@ -707,7 +707,7 @@ MOTION_BLOCK_CATALOG: dict[str, dict[str, Any]] = {
         "domain": "visuals",
         "category": "charts_and_numbers",
         "name": "Metric Grid",
-        "desc": "2-4 elevated institutional metric/capability cards with staggered spring settle, deterministic numeric count-up, top-edge specular sheen, and light/dark studio canvas. Each item supports reveal_at_s in act-local seconds and a short supporting detail.",
+        "desc": "2-4 elevated institutional metric/capability cards with staggered spring settle, deterministic numeric count-up, top-edge specular sheen, and light/dark studio canvas. Each item supports reveal_at_s in act-local seconds and a short supporting detail. Each items[].value must include its unit or symbol (e.g. '3s', '85%', '4.2×', '$1.8M'), keeping items[].label strictly as the metric name.",
         "use_for": [
             "quantified proof points, valuation metrics, or core platform pillars",
             "mid-promo credibility section breaking up UI showcases",

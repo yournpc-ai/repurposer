@@ -615,6 +615,53 @@ class MessageSeqCounter(Base):
     last_seq = Column(BigInteger, nullable=False, default=0, server_default="0")
 
 
+class MessageFeedback(Base):
+    """Per-user evaluation (good / bad) on an assistant reply with frozen turn context."""
+
+    __tablename__ = "message_feedback"
+    __table_args__ = (
+        UniqueConstraint("message_id", "user_id", name="uq_message_feedback_msg_user"),
+        Index("ix_message_feedback_rating_created", "rating", "created_at"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    project_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("projects.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    conversation_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("conversations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    message_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("messages.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    turn_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("messages.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    rating = Column(String(8), nullable=False)  # "good" | "bad"
+    reason = Column(Text, nullable=True)
+    tags = Column(JSONB, nullable=False, default=list, server_default="[]")
+    context_snapshot = Column(JSONB, nullable=False, default=dict, server_default="{}")
+    created_at = Column(DateTime(timezone=True), default=now_utc, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc, nullable=False)
+
+
 class Music(Base):
     """Background music piece (DB-backed; audio bytes stay in object storage).
 

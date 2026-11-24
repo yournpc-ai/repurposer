@@ -42,6 +42,7 @@ from app.chat.service import (
     answer_question,
     append_activity_row,
     chat,
+    compact_conversation_context,
     execute_chat_turn,
     list_conversation_messages,
     persist_partial_prose,
@@ -54,6 +55,7 @@ from app.chat.service import (
     settle_failed_chat_turn,
     stamp_turn_failed,
     stop_turn_at_visible_frontier,
+    upsert_message_feedback,
 )
 from app.chat.turn_tools import make_tool_echo_delta_filter
 from app.dependencies import DBDep, get_current_user_required
@@ -64,10 +66,16 @@ from app.models.schemas import (
     ChatMessageResponse,
     ChatRequest,
     ChatTurnStopRequest,
+    CompactConversationResponse,
     ConversationResponse,
+    MessageFeedbackRequest,
+    MessageFeedbackResponse,
+    MessageFeedbackSummary,
     MessageListResponse,
+    ProjectConversationSummary,
+    RenameConversationRequest,
 )
-from app.models.tables import Conversation, Message, Project, User
+from app.models.tables import Conversation, ExportJob, MediaJob, Message, MessageFeedback, Project, User
 from app.pipeline.errors import user_error_line
 from app.platform.conversation_context import (
     find_conversation,
@@ -85,22 +93,22 @@ chat_router = APIRouter()
 @chat_router.get("/conversation", response_model=ConversationResponse)
 async def get_conversation(
     project_id: UUID,
+    conversation_id: UUID | None = None,
     include_context: bool = False,
     db: DBDep = None,
     current_user: User = Depends(get_current_user_required),
 ) -> ConversationResponse | None:
-    """Get the project's conversation (project scope only — the asset scope
-    is retired, ADR-041 D8).
+    """Get a specific project conversation or the most recently active one.
 
-    Returns 404 if no conversation exists yet; the frontend should then show
-    the initial intro and create the conversation on first message via
-    ``POST /chat``. Carries the latest unanswered question (dock rebuild).
+    Returns 404 if no matching conversation exists yet. Carries the latest
+    unanswered question (dock rebuild) and compact_summary metadata.
     """
     await get_project_for_user(db, project_id, UUID(str(current_user.id)))
     conversation = await find_conversation(
         db,
         UUID(str(current_user.id)),
         project_id,
+        conversation_id=conversation_id,
     )
     if conversation is None:
         raise HTTPException(
@@ -108,6 +116,8 @@ async def get_conversation(
             detail="Conversation not found",
         )
     response = ConversationResponse.model_validate(conversation)
+    compact = (conversation.context or {}).get("compact_summary")
+    response.compact_summary = compact if isinstance(compact, dict) else None
     # Large model-facing history is opt-in; it is never accepted as input.
     if not include_context:
         response.context = None
@@ -1120,7 +1130,161 @@ async def list_chat_messages(
     if await recover_interrupted_edits(db, id):
         await db.commit()
     messages = await list_conversation_messages(db, id)
-    return MessageListResponse(items=[ChatMessageResponse.model_validate(m) for m in messages])
+    feedback_rows = list(
+        await db.scalars(
+            select(MessageFeedback).where(
+                MessageFeedback.conversation_id == id,
+                MessageFeedback.user_id == current_user.id,
+            )
+        )
+    )
+    feedback_by_msg = {
+        fb.message_id: MessageFeedbackSummary(
+            rating=fb.rating,
+            reason=fb.reason,
+            tags=list(fb.tags or []),
+            updated_at=fb.updated_at,
+        )
+        for fb in feedback_rows
+    }
+    items = []
+    for m in messages:
+        item = ChatMessageResponse.model_validate(m)
+        if m.id in feedback_by_msg:
+            item.feedback = feedback_by_msg[m.id]
+        items.append(item)
+    compact = (conversation.context or {}).get("compact_summary")
+    return MessageListResponse(
+        items=items,
+        compact_summary=compact if isinstance(compact, dict) else None,
+    )
+
+
+@chat_router.patch("/conversations/{conversation_id}", response_model=ProjectConversationSummary)
+async def rename_chat_conversation(
+    conversation_id: UUID,
+    data: RenameConversationRequest,
+    db: DBDep,
+    current_user: User = Depends(get_current_user_required),
+) -> ProjectConversationSummary:
+    """Rename an owned project conversation."""
+    from sqlalchemy import func, or_
+
+    conversation = await db.get(Conversation, conversation_id)
+    if (
+        conversation is None
+        or conversation.user_id != current_user.id
+        or conversation.project_id is None
+        or conversation.asset_id is not None
+    ):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Conversation not found")
+    conversation.title = data.title
+    conversation.updated_at = datetime.now(UTC)
+    await db.commit()
+    await db.refresh(conversation)
+    msg_count = int(
+        await db.scalar(
+            select(func.count(Message.id)).where(
+                Message.conversation_id == conversation.id,
+                Message.role.in_(("user", "assistant")),
+                or_(
+                    Message.intent.is_(None),
+                    ~Message.intent["type"].astext.in_(
+                        ("activity", "activity_forensics", "candidates_log", "partial")
+                    ),
+                ),
+            )
+        )
+        or 0
+    )
+    has_active_job = bool(
+        await db.scalar(
+            select(ExportJob.id)
+            .join(Message, ExportJob.receipt_id == Message.id)
+            .where(
+                Message.conversation_id == conversation.id,
+                ExportJob.status.in_(("queued", "running")),
+            )
+            .limit(1)
+        )
+        or await db.scalar(
+            select(MediaJob.id)
+            .join(Message, MediaJob.receipt_id == Message.id)
+            .where(
+                Message.conversation_id == conversation.id,
+                MediaJob.status.in_(("queued", "running")),
+            )
+            .limit(1)
+        )
+    )
+    compact = (conversation.context or {}).get("compact_summary")
+    return ProjectConversationSummary(
+        id=conversation.id,
+        project_id=conversation.project_id,
+        title=conversation.title,
+        created_at=conversation.created_at,
+        updated_at=conversation.updated_at,
+        message_count=msg_count,
+        has_active_job=has_active_job,
+        compacted=bool(isinstance(compact, dict) and compact.get("summary")),
+        compacted_at=compact.get("compacted_at") if isinstance(compact, dict) else None,
+    )
+
+
+@chat_router.post(
+    "/conversations/{conversation_id}/compact",
+    response_model=CompactConversationResponse,
+)
+async def compact_chat_conversation(
+    conversation_id: UUID,
+    db: DBDep,
+    current_user: User = Depends(get_current_user_required),
+) -> CompactConversationResponse:
+    """Compact settled history of an owned conversation into context['compact_summary']."""
+    conversation = await db.get(Conversation, conversation_id)
+    if conversation is None or conversation.user_id != current_user.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Conversation not found")
+    record = await compact_conversation_context(db, conversation)
+    return CompactConversationResponse(
+        conversation_id=conversation.id,
+        summary=record["summary"],
+        key_decisions=list(record.get("key_decisions") or []),
+        compacted_through_seq=int(record["compacted_through_seq"]),
+        compacted_at=record["compacted_at"],
+        message_count=int(record["message_count"]),
+    )
+
+
+@chat_router.post(
+    "/messages/{message_id}/feedback",
+    response_model=MessageFeedbackResponse,
+)
+async def submit_message_feedback(
+    message_id: UUID,
+    data: MessageFeedbackRequest,
+    db: DBDep,
+    current_user: User = Depends(get_current_user_required),
+) -> MessageFeedbackResponse:
+    """Record or clear per-user good/bad evaluation feedback with a frozen turn snapshot."""
+    row = await upsert_message_feedback(
+        db,
+        UUID(str(current_user.id)),
+        message_id,
+        rating=data.rating,
+        reason=data.reason,
+        tags=data.tags,
+    )
+    if row is None:
+        return MessageFeedbackResponse(message_id=message_id, feedback=None)
+    return MessageFeedbackResponse(
+        message_id=message_id,
+        feedback=MessageFeedbackSummary(
+            rating=row.rating,
+            reason=row.reason,
+            tags=list(row.tags or []),
+            updated_at=row.updated_at,
+        ),
+    )
 
 
 @chat_router.get("/skills")

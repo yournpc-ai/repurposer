@@ -104,6 +104,14 @@ class GenerateSfxArgs(BaseModel):
         description="Existing SFX clip_id whose recipe, params, and seed to inherit before applying params overrides.",
     )
     seed: int | None = Field(default=None, ge=0, le=0xFFFFFFFF)
+    place_at_seconds: float | None = Field(
+        default=None, ge=0, allow_inf_nan=False,
+        description="Optional timeline start in seconds to place this synthesized SFX immediately onto the effect audio track when a composition exists.",
+    )
+    gain_db: float | None = Field(
+        default=None, ge=-48.0, le=6.0, allow_inf_nan=False,
+        description="Optional clip gain in dB when placing the SFX onto the timeline (defaults to -12.0 dB).",
+    )
 
 
 class AudioDuckWindowArgs(BaseModel):
@@ -181,8 +189,9 @@ class InsertMotionBlockArgs(BaseModel):
     props: dict[str, Any] = Field(description=(
         "Declarative props for the chosen motion block. Stage options include backdrop_style "
         "('ambient_mesh' | 'architectural_grid' | 'editorial_paper' | 'kinetic_diagonal' | 'clean'), highlight_at_s, "
-        "and per-item items[].reveal_at_s in scene-local seconds. For product_showcase, set "
-        "camera_preset ('flat' | 'tilt_left' | 'tilt_right' | 'dolly_zoom' | 'scroll_reveal'), "
+        "and per-item items[].reveal_at_s in scene-local seconds. For metric_grid, items[].value must include "
+        "its unit or symbol (e.g. '3s', '85%', '4.2×', '$1.8M'), keeping items[].label strictly as the metric name. "
+        "For product_showcase, set camera_preset ('flat' | 'tilt_left' | 'tilt_right' | 'dolly_zoom' | 'scroll_reveal'), "
         "scroll_from_y/scroll_to_y (0..1), real view target element_id for cursor (click_at_s) "
         "and up to 4 sequential callout_steps (start_s, end_s, label, target), or callout "
         "{element_id, label?} / {x, y, width, height, label?}."
@@ -510,7 +519,7 @@ def _editor_tool(name, description, args, key, *, receipt_kind=None):
 EDITOR_TOOLS = (
     _editor_tool(
         "create_video",
-        "Create the first editable version from ordered shots (title cards, images, video, webpage captures, and optional narration). A title card only needs headline, duration_seconds, and text_color. Save an editable draft without exporting.",
+        "Create the first editable version from ordered shots (title cards, images, video, webpage captures, and optional narration) and/or native declarative motion_blocks (all 13 blocks with optional resources and act transitions). Save an editable draft without exporting.",
         CreateVideoArgs, "createVideo",
     ),
     _editor_tool(
@@ -555,6 +564,7 @@ EDITOR_TOOLS = (
     _editor_tool(
         "generate_sfx",
         "Synthesize a deterministic 48 kHz stereo sound effect with zero credit cost from 22 v2 recipes in creative_catalog.sound_recipes (UI ticks: click, soft_pop, toggle_on, select_tick, confirm_chime; motion/transitions: whoosh, swoosh_cut, velvet_pass, page_turn; impacts: impact, deep_hit, sub_drop, kinetic_thud; risers/swells: riser, sub_swell, shimmer_lift; stingers/accents: stinger, title_bloom, metric_chime, callout_ping; beds: studio_air, pulse_bed). "
+        "When a composition already exists, pass place_at_seconds (and optional gain_db) to synthesize and place onto the effect track in one atomic step. "
         "Pass base_clip_id to revise an existing SFX clip while inheriting its recipe and seed. Returns acoustic metrics (duration_ms, peak_offset_ms, spectral_centroid_hz, peak_dbfs); align peak_offset_ms with visual sync cues (typical peak ~-2 dBFS; place at -14 to -10 dB under narration).",
         GenerateSfxArgs, "generateSfx",
     ),
@@ -1340,66 +1350,87 @@ async def edit_clip(
         }
         ops.append(SetTransition(op="set_transition", transition=transition))
     elif isinstance(args, InsertMotionBlockArgs):
+        from app.chat.editor_create import resolve_motion_block_resources
+        from app.editing.edits import AddScene
         from app.editing.revisions import motion_block_ops
-        from app.editing.sources import register_web_view_snapshot
-        from app.models.tables import Asset, SourceSnapshot
+        from app.editing.schemas import Scene
+        from app.editing.timing import seconds_to_ticks
 
         start = _ticks(args.start_seconds, rate)
         end = _ticks(args.end_seconds, rate)
         limit = max([c.range.end for _, c in entries] + [scene.range.end for scene in content.scenes] + [0])
-        if not 0 <= start < end <= limit:
-            raise ValueError("The motion block window must fit inside the composition duration.")
-        legacy_asset = select(Asset.id).where(Asset.user_id == project.user_id, Asset.project_id == project.id)
-        props = args.props
-        resolved_resources: list[dict[str, Any]] = []
-        ext_map = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp"}
-        for idx, res_id in enumerate(args.resources or []):
-            snap = await db.scalar(select(SourceSnapshot).where(
-                SourceSnapshot.id == res_id,
-                SourceSnapshot.owner_id == project.user_id,
-                (SourceSnapshot.origin_project_id == project.id)
-                | (SourceSnapshot.origin_project_id.is_(None) & SourceSnapshot.asset_id.in_(legacy_asset)),
-            ))
-            if snap is None:
-                raise ValueError(f"Resource snapshot {res_id} is unavailable in this project.")
-            if snap.kind == "web":
-                views = (snap.meta or {}).get("views") or []
-                chosen_view = args.view_id or (views[0].get("view_id") if views else None)
-                if not chosen_view:
-                    raise ValueError("The captured webpage has no rendered views.")
-                if idx == 0 and args.block_id == "product_showcase":
-                    props = ProductShowcaseProps.resolve_props(props, views, chosen_view)
-                snap = await register_web_view_snapshot(
-                    db, owner_id=project.user_id, web_snapshot=snap, view_id=chosen_view,
-                )
-                await db.flush()
-            if snap.kind != "image" or not snap.storage_key:
-                raise ValueError("Motion block resources must be fixed images or captured webpage views.")
-            ctype = (snap.meta or {}).get("content_type") or (
-                "image/jpeg" if snap.storage_key.lower().endswith((".jpg", ".jpeg"))
-                else "image/webp" if snap.storage_key.lower().endswith(".webp")
-                else "image/png"
+        max_cap = seconds_to_ticks(180.0, rate)
+        gap_cap = seconds_to_ticks(2.0, rate)
+        if not (0 <= start < end <= max_cap):
+            raise ValueError("The motion block window must stay within 0–180 seconds.")
+        if limit > 0 and start > limit + gap_cap:
+            raise ValueError(
+                f"The motion block starts too far past the current timeline end ({limit / rate:g}s); "
+                "keep empty gaps at most 2 seconds."
             )
-            if ctype not in ext_map:
-                ctype = "image/png"
-            resolved_resources.append({
-                "path": f"media/img_{idx}{ext_map[ctype]}",
-                "snapshot_id": str(snap.id),
-                "snapshot_digest": snap.digest,
-                "content_type": ctype,
-            })
-        scene = next((s for s in content.scenes if s.range.start <= start and end <= s.range.end), None)
-        ops = motion_block_ops(
-            content,
+        props, resolved_resources = await resolve_motion_block_resources(
+            db,
+            owner_id=project.user_id,
+            project_id=project.id,
             block_id=args.block_id,
-            props=props,
-            resources=resolved_resources,
-            clip_id=f"clp_mg_{identity.hex}",
-            object_id=f"obj_mg_{identity.hex}",
-            scene_id=scene.scene_id if scene else None,
-            start=start,
-            end=end,
+            props=args.props,
+            resources=args.resources,
+            view_id=args.view_id,
         )
+        scene_ops = []
+        scene_id = None
+        if end > limit:
+            if content.scenes:
+                last_scene = max(content.scenes, key=lambda s: s.range.end)
+                if start >= last_scene.range.end:
+                    new_scene_id = f"scene_mg_{identity.hex[:8]}"
+                    intent_label = str(
+                        props.get("headline")
+                        or props.get("title")
+                        or props.get("brand_name")
+                        or args.block_id
+                    )[:120]
+                    scene_ops.append(
+                        AddScene(
+                            op="add_scene",
+                            scene=Scene(
+                                scene_id=new_scene_id,
+                                range=TimeRange(start=max(limit, last_scene.range.end), end=end),
+                                intent=intent_label,
+                            ),
+                        )
+                    )
+                    scene_id = new_scene_id
+                else:
+                    scene_ops.append(
+                        UpdateScene(
+                            op="update_scene",
+                            scene_id=last_scene.scene_id,
+                            range=TimeRange(start=last_scene.range.start, end=end),
+                        )
+                    )
+                    scene_id = last_scene.scene_id if last_scene.range.start <= start else None
+        else:
+            scene = next((s for s in content.scenes if s.range.start <= start and end <= s.range.end), None)
+            scene_id = scene.scene_id if scene else None
+
+        ops = [
+            *scene_ops,
+            *motion_block_ops(
+                content,
+                block_id=args.block_id,
+                props=props,
+                resources=resolved_resources,
+                clip_id=f"clp_mg_{identity.hex}",
+                object_id=f"obj_mg_{identity.hex}",
+                scene_id=scene_id,
+                start=start,
+                end=end,
+            ),
+        ]
+        extra["timeline_duration_seconds"] = max(limit, end) / rate
+        if end > limit:
+            extra["extended_timeline"] = True
     elif isinstance(args, SetCompositionStyleArgs):
         from app.editing.revisions import set_composition_style_ops
 
@@ -1709,8 +1740,12 @@ def project_editor_reply(text, labels, user_text):
     return re.sub(pattern, lambda m: labels[m[1]][0 if zh else 1], text, flags=re.ASCII)
 
 
-def _remember_labels(turn, facts, version_id, digest, number):
+def _remember_labels(turn, facts, version_id, digest, number, composition_id=None):
     labels = turn.__dict__.setdefault("_editor_labels", {})
+    if composition_id is not None:
+        cid = str(composition_id)
+        for token in (cid, cid[:8], cid[:12]):
+            labels[token] = ("当前作品", "this composition")
     for identity in (str(version_id), digest):
         for token in (identity, identity[:8], identity[:12]):
             labels[token] = (f"第 {number} 版", f"version {number}")
@@ -1818,6 +1853,7 @@ async def execute_editor(turn, name, args):
                     result["version_id"],
                     result["content_digest"],
                     result["version"],
+                    composition_id=result["composition_id"],
                 )
                 recent = getattr(turn, "_editor_recent", {})
                 focused = (
@@ -1970,7 +2006,10 @@ async def execute_editor(turn, name, args):
                     }
                 origins = await _load_snapshot_origins(db, [clip for _, clip in page])
                 facts = [_clip_facts(track, clip, content, origins) for track, clip in page]
-                _remember_labels(turn, facts, version.id, version.content_digest, version.version)
+                _remember_labels(
+                    turn, facts, version.id, version.content_digest, version.version,
+                    composition_id=composition.id,
+                )
                 return ToolObservation(
                     json.dumps(
                         {

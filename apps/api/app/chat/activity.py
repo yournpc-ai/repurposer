@@ -104,6 +104,7 @@ KIND_DRAFT = "draft"
 KIND_RUN = "run"
 KIND_REPAIR = "repair"
 KIND_FOCUS = "focus"
+KIND_STEPS = "steps"
 
 _UUID_RE = re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b", re.I)
 _INTERNAL_ID_RE = re.compile(
@@ -113,7 +114,7 @@ _INTERNAL_ID_RE = re.compile(
 )
 _FILE_PATH_RE = re.compile(r"(?:(?:/[\w.-]+){2,}|(?:apps|packages|src)/[\w./-]+)")
 _SNAKE_TOOL_RE = re.compile(
-    r"\b(?:update_focus|set_composition_style|insert_motion_block|update_motion_block|"
+    r"\b(?:update_focus|update_steps|set_composition_style|insert_motion_block|update_motion_block|"
     r"insert_text|edit_text|generate_sfx|edit_audio_clip|set_transition|create_video|"
     r"preview_range|inspect_timeline|inspect_clip)\b"
 )
@@ -147,6 +148,45 @@ def sanitize_focus_text(raw: str | None, *, max_len: int = 60) -> str | None:
     if len(cleaned) > max_len:
         cleaned = cleaned[: max_len - 1].rstrip() + "…"
     return cleaned
+
+
+_VALID_STEP_STATUSES = frozenset({"pending", "in_progress", "done", "skipped", "failed"})
+
+
+def sanitize_steps(raw_steps: Any) -> list[dict[str, str]] | None:
+    """Sanitize a progress step list: user-safe titles, validated statuses."""
+    if not isinstance(raw_steps, (list, tuple)):
+        return None
+    out: list[dict[str, str]] = []
+    for item in raw_steps:
+        if isinstance(item, dict):
+            title_raw = item.get("title")
+            status_raw = item.get("status")
+        else:
+            title_raw = getattr(item, "title", None)
+            status_raw = getattr(item, "status", None)
+        title = sanitize_focus_text(title_raw, max_len=60)
+        if not title or status_raw not in _VALID_STEP_STATUSES:
+            continue
+        out.append({"title": title, "status": str(status_raw)})
+    return out or None
+
+
+def finalize_steps(
+    steps: list[dict[str, str]] | None,
+    *,
+    completed: bool = True,
+) -> list[dict[str, str]] | None:
+    """Finalize steps on turn settlement; promotes leftover in_progress items on normal completion."""
+    sanitized = sanitize_steps(steps)
+    if not sanitized:
+        return None
+    if not completed:
+        return sanitized
+    return [
+        {"title": item["title"], "status": "done" if item["status"] == "in_progress" else item["status"]}
+        for item in sanitized
+    ]
 
 
 def sanitize_snippet(raw: str | None, *, max_len: int = 18) -> str | None:
@@ -402,7 +442,7 @@ def frame_persistence(frame: ActivityFrame) -> str | None:
       ACTIVE frame (the row appends at ReadExecuting, never at name_known —
       appending there would seat the row before the waiter interim_prose's).
     """
-    if frame.kind == KIND_FOCUS:
+    if frame.kind in (KIND_FOCUS, KIND_STEPS):
         return None
     if frame.kind == KIND_READ:
         return None if frame.status == STATUS_ACTIVE else "settle"
@@ -447,6 +487,8 @@ class ActivityFrame:
     receipt: ActivityReceipt | None = None
     # Lightweight live phase focus text (live-only, never persisted as a row).
     focus: str | None = None
+    # Live checklist steps (emitted live; finalized snapshot stamped on settled assistant message).
+    steps: list[dict[str, str]] | None = None
     # Deterministic user-safe semantic detail projected from validated tool args.
     detail: dict[str, Any] | None = None
 
@@ -467,6 +509,8 @@ class ActivityFrame:
             d["receipt"] = self.receipt.model_dump(mode="json")
         if self.focus is not None:
             d["focus"] = self.focus
+        if self.steps is not None:
+            d["steps"] = self.steps
         if self.detail is not None:
             d["detail"] = self.detail
         return d
@@ -506,6 +550,8 @@ class ActivityProjector:
         self._active: dict[str, tuple[str, str | None, float]] = {}
         # Settled frames retain emission order for row persistence and replay.
         self._settled: list[ActivityFrame] = []
+        # Latest sanitized checklist from update_steps (if any).
+        self._latest_steps: list[dict[str, str]] | None = None
 
     # -- frame factory -------------------------------------------------
 
@@ -520,13 +566,14 @@ class ActivityProjector:
         duration_ms: int | None = None,
         receipt: ActivityReceipt | None = None,
         focus: str | None = None,
+        steps: list[dict[str, str]] | None = None,
         detail: dict[str, Any] | None = None,
     ) -> ActivityFrame:
         self._seq += 1
         return ActivityFrame(
             activity_id=activity_id, seq=self._seq, kind=kind, status=status, key=key,
             count=count, at=datetime.now(UTC).isoformat(), duration_ms=duration_ms,
-            receipt=receipt, focus=focus, detail=detail,
+            receipt=receipt, focus=focus, steps=steps, detail=detail,
         )
 
     def _start(
@@ -633,7 +680,7 @@ class ActivityProjector:
             # The loop's dropped parallel extras (it executes call[0] only).
             return []
         presentation = self._presentations.get(tool_name)
-        if presentation is None or presentation.kind in ("native", KIND_FOCUS) or (presentation.defer_start or presentation.kind == KIND_READ):
+        if presentation is None or presentation.kind in ("native", KIND_FOCUS, KIND_STEPS) or (presentation.defer_start or presentation.kind == KIND_READ):
             self._open_call = (tool_name, None)
             return []
         activity_id, frame = self._start(presentation.kind, presentation.active_key)
@@ -827,6 +874,12 @@ class ActivityProjector:
                 if not focus:
                     return []
                 return [self._frame("__focus__", KIND_FOCUS, STATUS_ACTIVE, None, focus=focus)]
+            if presentation.kind == KIND_STEPS:
+                steps = sanitize_steps(getattr(event.params, "steps", None))
+                if not steps:
+                    return []
+                self._latest_steps = steps
+                return [self._frame("__steps__", KIND_STEPS, STATUS_ACTIVE, None, steps=steps)]
             if not (presentation.defer_start or presentation.kind == KIND_READ):
                 return []
             count = None
@@ -936,6 +989,12 @@ class ActivityProjector:
     def has_active(self) -> bool:
         return bool(self._active)
 
+    def latest_steps(self) -> list[dict[str, str]] | None:
+        """Return the latest sanitized checklist steps emitted in this turn, if any."""
+        if not self._latest_steps:
+            return None
+        return [dict(item) for item in self._latest_steps]
+
     def settled_frames(self) -> list[ActivityFrame]:
         """The turn's durable activity history (2026-09-25 activity 持久化):
         every frame that reached a terminal state, in emission (seq) order.
@@ -963,11 +1022,14 @@ __all__ = [
     "KIND_READ",
     "KIND_REPAIR",
     "KIND_RUN",
+    "KIND_STEPS",
     "STATUS_ACTIVE",
     "STATUS_CANCELLED",
     "STATUS_COMPLETED",
     "STATUS_FAILED",
+    "finalize_steps",
     "frame_persistence",
     "project_tool_detail",
     "sanitize_focus_text",
+    "sanitize_steps",
 ]

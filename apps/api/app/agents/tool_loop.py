@@ -1332,7 +1332,7 @@ class ToolLoopAgent:
                 for index, (request, wire) in enumerate(zip(result.tool_calls, wire_calls, strict=True)):
                     declared = by_name.get(request.name)
                     presentation = declared.presentation if declared else None
-                    if presentation is not None and presentation.kind == "focus":
+                    if presentation is not None and presentation.kind in ("focus", "steps"):
                         continue
                     member = BatchMember(group_id, wire["id"], request.name, index, len(wire_calls),
                                          presentation.active_key if presentation else None)

@@ -432,7 +432,22 @@ async def execute_generate_sfx(turn, args, composition, version):
     identity = str(uuid5(turn.turn_id, call_id))
     composition_id = str(composition.id) if composition else None
     version_id = str(version.id) if version else None
-    fingerprint = canonical_json_hash({"tool": "generate_sfx", "spec_sha256": spec_sha256})
+    fingerprint = canonical_json_hash({
+        "tool": "generate_sfx",
+        "spec_sha256": spec_sha256,
+        "place_at_seconds": args.place_at_seconds,
+        "gain_db": args.gain_db,
+    })
+
+    def _sfx_observation(payload: dict) -> ToolObservation:
+        if payload.get("placed") and payload.get("version_id") and payload.get("content_digest"):
+            return ToolObservation(
+                json.dumps(payload),
+                ok=payload.get("status") == "available",
+                version_saved=True,
+                valid_for_key=f"composition:{payload['version_id']}:{payload['content_digest']}",
+            )
+        return ToolObservation(json.dumps(payload), ok=payload.get("status") == "available")
 
     admission = turn.__dict__.setdefault("_media_admission", asyncio.Lock())
     async with admission:
@@ -456,7 +471,7 @@ async def execute_generate_sfx(turn, args, composition, version):
                 if receipt.intent.get("media_result"):
                     facts = dict(receipt.intent["media_result"])
                     facts["delivered_to_chat"] = facts.get("status") == "available"
-                    return ToolObservation(json.dumps(facts), ok=facts["status"] == "available")
+                    return _sfx_observation(facts)
             if opening.turn_state != "in_flight":
                 raise TurnStopped(str(turn.turn_id))
 
@@ -479,6 +494,7 @@ async def execute_generate_sfx(turn, args, composition, version):
         synth_error = exc
 
     recipe_meta = SOUND_RECIPE_CATALOG[spec["recipe_id"]]
+    placed_version_info: dict | None = None
     # Secondary Stop fence under opening lock before writing Message or emitting SSE.
     async with admission:
         await turn.db.execute(select(func.pg_advisory_xact_lock(editor_lock_key(turn.turn_id))))
@@ -492,7 +508,7 @@ async def execute_generate_sfx(turn, args, composition, version):
             if existing is not None and existing.intent.get("media_result"):
                 facts = dict(existing.intent["media_result"])
                 facts["delivered_to_chat"] = facts.get("status") == "available"
-                return ToolObservation(json.dumps(facts), ok=facts["status"] == "available")
+                return _sfx_observation(facts)
             if existing is None:
                 existing = await _create_message(
                     db, turn.conversation_id, "assistant", "", turn_id=opening.id,
@@ -519,6 +535,128 @@ async def execute_generate_sfx(turn, args, composition, version):
                 db, project, existing, result,
                 {"recipe_id": spec["recipe_id"], "title": f"{recipe_meta['name']} ({spec['recipe_id']})"},
             )
+            media_facts = dict(row.intent["media_result"])
+            if args.place_at_seconds is not None and composition is not None:
+                from app.editing.revisions import fixed_audio_ops
+                from app.editing.store import apply_composition_edits
+                from app.editing.timing import (
+                    output_ticks_to_source_ticks,
+                    seconds_to_ticks,
+                    source_ticks_to_output_ticks,
+                )
+                from app.models.tables import CompositionVersion
+
+                comp = await db.scalar(select(Composition).where(
+                    Composition.id == composition.id,
+                    Composition.owner_id == turn.user_id,
+                    Composition.origin_project_id == turn.project.id,
+                ))
+                cur_version = (
+                    await db.get(CompositionVersion, comp.current_version_id)
+                    if comp is not None and comp.current_version_id is not None
+                    else None
+                )
+                snap = await db.get(SourceSnapshot, UUID(media_facts["snapshot_id"]))
+                if comp is not None and cur_version is not None and snap is not None and snap.duration_ticks:
+                    comp_content = content_of(cur_version)
+                    rate = comp_content.settings.timebase
+                    limit = max(
+                        [c.range.end for t in comp_content.timeline.tracks for c in t.clips]
+                        + [s.range.end for s in comp_content.scenes]
+                        + [0]
+                    )
+                    start = seconds_to_ticks(args.place_at_seconds, rate)
+                    if limit <= 0 or start >= limit:
+                        raise ValueError(
+                            f"place_at_seconds ({args.place_at_seconds:g}s) must fall strictly before the "
+                            f"composition end ({limit / rate:g}s)."
+                        )
+                    raw_end = start + source_ticks_to_output_ticks(snap.duration_ticks, rate)
+                    if raw_end > limit:
+                        end = limit
+                        source_end = max(1, output_ticks_to_source_ticks(end - start, rate))
+                    else:
+                        end = raw_end
+                        source_end = snap.duration_ticks
+
+                    def _overlaps(t):
+                        return any(c.range.start < end and start < c.range.end for c in t.clips)
+
+                    existing_effects = sorted(
+                        (t for t in comp_content.timeline.tracks if t.kind == "audio" and t.role == "effect"),
+                        key=lambda t: t.order,
+                    )
+                    free_track = next((t for t in existing_effects if not _overlaps(t)), None)
+                    if free_track is not None:
+                        track_id = free_track.track_id
+                    else:
+                        used_ids = {t.track_id for t in comp_content.timeline.tracks}
+                        track_id = "trk_editor_effect"
+                        idx = 2
+                        while track_id in used_ids:
+                            track_id = f"trk_editor_effect_{idx}"
+                            idx += 1
+
+                    gain_db = args.gain_db if args.gain_db is not None else -12.0
+                    clip_id = f"clp_sfx_{identity.replace('-', '')[:16]}"
+                    object_id = f"obj_sfx_{identity.replace('-', '')[:16]}"
+                    ops = fixed_audio_ops(
+                        comp_content,
+                        source_id=snap.id,
+                        source_digest=snap.digest,
+                        track_id=track_id,
+                        role="effect",
+                        clip_id=clip_id,
+                        object_id=object_id,
+                        scene_id=None,
+                        start=start,
+                        end=end,
+                        source_start=0,
+                        source_end=source_end,
+                        gain_db=gain_db,
+                    )
+                    _, saved, _ = await apply_composition_edits(
+                        db,
+                        owner_id=turn.user_id,
+                        composition_id=comp.id,
+                        base_version_id=cur_version.id,
+                        base_digest=cur_version.content_digest,
+                        request_id=f"sfx_place:{identity}",
+                        skill_provenance=cur_version.skill_provenance,
+                        ops=ops,
+                    )
+                    media_facts.update(
+                        added_to_composition=True,
+                        placed=True,
+                        clip_id=clip_id,
+                        track_id=track_id,
+                        start_seconds=start / rate,
+                        end_seconds=end / rate,
+                        gain_db=gain_db,
+                        composition_id=str(comp.id),
+                        version_id=str(saved.id),
+                        version=saved.version,
+                        content_digest=saved.content_digest,
+                    )
+                    row.intent = {**row.intent, "media_result": media_facts}
+                    placed_version_info = {
+                        "composition_id": str(comp.id),
+                        "version_id": str(saved.id),
+                        "version": saved.version,
+                        "content_digest": saved.content_digest,
+                        "clip_id": clip_id,
+                        "object_id": object_id,
+                        "start_seconds": start / rate,
+                        "end_seconds": end / rate,
+                    }
+                else:
+                    media_facts["placed"] = False
+                    media_facts["next_step"] = "Call insert_audio with this snapshot_id to place the SFX onto the timeline."
+                    row.intent = {**row.intent, "media_result": media_facts}
+            else:
+                media_facts["placed"] = False
+                media_facts["next_step"] = "Call insert_audio with this snapshot_id to place the SFX onto the timeline."
+                row.intent = {**row.intent, "media_result": media_facts}
             await db.commit()
             receipt = row
 
@@ -533,7 +671,39 @@ async def execute_generate_sfx(turn, args, composition, version):
         if facts.get(key):
             for token in (facts[key], facts[key][:8], facts[key][:12]):
                 labels[token] = ("这份音效", "this sound effect")
-    return ToolObservation(json.dumps(facts), ok=True)
+    if placed_version_info is not None:
+        from app.chat.editor import _remember_labels
+
+        new_base_ref = {
+            "composition_id": placed_version_info["composition_id"],
+            "composition_version_id": placed_version_info["version_id"],
+            "content_digest": placed_version_info["content_digest"],
+        }
+        turn._video_base_ref = new_base_ref
+        turn._inspected_version = placed_version_info["version_id"]
+        group = current_group_id()
+        if group:
+            previous_write = getattr(turn, "_batch_commit", None)
+            new_ids = {placed_version_info["clip_id"], placed_version_info["object_id"]}
+            if previous_write and previous_write[0] == group:
+                new_ids.update(previous_write[2])
+            turn._batch_commit = (group, new_base_ref, new_ids)
+        _remember_labels(
+            turn,
+            [
+                {
+                    "clip_id": placed_version_info["clip_id"],
+                    "object_id": placed_version_info["object_id"],
+                    "start_seconds": placed_version_info["start_seconds"],
+                    "end_seconds": placed_version_info["end_seconds"],
+                }
+            ],
+            placed_version_info["version_id"],
+            placed_version_info["content_digest"],
+            placed_version_info["version"],
+            composition_id=placed_version_info["composition_id"],
+        )
+    return _sfx_observation(facts)
 
 
 async def generate_media(turn, name, args, composition, version):

@@ -838,7 +838,9 @@ def _instantiate_result_from_version(
     turn._video_presentation_pending = read
     from app.chat.editor import _remember_labels
 
-    _remember_labels(turn, [], saved.id, saved.content_digest, saved.version)
+    _remember_labels(
+        turn, [], saved.id, saved.content_digest, saved.version, composition_id=saved.composition_id
+    )
     return {
         "composition_id": str(saved.composition_id),
         "version_id": str(saved.id),

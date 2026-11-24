@@ -1,5 +1,6 @@
 """Project router."""
 
+from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -10,8 +11,10 @@ from app.dependencies import DBDep, get_current_user, get_current_user_required
 from app.models.schemas import (
     AssetStatus,
     BulkDeleteRequest,
+    CreateConversationRequest,
     PublicationState,
     ChatOutputEntry,
+    ProjectConversationSummary,
     ProjectCreate,
     ProjectResponse,
     ProjectResultsResponse,
@@ -19,6 +22,7 @@ from app.models.schemas import (
 )
 from app.models.tables import (
     Asset,
+    Composition,
     CompositionVersion,
     Conversation,
     ConversationUsage,
@@ -343,3 +347,360 @@ async def list_chat_delivered_outputs(
         for output_id in refs
         if output_id in by_id or output_id not in extant_ids
     ]
+
+
+@router.get("/{project_id}/conversations", response_model=list[ProjectConversationSummary])
+async def list_project_conversations(
+    project_id: UUID,
+    db: DBDep,
+    current_user: User = Depends(get_current_user_required),
+) -> list[ProjectConversationSummary]:
+    """List all project-scoped conversations ordered by most recently updated first."""
+    await get_project_for_user(db, project_id, UUID(str(current_user.id)))
+    conversations = list(
+        await db.scalars(
+            select(Conversation)
+            .where(
+                Conversation.project_id == project_id,
+                Conversation.user_id == current_user.id,
+                Conversation.asset_id.is_(None),
+            )
+            .order_by(
+                Conversation.updated_at.desc().nullslast(),
+                Conversation.created_at.desc(),
+                Conversation.id.desc(),
+            )
+        )
+    )
+    if not conversations:
+        return []
+    conv_ids = [c.id for c in conversations]
+    count_rows = (
+        await db.execute(
+            select(Message.conversation_id, func.count(Message.id))
+            .where(
+                Message.conversation_id.in_(conv_ids),
+                Message.role.in_(("user", "assistant")),
+                or_(
+                    Message.intent.is_(None),
+                    ~Message.intent["type"].astext.in_(
+                        ("activity", "activity_forensics", "candidates_log", "partial")
+                    ),
+                ),
+            )
+            .group_by(Message.conversation_id)
+        )
+    ).all()
+    counts = {cid: int(cnt) for cid, cnt in count_rows}
+
+    active_export_convs = set(
+        await db.scalars(
+            select(Message.conversation_id)
+            .join(ExportJob, ExportJob.receipt_id == Message.id)
+            .where(
+                Message.conversation_id.in_(conv_ids),
+                ExportJob.status.in_(("queued", "running")),
+            )
+        )
+    )
+    active_media_convs = set(
+        await db.scalars(
+            select(Message.conversation_id)
+            .join(MediaJob, MediaJob.receipt_id == Message.id)
+            .where(
+                Message.conversation_id.in_(conv_ids),
+                MediaJob.status.in_(("queued", "running")),
+            )
+        )
+    )
+    active_convs = active_export_convs | active_media_convs
+
+    summaries: list[ProjectConversationSummary] = []
+    for conv in conversations:
+        compact = (conv.context or {}).get("compact_summary")
+        summaries.append(
+            ProjectConversationSummary(
+                id=conv.id,
+                project_id=project_id,
+                title=conv.title,
+                created_at=conv.created_at,
+                updated_at=conv.updated_at,
+                message_count=counts.get(conv.id, 0),
+                has_active_job=conv.id in active_convs,
+                compacted=bool(isinstance(compact, dict) and compact.get("summary")),
+                compacted_at=compact.get("compacted_at") if isinstance(compact, dict) else None,
+            )
+        )
+    return summaries
+
+
+@router.post(
+    "/{project_id}/conversations",
+    response_model=ProjectConversationSummary,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_project_conversation(
+    project_id: UUID,
+    data: CreateConversationRequest,
+    db: DBDep,
+    current_user: User = Depends(get_current_user_required),
+) -> ProjectConversationSummary:
+    """Create a fresh conversation thread under an owned project (sharing all project assets & compositions)."""
+    await get_project_for_user(db, project_id, UUID(str(current_user.id)))
+    now = datetime.now(UTC)
+    title = (data.title or "").strip() or "New chat"
+    conv = Conversation(
+        user_id=current_user.id,
+        project_id=project_id,
+        title=title,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(conv)
+    await db.commit()
+    await db.refresh(conv)
+    return ProjectConversationSummary(
+        id=conv.id,
+        project_id=project_id,
+        title=conv.title,
+        created_at=conv.created_at,
+        updated_at=conv.updated_at,
+        message_count=0,
+        has_active_job=False,
+        compacted=False,
+        compacted_at=None,
+    )
+
+
+def _version_duration_seconds(version: CompositionVersion) -> float:
+    settings_dict = version.settings or {}
+    timebase = int(settings_dict.get("timebase") or 90000)
+    timeline = version.timeline or {}
+    max_ticks = 0
+    for track in timeline.get("tracks") or []:
+        for clip in track.get("clips") or []:
+            end = (clip.get("range") or {}).get("end") or 0
+            if end > max_ticks:
+                max_ticks = int(end)
+    for scene in version.scenes or []:
+        end = (scene.get("range") or {}).get("end") or 0
+        if end > max_ticks:
+            max_ticks = int(end)
+    return round(max_ticks / timebase, 3) if timebase > 0 else 0.0
+
+
+@router.get("/{project_id}/workbench")
+async def get_project_workbench(
+    project_id: UUID,
+    db: DBDep,
+    current_user: User = Depends(get_current_user_required),
+) -> dict:
+    """Project workbench projection: compositions/versions, outputs, assets, active jobs, and reusable skills."""
+    from app.pipeline.outputs import visible_outputs_stmt
+    from app.skills.resolution import list_available_skills
+
+    owner_id = UUID(str(current_user.id))
+    project = await get_project_for_user(db, project_id, owner_id)
+
+    comps = list(
+        await db.scalars(
+            select(Composition)
+            .where(
+                Composition.origin_project_id == project_id,
+                Composition.owner_id == owner_id,
+            )
+            .order_by(Composition.created_at.desc())
+        )
+    )
+    comp_ids = [c.id for c in comps]
+    versions_by_comp: dict[UUID, list[CompositionVersion]] = {cid: [] for cid in comp_ids}
+    if comp_ids:
+        all_versions = list(
+            await db.scalars(
+                select(CompositionVersion)
+                .where(CompositionVersion.composition_id.in_(comp_ids))
+                .order_by(CompositionVersion.version.desc())
+            )
+        )
+        for v in all_versions:
+            versions_by_comp.setdefault(v.composition_id, []).append(v)
+
+    compositions_payload = [
+        {
+            "composition_id": str(comp.id),
+            "name": comp.name,
+            "current_version_id": str(comp.current_version_id) if comp.current_version_id else None,
+            "versions": [
+                {
+                    "version_id": str(v.id),
+                    "version": v.version,
+                    "duration_seconds": _version_duration_seconds(v),
+                    "style_preset": ((v.settings or {}).get("style") or {}).get("preset_id"),
+                    "is_head": v.id == comp.current_version_id,
+                    "created_at": v.created_at.isoformat() if v.created_at else None,
+                }
+                for v in versions_by_comp.get(comp.id, [])
+            ],
+        }
+        for comp in comps
+    ]
+
+    outputs_rows = list(
+        await db.scalars(
+            visible_outputs_stmt()
+            .where(Output.project_id == project_id)
+            .order_by(Output.created_at.desc())
+        )
+    )
+    outputs_payload = []
+    for out in outputs_rows:
+        resolved_files: dict[str, str | None] = {}
+        for k, val in (out.files or {}).items():
+            if isinstance(val, str):
+                if is_export_location(val):
+                    resolved_files[k] = (
+                        resolve_stored_url(val)
+                        if matches_export_location(val, owner_id, project_id, out.id)
+                        else None
+                    )
+                else:
+                    resolved_files[k] = resolve_stored_url(val)
+            else:
+                resolved_files[k] = val
+        provenance = (out.render_spec or {}).get("provenance") or {}
+        outputs_payload.append(
+            {
+                "id": str(out.id),
+                "type": out.type,
+                "status": out.status.value if hasattr(out.status, "value") else str(out.status),
+                "files": resolved_files,
+                "composition_id": str(out.composition_id) if out.composition_id else provenance.get("composition_id"),
+                "composition_version_id": (
+                    str(out.composition_version_id)
+                    if out.composition_version_id
+                    else provenance.get("composition_version_id")
+                ),
+                "created_at": out.created_at.isoformat() if out.created_at else None,
+            }
+        )
+
+    asset_rows = list(
+        await db.scalars(
+            select(Asset)
+            .where(Asset.project_id == project_id)
+            .order_by(Asset.created_at.desc())
+        )
+    )
+    assets_payload = [
+        {
+            "id": str(a.id),
+            "type": a.type.value if hasattr(a.type, "value") else str(a.type),
+            "title": a.title or a.display_name,
+            "file_url": resolve_stored_url(a.file_url) if a.file_url else None,
+            "processing_status": (
+                a.processing_status.value
+                if hasattr(a.processing_status, "value")
+                else str(a.processing_status)
+            ),
+            "meta": a.meta or {},
+            "created_at": a.created_at.isoformat() if a.created_at else None,
+        }
+        for a in asset_rows
+    ]
+
+    active_jobs: list[dict] = []
+    export_rows = (
+        await db.execute(
+            select(ExportJob, Message.conversation_id)
+            .join(Message, ExportJob.receipt_id == Message.id)
+            .where(
+                ExportJob.project_id == project_id,
+                ExportJob.status.in_(("queued", "running")),
+            )
+            .order_by(ExportJob.created_at.asc())
+        )
+    ).all()
+    for job, conv_id in export_rows:
+        active_jobs.append(
+            {
+                "job_id": str(job.id),
+                "kind": "export",
+                "status": job.status,
+                "label_key": "workbench.job.export",
+                "conversation_id": str(conv_id) if conv_id else None,
+                "receipt_id": str(job.receipt_id),
+                "target_version_id": str(job.version_id),
+                "created_at": job.created_at.isoformat() if job.created_at else None,
+            }
+        )
+
+    media_kind_map = {
+        "generate_image": "image",
+        "generate_voice": "voice",
+        "generate_music": "music",
+        "image": "image",
+        "voice": "voice",
+        "music": "music",
+    }
+    media_rows = (
+        await db.execute(
+            select(MediaJob, Message.conversation_id, Message.intent)
+            .join(Message, MediaJob.receipt_id == Message.id)
+            .where(
+                MediaJob.project_id == project_id,
+                MediaJob.status.in_(("queued", "running")),
+            )
+            .order_by(MediaJob.created_at.asc())
+        )
+    ).all()
+    for job, conv_id, intent in media_rows:
+        norm_kind = media_kind_map.get(job.kind, job.kind)
+        active_jobs.append(
+            {
+                "job_id": str(job.id),
+                "kind": norm_kind,
+                "status": job.status,
+                "label_key": f"workbench.job.{norm_kind}",
+                "conversation_id": str(conv_id) if conv_id else None,
+                "receipt_id": str(job.receipt_id),
+                "target_version_id": (intent or {}).get("version_id"),
+                "created_at": job.created_at.isoformat() if job.created_at else None,
+            }
+        )
+
+    for a in asset_rows:
+        if a.processing_status == AssetStatus.PROCESSING:
+            active_jobs.append(
+                {
+                    "job_id": str(a.id),
+                    "kind": "asset_processing",
+                    "status": "running",
+                    "label_key": "workbench.job.assetProcessing",
+                    "conversation_id": None,
+                    "receipt_id": None,
+                    "target_version_id": None,
+                    "created_at": a.created_at.isoformat() if a.created_at else None,
+                }
+            )
+
+    available_skills = await list_available_skills(db, owner_id=owner_id)
+    blueprint_skills = [
+        opt.model_dump(mode="json")
+        for opt in available_skills
+        if getattr(opt, "blueprint_summary", None) is not None
+    ]
+
+    return {
+        "project": {
+            "id": str(project.id),
+            "title": project.title,
+            "language": project.language,
+            "status": project.status.value if hasattr(project.status, "value") else str(project.status),
+            "updated_at": project.updated_at.isoformat() if project.updated_at else None,
+        },
+        "compositions": compositions_payload,
+        "outputs": outputs_payload,
+        "assets": assets_payload,
+        "active_jobs": active_jobs,
+        "skills": blueprint_skills,
+    }

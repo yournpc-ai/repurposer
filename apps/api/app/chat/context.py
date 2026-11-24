@@ -25,8 +25,25 @@ from app.models.tables import (
 from app.pipeline.outputs import list_visible_outputs
 
 
-def conversation_messages(rows: list[Message]) -> list[dict]:
-    """Project the durable chat into native roles, including dock submissions."""
+def conversation_messages(
+    rows: list[Message],
+    *,
+    compact_summary: dict[str, Any] | None = None,
+) -> list[dict]:
+    """Project the durable chat into native roles, including dock submissions.
+
+    When ``compact_summary`` carries ``compacted_through_seq``, messages at or
+    before that sequence number are skipped (the summary rides in the round
+    context block) while newer messages stay verbatim.
+    """
+    compacted_through_seq = 0
+    if isinstance(compact_summary, dict) and compact_summary.get("summary"):
+        try:
+            compacted_through_seq = int(compact_summary.get("compacted_through_seq") or 0)
+        except (TypeError, ValueError):
+            compacted_through_seq = 0
+    if compacted_through_seq > 0:
+        rows = [row for row in rows if (row.seq or 0) > compacted_through_seq]
     linked = {
         str((row.intent or {}).get("answered_question_id"))
         for row in rows if row.role == "user"

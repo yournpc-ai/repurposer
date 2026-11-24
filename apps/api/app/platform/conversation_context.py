@@ -12,16 +12,23 @@ async def find_conversation(
     db: AsyncSession,
     user_id: UUID,
     project_id: UUID,
+    conversation_id: UUID | None = None,
 ) -> Conversation | None:
-    """Return the project's chat conversation, or None. (Conversations are
-    project-scope only — the asset scope is retired, ADR-041 D8.)"""
-    result = await db.execute(
-        select(Conversation).where(
-            Conversation.user_id == user_id,
-            Conversation.project_id == project_id,
-            Conversation.asset_id.is_(None),
-        )
+    """Return a specific project conversation or the most recently active one."""
+    stmt = select(Conversation).where(
+        Conversation.user_id == user_id,
+        Conversation.project_id == project_id,
+        Conversation.asset_id.is_(None),
     )
+    if conversation_id is not None:
+        stmt = stmt.where(Conversation.id == conversation_id)
+    else:
+        stmt = stmt.order_by(
+            Conversation.updated_at.desc().nullslast(),
+            Conversation.created_at.desc(),
+            Conversation.id.desc(),
+        ).limit(1)
+    result = await db.execute(stmt)
     return result.scalar_one_or_none()
 
 
@@ -56,7 +63,7 @@ async def get_project_prompt(db: AsyncSession, project_id: UUID) -> str | None:
             Conversation.asset_id.is_(None),
             Message.role == "user",
         )
-        .order_by(Message.seq.asc())
+        .order_by(Conversation.created_at.asc(), Message.seq.asc())
         .limit(1)
     )
     message = result.scalar_one_or_none()

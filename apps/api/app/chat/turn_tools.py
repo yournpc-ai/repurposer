@@ -1,6 +1,7 @@
 """Native tools offered to the editor and transcript prose filtering."""
 
 import re
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -372,8 +373,42 @@ UPDATE_FOCUS_TOOL = ChatTool(
 )
 
 
+class StepItem(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    title: str = Field(
+        min_length=2,
+        max_length=60,
+        description="Short imperative user-safe step title (no internal IDs, file paths, or tool names).",
+    )
+    status: Literal["pending", "in_progress", "done", "skipped", "failed"]
+
+
+class UpdateStepsArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    steps: list[StepItem] = Field(
+        min_length=2,
+        max_length=10,
+        description="Full ordered checklist of steps for the current multi-phase request.",
+    )
+
+
+UPDATE_STEPS_TOOL = ChatTool(
+    name="update_steps",
+    terminal=False,
+    batchable=True,
+    description=(
+        "更新当前轮的动态进度清单，零副作用。多步骤视频制作（≥3 个阶段）时，与该阶段首个真实工具并行调用，"
+        "发送完整有序清单（2–10 步），并在推进阶段时同步更新各步状态；单步简单问答无需调用。"
+        "使用用户当前语言，标题简洁清晰，不暴露内部标识。"
+    ),
+    params_model=UpdateStepsArgs,
+    presentation=ToolPresentation(kind="steps", active_key="chat.activity.steps"),
+)
+
+
 PLAN_READ_TOOLS = [
     UPDATE_FOCUS_TOOL,
+    UPDATE_STEPS_TOOL,
     *perception_chat_tools(
         "get_understanding", "get_asset", "search_music", "search_transcript",
         "get_segment", "get_web_page", "search_web", "list_project_media",

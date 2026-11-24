@@ -274,3 +274,36 @@ app.include_router(skills_router, prefix="/api/v1/skills", tags=["skills"])
 async def health_check():
     """Health check endpoint."""
     return {"status": "ok"}
+
+
+@app.get("/_local_storage/{key:path}")
+@app.head("/_local_storage/{key:path}")
+async def local_storage_get(key: str):
+    """Serve objects from local:// storage in local dev/E2E mode only."""
+    from fastapi.responses import FileResponse
+    from app.providers.storage import is_local_storage, local_storage_path
+
+    if not is_local_storage():
+        return JSONResponse({"detail": "Not found"}, status_code=404)
+    try:
+        path = local_storage_path(key)
+    except ValueError:
+        return JSONResponse({"detail": "Invalid key"}, status_code=400)
+    if not path.is_file():
+        return JSONResponse({"detail": "Not found"}, status_code=404)
+    return FileResponse(path)
+
+
+@app.put("/_local_storage/{key:path}")
+async def local_storage_put(key: str, request: Request):
+    """Accept direct PUT uploads into local:// storage in local dev/E2E mode only."""
+    from app.providers.storage import is_local_storage, save
+
+    if not is_local_storage():
+        return JSONResponse({"detail": "Not found"}, status_code=404)
+    body = await request.body()
+    try:
+        await save(key, body, content_type=request.headers.get("content-type"))
+    except ValueError:
+        return JSONResponse({"detail": "Invalid key"}, status_code=400)
+    return Response(status_code=200)

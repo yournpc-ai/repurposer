@@ -43,6 +43,7 @@ from app.models.tables import (
     Asset,
     Conversation,
     Message,
+    MessageFeedback,
     MessageSeqCounter,
     Output,
     Project,
@@ -162,17 +163,57 @@ def _reminder_block(
     return _system_notice(_reminder_tail(text, question, default_path))
 
 
-async def _get_or_create_project_conversation(
+_DEFAULT_CONVERSATION_TITLES = frozenset({"", "Project chat", "New chat", "新对话"})
+
+
+def _auto_conversation_title(text: str, *, max_len: int = 28) -> str:
+    """Derive a concise readable title from the opening user message."""
+    first_line = next((line.strip() for line in (text or "").splitlines() if line.strip()), "")
+    cleaned = re.sub(r"\s+", " ", first_line).strip()
+    if not cleaned:
+        return "Project chat"
+    if len(cleaned) > max_len:
+        return cleaned[: max_len - 1].rstrip() + "…"
+    return cleaned
+
+
+async def resolve_project_conversation(
     db: AsyncSession,
     user_id: UUID,
     project_id: UUID,
+    conversation_id: UUID | None = None,
 ) -> Conversation:
+    """Resolve an explicit project conversation (404 if foreign/missing) or the most recently active one."""
+    if conversation_id is not None:
+        result = await db.execute(
+            select(Conversation).where(
+                Conversation.id == conversation_id,
+                Conversation.project_id == project_id,
+                Conversation.asset_id.is_(None),
+                Conversation.user_id == user_id,
+            )
+        )
+        conversation = result.scalar_one_or_none()
+        if conversation is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Conversation not found",
+            )
+        return conversation
+
     result = await db.execute(
-        select(Conversation).where(
+        select(Conversation)
+        .where(
             Conversation.project_id == project_id,
             Conversation.asset_id.is_(None),
             Conversation.user_id == user_id,
         )
+        .order_by(
+            Conversation.updated_at.desc().nullslast(),
+            Conversation.created_at.desc(),
+            Conversation.id.desc(),
+        )
+        .limit(1)
     )
     conversation = result.scalar_one_or_none()
     if conversation is None:
@@ -180,6 +221,7 @@ async def _get_or_create_project_conversation(
             user_id=user_id,
             project_id=project_id,
             title="Project chat",
+            updated_at=datetime.now(UTC),
         )
         db.add(conversation)
         await db.flush()
@@ -191,6 +233,14 @@ async def _get_or_create_project_conversation(
             UUID(str(conversation.id))
         )
     return conversation
+
+
+async def _get_or_create_project_conversation(
+    db: AsyncSession,
+    user_id: UUID,
+    project_id: UUID,
+) -> Conversation:
+    return await resolve_project_conversation(db, user_id, project_id)
 
 
 # interaction_policy_version 戳 (ADR-099 §7, 批次 C·C+ commit 2): every
@@ -1607,10 +1657,13 @@ async def prepare_chat_turn(
     await db.execute(select(func.pg_advisory_xact_lock(
         request.project_id.int % (1 << 63)
     )))
-    conversation = await _get_or_create_project_conversation(
-        db, user_id, request.project_id
+    conversation = await resolve_project_conversation(
+        db, user_id, request.project_id, request.conversation_id
     )
     conversation_id = UUID(str(conversation.id))
+    if (conversation.title or "").strip() in _DEFAULT_CONVERSATION_TITLES and request.message.strip():
+        conversation.title = _auto_conversation_title(request.message)
+    conversation.updated_at = datetime.now(UTC)
     if request.first_message:
         # The sequence counter also survives a zero-visible Stop retraction.
         # Allocate the opener's sequence in this transaction so an admission
@@ -2186,6 +2239,9 @@ async def execute_chat_turn(
         }
     turn_row.turn_state = "settled"
     prepared.user_message.turn_state = "settled"
+    conv_row = await db.get(Conversation, prepared.conversation_id)
+    if conv_row is not None:
+        conv_row.updated_at = datetime.now(UTC)
     await db.commit()
     return ChatResponse(
         conversation_id=prepared.conversation_id,
@@ -2463,6 +2519,7 @@ async def append_activity_row(
     return message
 
 
+
 async def settle_activity_row(
     db: AsyncSession,
     message_id: UUID,
@@ -2516,6 +2573,7 @@ async def record_activity_forensics(
     return message
 
 
+
 # ---- Candidate surface persistence (Workspace 合同 v4.2 C8-c, 2026-09-26) ---
 # The candidate surface's data chain is message-borne end to end: live it
 # rides the ``assistant.candidates`` SSE frames; at turn settle the route
@@ -2561,3 +2619,374 @@ async def record_candidates_log(
     await db.flush()
     await db.refresh(message)
     return message
+
+
+_INTERNAL_INTENT_TYPES = frozenset({
+    ACTIVITY_ROW_TYPE,
+    ACTIVITY_FORENSICS_TYPE,
+    CANDIDATES_LOG_TYPE,
+    "partial",
+})
+
+
+def _is_conversational_message(row: Message) -> bool:
+    if row.role not in {"user", "assistant"}:
+        return False
+    intent = row.intent or {}
+    if intent.get("type") in _INTERNAL_INTENT_TYPES:
+        return False
+    if "editor_media" in intent and not (row.content or "").strip():
+        return False
+    return bool((row.content or "").strip() or row.question)
+
+
+def _deterministic_compact_summary(
+    rows: list[Message],
+    prior_summary: dict[str, Any] | None,
+) -> tuple[str, list[str]]:
+    """Fast deterministic extractive summary used as baseline and offline/test fallback."""
+    parts: list[str] = []
+    decisions: list[str] = []
+    if isinstance(prior_summary, dict) and prior_summary.get("summary"):
+        parts.append(str(prior_summary["summary"]).strip()[:600])
+        for item in prior_summary.get("key_decisions") or []:
+            if isinstance(item, str) and item.strip() and item.strip() not in decisions:
+                decisions.append(item.strip()[:160])
+
+    user_snippets: list[str] = []
+    assistant_snippets: list[str] = []
+    for row in rows:
+        text = re.sub(r"\s+", " ", (row.content or "").strip())
+        if not text:
+            continue
+        snippet = text[:180] + ("…" if len(text) > 180 else "")
+        if row.role == "user":
+            user_snippets.append(snippet)
+            if len(decisions) < 8:
+                decisions.append(snippet[:140])
+        else:
+            assistant_snippets.append(snippet)
+
+    if user_snippets:
+        parts.append("User requests: " + " | ".join(user_snippets[-4:]))
+    if assistant_snippets:
+        parts.append("Assistant outcomes: " + " | ".join(assistant_snippets[-3:]))
+    summary = "\n".join(p for p in parts if p).strip()
+    if not summary:
+        summary = "Conversation compacted with no prior messages."
+    return summary[:1600], decisions[:8]
+
+
+async def _try_llm_compact_summary(
+    rows: list[Message],
+    prior_summary: dict[str, Any] | None,
+    ui_language: str | None,
+) -> tuple[str, list[str]] | None:
+    """Attempt a compact structured summary via the configured LLM, returning None on failure."""
+    import asyncio
+    import json
+    import os
+
+    if "PYTEST_CURRENT_TEST" in os.environ or not rows:
+        return None
+    try:
+        from app.providers.llm import get_llm_client
+
+        client = get_llm_client()
+    except Exception:  # noqa: BLE001
+        return None
+
+    transcript_lines: list[str] = []
+    if isinstance(prior_summary, dict) and prior_summary.get("summary"):
+        transcript_lines.append(f"[Prior summary] {str(prior_summary['summary'])[:600]}")
+    for row in rows[-40:]:
+        text = re.sub(r"\s+", " ", (row.content or "").strip())
+        if not text:
+            continue
+        transcript_lines.append(f"{row.role}: {text[:400]}")
+    if not transcript_lines:
+        return None
+    lang_hint = "Chinese" if (ui_language or "").startswith("zh") or _prefers_zh("\n".join(transcript_lines)) else "English"
+    system_prompt = (
+        f"Summarize the conversation concisely in {lang_hint} for continuing video editing work. "
+        "Return strict JSON only: {\"summary\": \"<=300 chars concise summary\", "
+        "\"key_decisions\": [\"up to 6 concrete decisions/preferences\"]}."
+    )
+    try:
+        raw = await asyncio.wait_for(
+            client.chat(
+                [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": "\n".join(transcript_lines)[:8000]},
+                ],
+                temperature=0.2,
+                max_tokens=500,
+                thinking=False,
+            ),
+            timeout=15.0,
+        )
+        text = raw if isinstance(raw, str) else getattr(raw, "content", "") or ""
+        match = re.search(r"\{.*\}", text, re.S)
+        if not match:
+            return None
+        parsed = json.loads(match.group(0))
+        summary = str(parsed.get("summary") or "").strip()
+        raw_decisions = parsed.get("key_decisions") or []
+        decisions = [
+            str(item).strip()[:160]
+            for item in raw_decisions
+            if isinstance(item, str) and item.strip()
+        ][:8]
+        if summary:
+            return summary[:1600], decisions
+    except Exception:  # noqa: BLE001
+        return None
+    return None
+
+
+async def compact_conversation_context(
+    db: AsyncSession,
+    conversation: Conversation,
+) -> dict[str, Any]:
+    """Compact settled messages in a conversation into Conversation.context['compact_summary']."""
+    all_rows = await list_conversation_messages(db, UUID(str(conversation.id)))
+    latest_seq = max((int(row.seq) for row in all_rows if row.seq is not None), default=0)
+    prior_ctx = dict(conversation.context or {"schema_version": 1, "items": []})
+    prior_summary = prior_ctx.get("compact_summary")
+    prior_seq = 0
+    if isinstance(prior_summary, dict):
+        try:
+            prior_seq = int(prior_summary.get("compacted_through_seq") or 0)
+        except (TypeError, ValueError):
+            prior_seq = 0
+
+    delta_rows = [
+        row
+        for row in all_rows
+        if _is_conversational_message(row) and (row.seq or 0) > prior_seq
+    ]
+    total_conv_messages = sum(1 for row in all_rows if _is_conversational_message(row))
+
+    llm_result = await _try_llm_compact_summary(delta_rows, prior_summary, conversation.ui_language)
+    if llm_result is not None:
+        summary, key_decisions = llm_result
+    else:
+        summary, key_decisions = _deterministic_compact_summary(delta_rows, prior_summary)
+
+    now = datetime.now(UTC)
+    compact_record: dict[str, Any] = {
+        "summary": summary,
+        "key_decisions": key_decisions,
+        "compacted_through_seq": latest_seq,
+        "compacted_at": now.isoformat(),
+        "message_count": total_conv_messages,
+    }
+    conversation.context = {**prior_ctx, "compact_summary": compact_record}
+    conversation.updated_at = now
+    await db.commit()
+    await db.refresh(conversation)
+    return compact_record
+
+
+async def upsert_message_feedback(
+    db: AsyncSession,
+    user_id: UUID,
+    message_id: UUID,
+    *,
+    rating: str | None,
+    reason: str | None = None,
+    tags: list[str] | None = None,
+) -> MessageFeedback | None:
+    """Create/update or delete per-user evaluation feedback with a frozen context snapshot."""
+    message = await db.get(Message, message_id)
+    conversation = (
+        await db.get(Conversation, message.conversation_id)
+        if message is not None
+        else None
+    )
+    if message is None or conversation is None or conversation.user_id != user_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Message not found")
+    if message.role != "assistant":
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Feedback is only supported on assistant messages.",
+        )
+
+    if rating is None:
+        await db.execute(
+            delete(MessageFeedback).where(
+                MessageFeedback.message_id == message_id,
+                MessageFeedback.user_id == user_id,
+            )
+        )
+        await db.commit()
+        return None
+
+    # Resolve opening user message for this turn
+    opening: Message | None = None
+    if message.turn_id is not None:
+        opening = await db.get(Message, message.turn_id)
+    if opening is None:
+        opening = await db.scalar(
+            select(Message)
+            .where(
+                Message.conversation_id == conversation.id,
+                Message.role == "user",
+                Message.seq < (message.seq or 0),
+            )
+            .order_by(Message.seq.desc())
+            .limit(1)
+        )
+
+    msg_intent = dict(message.intent or {})
+    eval_meta = dict(msg_intent.get("eval_meta") or {})
+
+    # Collect turn tool trace (activities + forensics)
+    activities: list[dict[str, Any]] = []
+    forensics: list[dict[str, Any]] = []
+    trace_turn_id = message.turn_id or (opening.id if opening is not None else None)
+    if trace_turn_id is not None:
+        turn_rows = list(
+            await db.scalars(
+                select(Message)
+                .where(
+                    Message.conversation_id == conversation.id,
+                    or_(
+                        Message.turn_id == trace_turn_id,
+                        Message.intent["ref"].astext == str(trace_turn_id),
+                    ),
+                )
+                .order_by(Message.seq.asc().nulls_last(), Message.created_at.asc())
+            )
+        )
+        for row in turn_rows:
+            row_intent = row.intent or {}
+            row_type = row_intent.get("type")
+            if row_type == ACTIVITY_ROW_TYPE:
+                frame = row_intent.get("frame") or {}
+                activities.append(
+                    {
+                        "key": frame.get("key"),
+                        "detail": frame.get("detail"),
+                        "status": frame.get("status"),
+                        "duration_ms": frame.get("duration_ms"),
+                        "receipt": frame.get("receipt"),
+                    }
+                )
+            elif row_type == ACTIVITY_FORENSICS_TYPE:
+                forensics.extend(row_intent.get("rejections") or [])
+
+    # Resolve composition_ref snapshot
+    composition_ref: dict[str, Any] | None = None
+    comp_id_raw = eval_meta.get("composition_id")
+    ver_id_raw = eval_meta.get("composition_version_id")
+    if not ver_id_raw:
+        for block in message.blocks or []:
+            if isinstance(block, dict) and block.get("composition_version_id"):
+                ver_id_raw = block.get("composition_version_id")
+                comp_id_raw = comp_id_raw or block.get("composition_id")
+                break
+    version_row: CompositionVersion | None = None
+    if ver_id_raw:
+        try:
+            version_row = await db.get(CompositionVersion, UUID(str(ver_id_raw)))
+        except ValueError:
+            version_row = None
+    if version_row is None and conversation.project_id is not None:
+        comp_row = await db.scalar(
+            select(Composition)
+            .where(
+                Composition.origin_project_id == conversation.project_id,
+                Composition.owner_id == user_id,
+            )
+            .order_by(Composition.created_at.desc())
+            .limit(1)
+        )
+        if comp_row is not None and comp_row.current_version_id is not None:
+            version_row = await db.get(CompositionVersion, comp_row.current_version_id)
+    if version_row is not None:
+        composition_ref = {
+            "composition_id": str(version_row.composition_id),
+            "version_id": str(version_row.id),
+            "version_number": version_row.version,
+            "style_preset": ((version_row.settings or {}).get("style") or {}).get("preset_id"),
+        }
+    elif comp_id_raw or ver_id_raw:
+        composition_ref = {
+            "composition_id": str(comp_id_raw) if comp_id_raw else None,
+            "version_id": str(ver_id_raw) if ver_id_raw else None,
+            "version_number": None,
+            "style_preset": None,
+        }
+
+    opening_intent = (opening.intent or {}) if opening is not None else {}
+    context_snapshot: dict[str, Any] = {
+        "user_prompt": (
+            {
+                "message_id": str(opening.id),
+                "content": opening.content or "",
+                "mentions": opening.mentions or [],
+                "attachments": opening.attachments or [],
+                "skill_reference": opening_intent.get("skill") or eval_meta.get("skill_reference"),
+            }
+            if opening is not None
+            else None
+        ),
+        "assistant_reply": {
+            "message_id": str(message.id),
+            "content": message.content or "",
+            "blocks": message.blocks or [],
+            "steps": msg_intent.get("steps"),
+        },
+        "prompt_meta": {
+            "model_name": eval_meta.get("model_name"),
+            "system_prompt_sha256": eval_meta.get("system_prompt_sha256"),
+            "interaction_policy_version": (
+                eval_meta.get("interaction_policy_version")
+                or msg_intent.get("interaction_policy_version")
+                or INTERACTION_POLICY_VERSION
+            ),
+            "assembled_context_excerpt": eval_meta.get("assembled_context_excerpt"),
+        },
+        "tool_trace": {
+            "activities": activities,
+            "forensics": forensics,
+        },
+        "composition_ref": composition_ref,
+        "compact_summary": (conversation.context or {}).get("compact_summary"),
+    }
+
+    clean_tags = [t.strip()[:48] for t in (tags or []) if isinstance(t, str) and t.strip()][:10]
+    clean_reason = reason.strip() if isinstance(reason, str) and reason.strip() else None
+    now = datetime.now(UTC)
+
+    stmt = (
+        pg_insert(MessageFeedback)
+        .values(
+            user_id=user_id,
+            project_id=conversation.project_id,
+            conversation_id=conversation.id,
+            message_id=message.id,
+            turn_id=opening.id if opening is not None else message.turn_id,
+            rating=rating,
+            reason=clean_reason,
+            tags=clean_tags,
+            context_snapshot=context_snapshot,
+            created_at=now,
+            updated_at=now,
+        )
+        .on_conflict_do_update(
+            constraint="uq_message_feedback_msg_user",
+            set_={
+                "rating": rating,
+                "reason": clean_reason,
+                "tags": clean_tags,
+                "context_snapshot": context_snapshot,
+                "updated_at": now,
+            },
+        )
+        .returning(MessageFeedback.id)
+    )
+    feedback_id = (await db.execute(stmt)).scalar_one()
+    await db.commit()
+    return await db.get(MessageFeedback, feedback_id)
