@@ -597,3 +597,139 @@ def test_catalog_prompt_index_exposes_style_presets():
     for item in index["style_presets"]:
         assert item["bgm_mood"]
         assert len(item["sfx_palette"]) >= 5
+
+
+def test_set_composition_style_adapts_only_unreadable_unbacked_titles():
+    audio_id = uuid4()
+    audio_digest = "f" * 64
+    white_heading = Clip(
+        clip_id="clp_white_heading",
+        range=TimeRange(start=0, end=180000),
+        object=TextObject(
+            kind="text",
+            object_id="obj_white_heading",
+            text="Hero Title",
+            layout=LayoutBox(x=160, y=420, width=1600, height=140),
+            style=TextStyle(font_size=64, color="#F8FAFC", background=None, weight=700, align="center"),
+            caption=None,
+        ),
+    )
+    white_sub = Clip(
+        clip_id="clp_white_sub",
+        range=TimeRange(start=0, end=180000),
+        object=TextObject(
+            kind="text",
+            object_id="obj_white_sub",
+            text="Supporting line",
+            layout=LayoutBox(x=160, y=580, width=1600, height=80),
+            style=TextStyle(font_size=32, color="#F8FAFC", background=None, weight=500, align="center"),
+            caption=None,
+        ),
+    )
+    readable_navy = Clip(
+        clip_id="clp_readable_navy",
+        range=TimeRange(start=0, end=180000),
+        object=TextObject(
+            kind="text",
+            object_id="obj_readable_navy",
+            text="Already readable on cream",
+            layout=LayoutBox(x=160, y=100, width=1600, height=80),
+            style=TextStyle(font_size=36, color="#123456", background=None, weight=700, align="left"),
+            caption=None,
+        ),
+    )
+    pill_tag = Clip(
+        clip_id="clp_pill_tag",
+        range=TimeRange(start=0, end=180000),
+        object=TextObject(
+            kind="text",
+            object_id="obj_pill_tag",
+            text="CHAPTER 01",
+            layout=LayoutBox(x=160, y=900, width=800, height=100),
+            style=TextStyle(
+                font_size=32,
+                color="#F8FAFC",
+                background="#0F172A",
+                background_mode="pill",
+                background_opacity=0.86,
+                background_padding=(22.0, 10.0),
+                background_radius=6.0,
+                weight=700,
+                align="left",
+            ),
+            caption=None,
+        ),
+    )
+    independent_cap = Clip(
+        clip_id="clp_ind_cap",
+        range=TimeRange(start=0, end=180000),
+        object=TextObject(
+            kind="text",
+            object_id="obj_ind_cap",
+            text="Manual white caption stays untouched",
+            layout=LayoutBox(x=160, y=920, width=1600, height=110),
+            style=TextStyle(font_size=42, color="#F8FAFC", background=None, weight=700, align="center"),
+            caption=SourceCaptionDerivation(
+                snapshot_id=audio_id,
+                snapshot_digest=audio_digest,
+                sentence_id="s1",
+                source_range=TimeRange(start=0, end=180000),
+                source_text_digest=speech_text_digest("Original"),
+                state="independent",
+            ),
+        ),
+    )
+    audio_clip = Clip(
+        clip_id="clp_vo",
+        range=TimeRange(start=0, end=180000),
+        source=ClipSource(
+            snapshot_id=audio_id,
+            snapshot_digest=audio_digest,
+            source_range=TimeRange(start=0, end=180000),
+        ),
+        object=AudioObject(kind="audio", object_id="obj_vo", gain_db=-2.0),
+    )
+
+    dark_content = CompositionContent(
+        settings=VersionSettings(
+            width=1920,
+            height=1080,
+            background="#0A0F16",
+            style=CompositionStyle(preset_id="institutional_dark"),
+        ),
+        sources=[SourceBinding(snapshot_id=audio_id, snapshot_digest=audio_digest)],
+        timeline=Timeline(
+            tracks=[
+                Track(track_id="trk_t1", kind="visual", role="title", order=0, clips=[white_heading]),
+                Track(track_id="trk_t2", kind="visual", role="title", order=1, clips=[white_sub]),
+                Track(track_id="trk_t3", kind="visual", role="title", order=2, clips=[readable_navy]),
+                Track(track_id="trk_t4", kind="visual", role="title", order=3, clips=[pill_tag]),
+                Track(track_id="trk_cap", kind="visual", role="caption", order=4, clips=[independent_cap]),
+                Track(track_id="trk_audio", kind="audio", role="dialogue", order=0, clips=[audio_clip]),
+            ]
+        ),
+    )
+
+    # Dark -> Light (vox_editorial #F4EFE2): only the two unbacked low-contrast white titles adapt!
+    light_content, light_summary = apply_composition_style(dark_content, preset_id="vox_editorial")
+    assert light_summary["title_texts_contrast_adapted"] == 2
+    assert light_summary["independent_captions_preserved"] == 1
+    light_clips = {c.clip_id: c for t in light_content.timeline.tracks for c in t.clips}
+    assert light_clips["clp_white_heading"].object.style.color == "#141413"
+    assert light_clips["clp_white_sub"].object.style.color == "#3E3D39"
+    # Readable unbacked title, pill-backed title, independent caption, and audio stay 100% untouched!
+    assert light_clips["clp_readable_navy"].model_dump(mode="json") == readable_navy.model_dump(mode="json")
+    assert light_clips["clp_pill_tag"].model_dump(mode="json") == pill_tag.model_dump(mode="json")
+    assert light_clips["clp_ind_cap"].model_dump(mode="json") == independent_cap.model_dump(mode="json")
+    assert light_clips["clp_vo"].model_dump(mode="json") == audio_clip.model_dump(mode="json")
+
+    # Light -> Dark (institutional_dark #0A0F16): now the 3 dark unbacked titles auto-adapt to light ink!
+    back_dark, dark_summary = apply_composition_style(light_content, preset_id="institutional_dark")
+    assert dark_summary["title_texts_contrast_adapted"] == 3
+    dark_clips = {c.clip_id: c for t in back_dark.timeline.tracks for c in t.clips}
+    assert dark_clips["clp_white_heading"].object.style.color == "#F4F7FA"
+    assert dark_clips["clp_white_sub"].object.style.color == "#B8C7D4"
+    assert dark_clips["clp_readable_navy"].object.style.color == "#F4F7FA"
+    assert dark_clips["clp_pill_tag"].model_dump(mode="json") == pill_tag.model_dump(mode="json")
+    assert dark_clips["clp_ind_cap"].model_dump(mode="json") == independent_cap.model_dump(mode="json")
+    assert dark_clips["clp_vo"].model_dump(mode="json") == audio_clip.model_dump(mode="json")

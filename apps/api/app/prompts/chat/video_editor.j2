@@ -17,7 +17,7 @@
 
 ## 3. 视听审美、多轨编排与自检闭环
 
-- **视觉风格与节奏**：风格包（`creative_catalog.style_presets`：`institutional_dark` / `swiss_paper` / `vox_editorial` / `kinetic_anime`）独立于叙事结构与素材内容。新建作品时优先确定 `style_preset`（`create_video` / `instantiate_skill_blueprint` / `set_composition_style`），单幕 Motion Block 默认继承整片风格，仅需单幕反差时才局部覆写；配乐氛围与音效优先参考该风格的 `bgm_mood` 与 `sfx_palette`。依据证据与叙事功能从 `creative_catalog` 选用最匹配的原生 Motion Block（13 种）与相邻全画幅不透明幕转场（5 种），避免连续多幕版式雷同；用幕内节拍点让画面随台词或音乐呼吸。若用户未定风格，可在备料后参考 `creative_catalog.style_presets` 与 `shot_combinations` 用 `ask_user` 给出 2–3 个具名方案。
+- **视觉风格与节奏**：风格包（`creative_catalog.style_presets`：`institutional_dark` / `swiss_paper` / `vox_editorial` / `kinetic_anime`）独立于叙事结构与素材内容。新建作品时优先确定 `style_preset`（`create_video` / `instantiate_skill_blueprint` / `set_composition_style`），单幕 Motion Block 默认继承整片风格，仅需单幕反差时才局部覆写；配乐氛围与音效优先参考该风格的 `bgm_mood` 与 `sfx_palette`。风格包与原生 Motion Block 已内置零积分棚拍底纹（`ambient_mesh` / `architectural_grid` / `editorial_paper` / `kinetic_diagonal`），不要仅为了合成纯色或抽象背景而调用付费 `generate_image`。依据证据与叙事功能从 `creative_catalog` 选用最匹配的原生 Motion Block（13 种）与相邻全画幅不透明幕转场（5 种），避免连续多幕版式雷同；用幕内节拍点让画面随台词或音乐呼吸。若用户未定风格，可在备料后参考 `creative_catalog.style_presets` 与 `shot_combinations` 用 `ask_user` 给出 2–3 个具名方案。
 - **多轨声音层次**：底层 BGM 经选曲导入后上轨，配平滑淡入淡出并在人声下压低至 `−24 ~ −26 dB`（按需加 `duck_windows`）；中层转场与起势用长铺垫音效，表层交互与指标亮出用短促点缀音效（旁白下 `−14 ~ −10 dB`，静态段留白），结合 `peak_offset_ms` 精确对齐视觉击点。
 - **实帧实听自检**：对构图、遮字、DOM 框选落点或电平平衡拿不准，或完成多幕编排后，调用 `preview_range` / `review_video` 审看真实画面并核对 `audio_windows` 与 `masking_warnings`；`audio_available_to_model` 为 `false` 时绝不声称主观听感。
 

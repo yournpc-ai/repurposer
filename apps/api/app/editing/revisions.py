@@ -53,6 +53,7 @@ from app.editing.styles import (
     BackdropStyle,
     CompositionStyle,
     StylePresetId,
+    contrast_ratio,
     resolve_style_tokens,
 )
 from app.editing.text_presets import (
@@ -913,6 +914,7 @@ def set_composition_style_ops(
     blocks_preserved = 0
     captions_updated = 0
     independent_captions_preserved = 0
+    title_texts_contrast_adapted = 0
     transitions_updated = 0
 
     cap_token = tokens["caption_style"]
@@ -939,7 +941,21 @@ def set_composition_style_ops(
                     blocks_preserved += 1
             elif isinstance(obj, TextObject):
                 if obj.caption is None:
-                    # Non-caption native text is never altered by style caption refresh.
+                    # Preserve readable or surface-backed titles; adapt only unbacked low-contrast titles.
+                    if (
+                        obj.style.background is None
+                        and contrast_ratio(obj.style.color, tokens["canvas_bg"]) < 3.0
+                    ):
+                        adapted_color = (
+                            tokens["ink"]
+                            if (obj.style.weight >= 700 or obj.style.font_size >= 48)
+                            else tokens["secondary_ink"]
+                        )
+                        updated_text_style = obj.style.model_copy(update={"color": adapted_color})
+                        if updated_text_style != obj.style:
+                            updated_obj = obj.model_copy(update={"style": updated_text_style})
+                            ops.append(UpdateClip(op="update_clip", clip_id=clip.clip_id, object=updated_obj))
+                            title_texts_contrast_adapted += 1
                     continue
                 if obj.caption.state == "independent":
                     independent_captions_preserved += 1
@@ -974,6 +990,7 @@ def set_composition_style_ops(
         "blocks_preserved": blocks_preserved,
         "captions_updated": captions_updated,
         "independent_captions_preserved": independent_captions_preserved,
+        "title_texts_contrast_adapted": title_texts_contrast_adapted,
         "transitions_updated": transitions_updated,
     }
     return ops, summary
