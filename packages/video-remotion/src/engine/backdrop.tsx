@@ -15,7 +15,7 @@ export function StudioBackdrop({ theme, accent, style = "ambient_mesh", tSec, sc
   style?: BackdropStyle;
   tSec: number;
   scaleUnit: number;
-}) {
+}): React.JSX.Element {
   const dark = theme === "dark";
   const paper = style === "editorial_paper";
   const base = dark ? (paper ? "#161716" : "#0B1016") : (paper ? "#F5F2E9" : "#F4F6F8");

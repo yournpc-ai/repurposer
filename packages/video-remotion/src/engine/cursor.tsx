@@ -9,7 +9,7 @@ export interface CursorCue {
 
 export function VirtualCursor({ cue, tSec, scaleUnit, accent }: {
   cue: CursorCue; tSec: number; scaleUnit: number; accent: string;
-}) {
+}): React.JSX.Element | null {
   const travelSec = Math.min(0.85, cue.click_at_s);
   const start = cue.click_at_s - travelSec;
   if (tSec < start) return null;
