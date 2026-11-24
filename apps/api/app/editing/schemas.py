@@ -26,6 +26,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator, model_validator
 
+from app.editing.catalog import MotionBlockId
 from app.editing.fonts import FONT_ID, FONT_SET_DIGEST, LAYOUT_VERSION, SEGMENTATION_VERSION
 from app.editing.timing import DEFAULT_TIMEBASE
 
@@ -849,12 +850,172 @@ class ClosingCtaProps(BaseModel):
         return data
 
 
+ShortLabel = Annotated[str, Field(min_length=1, max_length=32)]
+BlockHeading = Annotated[str, Field(min_length=1, max_length=80)]
+BlockDetail = Annotated[str, Field(min_length=1, max_length=120)]
+
+
+class NarrativeFields(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True, strict=True)
+
+
+class NarrativeStyle(NarrativeFields):
+    theme: Literal["light", "dark"] = "dark"
+    backdrop_style: BackdropStyle = "ambient_mesh"
+    accent_color: Annotated[str, _HEX_COLOR] = "#20968B"
+    show_backdrop: bool = True
+
+
+class TitledNarrative(NarrativeStyle):
+    eyebrow: ShortLabel | None = None
+    title: BlockHeading | None = None
+
+
+class ChatMessage(NarrativeFields):
+    role: Literal["user", "assistant"]
+    text: BlockDetail
+    at_s: CueSecond | None = None
+
+
+class WorkStep(NarrativeFields):
+    label: BlockHeading
+    at_s: CueSecond | None = None
+
+
+class ChatResult(NarrativeFields):
+    title: BlockHeading
+    subtitle: BlockHeading | None = None
+    badge: ShortLabel | None = None
+
+
+class ChatDemoProps(NarrativeStyle):
+    title: BlockHeading | None = None
+    messages: list[ChatMessage] = Field(min_length=2, max_length=4)
+    work_steps: list[WorkStep] | None = Field(default=None, min_length=1, max_length=4)
+    result_card: ChatResult | None = None
+
+    @field_validator("messages")
+    @classmethod
+    def _conversation_order(cls, messages: list[ChatMessage]) -> list[ChatMessage]:
+        for index, message in enumerate(messages):
+            if message.role != ("user" if index % 2 == 0 else "assistant"):
+                raise ValueError("Chat turns must alternate starting with the user.")
+        return messages
+
+
+class DeviceMockupProps(NarrativeStyle):
+    eyebrow: ShortLabel | None = None
+    headline: BlockHeading | None = None
+    caption: BlockDetail | None = None
+    layout: Literal["dual", "desktop", "mobile"] = "dual"
+    reveal_at_s: CueSecond | None = None
+
+
+class TimedItem(NarrativeFields):
+    reveal_at_s: CueSecond | None = None
+
+
+class FlowNode(TimedItem):
+    step_label: ShortLabel | None = None
+    title: BlockHeading
+    detail: BlockDetail | None = None
+    badge: ShortLabel | None = None
+
+
+class FlowDiagramProps(TitledNarrative):
+    nodes: list[FlowNode] = Field(min_length=3, max_length=5)
+
+
+class CompareItem(TimedItem):
+    text: BlockDetail
+
+
+class SplitCompareProps(TitledNarrative):
+    left_heading: BlockHeading
+    left_items: list[CompareItem] = Field(min_length=2, max_length=4)
+    right_heading: BlockHeading
+    right_items: list[CompareItem] = Field(min_length=2, max_length=4)
+    dim_left: bool = True
+
+
+class TimelineStep(TimedItem):
+    number: ShortLabel | int | None = None
+    title: BlockHeading
+    detail: BlockDetail | None = None
+
+
+class StepTimelineProps(TitledNarrative):
+    steps: list[TimelineStep] = Field(min_length=3, max_length=4)
+    active_step: int | None = Field(default=None, ge=1)
+
+    @model_validator(mode="after")
+    def _valid_step(self):
+        if self.active_step is not None and self.active_step > len(self.steps):
+            raise ValueError("active_step exceeds the number of steps")
+        return self
+
+
+class FeatureCard(TimedItem):
+    tag: ShortLabel | None = None
+    title: BlockHeading
+    detail: BlockDetail
+
+
+class BentoFeaturesProps(TitledNarrative):
+    cards: list[FeatureCard] = Field(min_length=3, max_length=4)
+    highlight_index: int | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def _valid_highlight(self):
+        if self.highlight_index is not None and self.highlight_index >= len(self.cards):
+            raise ValueError("highlight_index exceeds the card index range")
+        return self
+
+
+class ChartPoint(TimedItem):
+    label: ShortLabel
+    value: float = Field(allow_inf_nan=False)
+    display_value: ShortLabel | None = None
+
+
+class DataChartProps(TitledNarrative):
+    title: BlockHeading
+    subtitle: BlockDetail | None = None
+    chart_type: Literal["bar", "line"]
+    unit: Annotated[str, Field(min_length=1, max_length=12)] | None = None
+    points: list[ChartPoint] = Field(min_length=3, max_length=8)
+    highlight_index: int | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def _valid_highlight(self):
+        if self.highlight_index is not None and self.highlight_index >= len(self.points):
+            raise ValueError("highlight_index exceeds the point index range")
+        return self
+
+
+class QuoteProofProps(NarrativeStyle):
+    quote: Annotated[str, Field(min_length=1, max_length=320)]
+    author: BlockHeading
+    role_or_source: BlockDetail | None = None
+    verification_badge: ShortLabel | None = None
+    highlight_phrase: BlockHeading | None = None
+    highlight_at_s: CueSecond | None = None
+
+
 MOTION_BLOCK_PROP_MODELS: dict[str, type[BaseModel]] = {
     "kinetic_title": KineticTitleProps,
     "product_showcase": ProductShowcaseProps,
     "statement_hook": StatementHookProps,
     "metric_grid": MetricGridProps,
     "closing_cta": ClosingCtaProps,
+    "chat_demo": ChatDemoProps,
+    "device_mockup": DeviceMockupProps,
+    "flow_diagram": FlowDiagramProps,
+    "split_compare": SplitCompareProps,
+    "step_timeline": StepTimelineProps,
+    "bento_features": BentoFeaturesProps,
+    "data_chart": DataChartProps,
+    "quote_proof": QuoteProofProps,
 }
 
 
@@ -869,7 +1030,7 @@ class MotionBlockObject(BaseModel):
 
     kind: Literal["motion_block"]
     object_id: str = _ID
-    block_id: Literal["kinetic_title", "product_showcase", "statement_hook", "metric_grid", "closing_cta"]
+    block_id: MotionBlockId
     block_version: Literal[1] = 1
     props: dict[str, JsonValue]
     resources: list[RemotionResource] = Field(default_factory=list, max_length=16)
@@ -886,6 +1047,10 @@ class MotionBlockObject(BaseModel):
         paths = [r.path for r in self.resources]
         if len(paths) != len(set(paths)):
             raise ValueError("motion_block resource paths must be unique")
+        if self.block_id == "device_mockup" and not 1 <= len(self.resources) <= 2:
+            raise ValueError("device_mockup requires one or two pinned image resources")
+        if self.block_id == "chat_demo" and len(self.resources) > 1:
+            raise ValueError("chat_demo accepts one result preview image")
         if self.block_id == "product_showcase" and not self.resources:
             raise ValueError("product_showcase requires at least one pinned image resource")
         return self

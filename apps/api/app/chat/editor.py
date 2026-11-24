@@ -153,7 +153,7 @@ class SetTransitionArgs(BaseModel):
 class InsertMotionBlockArgs(BaseModel):
     model_config = ConfigDict(extra="forbid")
     block_id: MotionBlockId = Field(
-        description="Native motion block id: statement_hook, product_showcase, metric_grid, closing_cta, or kinetic_title.",
+        description="Native motion block ID from the motion catalog.",
     )
     start_seconds: float = Field(ge=0, allow_inf_nan=False, description="Inclusive start time on timeline.")
     end_seconds: float = Field(gt=0, allow_inf_nan=False, description="Exclusive end time on timeline.")
@@ -163,7 +163,7 @@ class InsertMotionBlockArgs(BaseModel):
     ))
     resources: list[UUID] | None = Field(
         default=None, max_length=16,
-        description="Pinned image or captured webpage snapshot IDs (required for product_showcase; optional logo for closing_cta).",
+        description="Pinned image or captured webpage snapshot IDs (one or two ordered captures for device_mockup, required capture for product_showcase, optional chat result or CTA logo).",
     )
     view_id: str | None = Field(
         default=None, max_length=120,
@@ -359,8 +359,8 @@ EDITOR_TOOLS = (
     ),
     _editor_tool(
         "insert_motion_block",
-        "Insert a native declarative motion block (statement_hook, product_showcase, metric_grid, closing_cta, or transparent-ready kinetic_title) onto the timeline below captions. "
-        "Pass captured webpage or image snapshot IDs in resources for product_showcase (and optional logo for closing_cta).",
+        "Insert a native declarative motion block from the catalog onto the timeline below captions. "
+        "Pass captured webpage or image snapshot IDs in resources for product_showcase, device_mockup (primary then mobile), optional chat result or CTA logo.",
         InsertMotionBlockArgs, "insertMotionBlock",
     ),
     _editor_tool(

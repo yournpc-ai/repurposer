@@ -415,7 +415,7 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
                     "目标明确就编辑。多个素材符合描述且用户未指定全用时，写入前用 ask_user 让用户选定，以可辨特征或附件序号列出选项。分镜按需表达。"
                     "保留未要求改变的画面、字幕、动画和声音。依赖新增对象或素材时先读取上一步返回的标识。"
                     "专业 MG 画面优先使用 insert_motion_block，单实例修订用 update_motion_block。"
-                    "制作 25–45 秒多幕产品宣传片时，按专业工作室多幕节奏编排（通常 4–5 幕）：① 纯排版开场钩子 statement_hook（不压在网页截屏上，避免与首页 Hero 大标题复读）；② 2 幕不同真实网页视图的 product_showcase（配合 callout 局部聚焦框或轻量 kinetic_title(surface_style='pill_caption') 角标，不叠巨型复读标题卡）；③ 量化能力/指标卡 metric_grid；④ 品牌收尾卡 closing_cta（无 Logo 时用纯排版，有 Logo 时默认 logo_surface='light_pill'）。"
+                    "按证据选块：statement_hook 开场论点，product_showcase 展示网页局部，device_mockup 展示单双端截屏，chat_demo 演示真实问答。flow_diagram 讲机制，step_timeline 讲顺序，split_compare 对照方案，bento_features 陈列能力。metric_grid 呈现独立指标，data_chart 呈现同单位对比或趋势，quote_proof 呈现可归属引文。kinetic_title 做轻量角标，closing_cta 收尾。按旁白设置逐项节拍，避免复读截图中的标题。"
                     "相邻同轨全画幅不透明幕用 set_transition，按镜头选择 crossfade、whip_pan、wipe_reveal、zoom_through 或 iris_focus。"
                     "creative_catalog.shot_combinations 提供开箱即用的单镜方案；若用户未定风格或希望挑选方案，可在采集网页后用 ask_user 给出 2–3 个具名方案供点选。"
                     "配乐可用 search_music / show_music_candidates / select_music 选曲并经 prepare_video_materials(material_music_ids=…) 导入后 insert_audio（旁白下 BGM 压低至 −24 ~ −26 dB），并用 edit_audio_clip 设置平滑 fade_in_seconds / fade_out_seconds 与必要 duck_windows。"

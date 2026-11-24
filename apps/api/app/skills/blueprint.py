@@ -89,6 +89,14 @@ BLUEPRINT_CAPABILITY = "slot_blueprint_v1"
 
 # Props that carry brand/project-specific content (stripped during extraction).
 _CONTENT_PROP_KEYS: dict[str, set[str]] = {
+    "chat_demo": {"messages", "title", "work_steps", "result_card"},
+    "device_mockup": {"eyebrow", "headline", "caption"},
+    "flow_diagram": {"nodes", "eyebrow", "title"},
+    "split_compare": {"left_heading", "left_items", "right_heading", "right_items", "eyebrow", "title"},
+    "step_timeline": {"steps", "eyebrow", "title"},
+    "bento_features": {"cards", "eyebrow", "title"},
+    "data_chart": {"title", "points", "eyebrow", "subtitle", "unit"},
+    "quote_proof": {"quote", "author", "role_or_source", "verification_badge", "highlight_phrase"},
     "statement_hook": {"eyebrow", "headline", "highlight_phrase", "subheadline"},
     "kinetic_title": {"eyebrow", "headline", "subheadline"},
     "product_showcase": {"url_bar", "badge", "callout", "callout_steps", "cursor"},
@@ -96,12 +104,33 @@ _CONTENT_PROP_KEYS: dict[str, set[str]] = {
     "closing_cta": {"brand_name", "tagline", "cta_label", "url_text"},
 }
 
+_NARRATIVE_STYLE = {"theme", "backdrop_style", "accent_color", "show_backdrop"}
+
 _STYLE_PROP_KEYS: dict[str, set[str]] = {
+    "chat_demo": _NARRATIVE_STYLE,
+    "device_mockup": _NARRATIVE_STYLE | {"layout", "reveal_at_s"},
+    "flow_diagram": _NARRATIVE_STYLE,
+    "split_compare": _NARRATIVE_STYLE | {"dim_left"},
+    "step_timeline": _NARRATIVE_STYLE | {"active_step"},
+    "bento_features": _NARRATIVE_STYLE | {"highlight_index"},
+    "data_chart": _NARRATIVE_STYLE | {"highlight_index", "chart_type"},
+    "quote_proof": _NARRATIVE_STYLE | {"highlight_at_s"},
     "statement_hook": {"backdrop_style", "highlight_at_s", "theme", "layout_variant", "accent_color", "entrance_duration_s", "exit_duration_s", "show_backdrop"},
     "kinetic_title": {"align", "position", "entrance_duration_s", "exit_duration_s", "accent_color", "text_color", "surface_style"},
     "product_showcase": {"camera_preset", "backdrop_style", "scroll_from_y", "scroll_to_y", "theme", "chrome_mode", "camera_motion", "entrance_duration_s", "zoom_scale", "focus_x", "focus_y", "accent_color", "show_backdrop"},
     "metric_grid": {"backdrop_style", "columns", "theme", "accent_color", "stagger_s", "count_up", "show_backdrop"},
     "closing_cta": {"backdrop_style", "theme", "accent_color", "entrance_duration_s", "logo_surface", "show_backdrop"},
+}
+
+
+# Ordered pairs of (content slot, cue field); only the seconds cross projects.
+_ITEM_CUES = {
+    "chat_demo": (("messages", "at_s"), ("work_steps", "at_s")),
+    "flow_diagram": (("nodes", "reveal_at_s"),),
+    "split_compare": (("left_items", "reveal_at_s"), ("right_items", "reveal_at_s")),
+    "step_timeline": (("steps", "reveal_at_s"),),
+    "bento_features": (("cards", "reveal_at_s"),),
+    "data_chart": (("points", "reveal_at_s"),),
 }
 
 
@@ -142,6 +171,9 @@ class BlueprintAct(BaseModel):
     callout_windows_s: list[tuple[CueSecond, CueSecond]] = Field(default_factory=list, max_length=4)
     metric_reveals_s: list[CueSecond | None] = Field(default_factory=list, max_length=4)
 
+    item_reveals_s: list[CueSecond | None] = Field(default_factory=list, max_length=8, exclude_if=lambda x: not x)
+    secondary_reveals_s: list[CueSecond | None] = Field(default_factory=list, max_length=4, exclude_if=lambda x: not x)
+
     def bind_props(self, replacement: dict[str, Any]) -> dict:
         props = {**self.style_defaults, **replacement}
         if isinstance(props.get("cursor"), dict) and self.cursor_click_at_s is not None:
@@ -158,6 +190,15 @@ class BlueprintAct(BaseModel):
                 if isinstance(item, dict) and reveal is not None:
                     items[i] = {"reveal_at_s": reveal, **item}
             props["items"] = items
+        groups = _ITEM_CUES.get(self.block_id, ())
+        for (slot, key), times in zip(groups, (self.item_reveals_s, self.secondary_reveals_s)):
+            if not times or not isinstance(props.get(slot), list):
+                continue
+            items = list(props[slot])
+            for i, (item, time) in enumerate(zip(items, times)):
+                if time is not None and isinstance(item, dict):
+                    items[i] = {key: time, **item}
+            props[slot] = items
         return props
 
 
@@ -305,7 +346,7 @@ def _render_skill_md(name: str, description: str, bp: SkillBlueprintV1) -> str:
         "1. Gather fresh target materials (`capture_web` / `prepare_video_materials` for screenshots, `search_music` + `prepare_video_materials` for BGM if desired).",
         "2. Generate fresh per-act narration (`generate_voice`) in the user's requested language and angle.",
         "3. Call `instantiate_skill_blueprint` once with `skill_version_id` from `skill_reference.skill_version_id` and the ordered `acts` slot values (`act_id`, `props`, `resources`/`view_id`, `narration_snapshot_id`, optional `overlay_props`) plus optional `bgm_snapshot_id`. Replace ALL headlines, copy, metrics, URLs, and voiceovers with the new target brief.",
-        "For each visual cue in the blueprint, bind a fresh target from the chosen capture. Match callout steps and metric items in order to inherit their timing.",
+        "For each visual cue in the blueprint, bind a fresh target from the chosen capture. Match callout steps and timed list items in order to inherit their timing.",
         "4. The instantiated work is a normal editable `CompositionVersion` — preview and continue refining any individual act, audio clip, or transition in Chat.",
     ])
     return "\n".join(lines) + "\n"
@@ -395,11 +436,15 @@ def extract_skill_draft_from_composition(
         dur_s = e_s - s_s
         act_ranges_s.append((s_s, e_s))
 
+        cue_lists = [
+            [item.get(field) for item in (obj.props.get(slot) or [])]
+            for slot, field in _ITEM_CUES.get(obj.block_id, ())
+        ]
         allowed_style = _STYLE_PROP_KEYS.get(obj.block_id, set())
         style_defaults = {k: v for k, v in obj.props.items() if k in allowed_style}
         cat = MOTION_BLOCK_CATALOG[obj.block_id]
         content_keys = _CONTENT_PROP_KEYS.get(obj.block_id, set())
-        req_slots = list(cat["required_slots"])
+        req_slots = [k for k in cat["required_slots"] if k not in style_defaults]
         opt_slots = [k for k in cat["optional_slots"] if k in content_keys or k.endswith("_resource")]
 
         has_narr = any(
@@ -442,6 +487,8 @@ def extract_skill_draft_from_composition(
             optional_slots=opt_slots,
             callout_windows_s=[(s["start_s"], s["end_s"]) for s in obj.props.get("callout_steps", [])],
             cursor_click_at_s=(obj.props.get("cursor") or {}).get("click_at_s"),
+            item_reveals_s=cue_lists[0] if cue_lists else [],
+            secondary_reveals_s=cue_lists[1] if len(cue_lists) > 1 else [],
             metric_reveals_s=[item.get("reveal_at_s") for item in obj.props.get("items", [])],
             has_narration=has_narr,
             transition_after=trn_after,
@@ -673,10 +720,10 @@ class BlueprintActSlotInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     act_id: str | None = Field(default=None, max_length=64, description="Optional act_id matching blueprint order.")
-    props: dict[str, Any] = Field(description="Replacement content props. Bind callout, callout_steps and cursor to fresh captured element_ids. Step windows, click and metric reveal times inherit by position unless overridden.")
+    props: dict[str, Any] = Field(description="Replacement content props. Bind callout, callout_steps and cursor to fresh captured element_ids. Step windows, click and per-item reveal times inherit by position unless overridden.")
     resources: list[UUID] | None = Field(
         default=None, max_length=16,
-        description="Pinned image or captured webpage snapshot IDs (required for product_showcase acts).",
+        description="Pinned image or captured webpage snapshot IDs (product_showcase needs an image; device_mockup takes primary then optional mobile; chat_demo accepts a result preview).",
     )
     view_id: str | None = Field(
         default=None, max_length=120,

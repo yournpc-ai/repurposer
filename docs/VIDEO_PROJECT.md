@@ -300,6 +300,8 @@ Scene 只组织叙事范围，不限定为“文字幕/网页幕/视频幕”，
 
 1. **Layer 1 · 原生参数化 `MotionBlockObject`（Path β，现役主力）**：
    - 高频高完成度 MG（动态排版标题、产品 UI 展示卡、数据指标卡等）作为第一方审计组件进入共享 `@repurposer/video-remotion`，通过 `MotionBlockObject` 随 `CompositionVersion` 保存。
+   - 原生库含 13 块。标题、产品展示、独立指标与收尾沿用 `statement_hook`、`kinetic_title`、`product_showcase`、`metric_grid`、`closing_cta`。问答与双端截图用 `chat_demo`、`device_mockup`，机制、对照、步骤与能力分别用 `flow_diagram`、`split_compare`、`step_timeline`、`bento_features`，同单位数据与署名引文用 `data_chart`、`quote_proof`。
+   - Slot 蓝图保留样式、单幕切点后的秒数和分组内逐项节拍。换料按位置继承时间，新内容可显式覆盖。双端样机按主屏、手机顺序绑定新项目的 1–2 张固定截图。对话、数值、单位、引文及所有截图标识均由目标项目重新提供。
    - **统一二级分类 Catalog 元数据**（0 新 SQL 表，静态注册表承载）：每个 Block 声明 `domain`（`text` | `product` | `visuals`）、`category`（如 `titles_and_phrases`、`interfaces`、`charts_and_numbers`、`agents_and_flows`、`endings_and_cta`）、`name`、`desc`、`use_for`、`avoid`、`supports_alpha`、`suggested_duration_s`、`required_slots` / `optional_slots`。**这些发现与决策元数据绝不进入 `content_digest` 或缓存哈希**，优化文案不破坏历史缓存。
    - 外部 21st.dev Video Blocks 仅作设计范式、动效曲线与分类体系参考；实际引入外部组件源码须逐件核对商业授权与依赖合规，不得将第一方原创组件冒充已集成 21st 源码。
 2. **Layer 2 · 可再生产 `GeneratorObject`（`draw-2d` / `image-generation` / 未来 Linux 沙箱下的 `remotion-project`）**：

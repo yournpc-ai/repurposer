@@ -193,6 +193,14 @@ const motionBlockObjectSchema = z
       "statement_hook",
       "metric_grid",
       "closing_cta",
+      "chat_demo",
+      "device_mockup",
+      "flow_diagram",
+      "split_compare",
+      "step_timeline",
+      "bento_features",
+      "data_chart",
+      "quote_proof",
     ]),
     block_version: z.literal(1),
     props: z.record(z.string(), z.unknown()),
@@ -362,6 +370,10 @@ const clipSchema = z
   .superRefine((clip, ctx) => {
     if (clip.end_frame <= clip.start_frame) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: "end_frame must exceed start_frame" });
+    }
+    if (clip.object.kind === "motion_block" && clip.object.block_id === "device_mockup" &&
+        (clip.object.resources.length < 1 || clip.object.resources.length > 2)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "device_mockup requires one or two pinned images" });
     }
     const hasWindow = clip.source?.start_frame !== undefined || clip.source?.end_frame !== undefined;
     if (["audio", "video"].includes(clip.object.kind) && !hasWindow) {

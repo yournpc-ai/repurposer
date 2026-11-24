@@ -418,7 +418,8 @@ const VisualObjectView: React.FC<{
   fps: number;
   gain: number;
   cueOffsetFrames: number;
-}> = ({ clip, fonts, fps, gain, cueOffsetFrames }) => {
+  tailFrames: number;
+}> = ({ clip, fonts, fps, gain, cueOffsetFrames, tailFrames }) => {
   const frame = useCurrentFrame();
   const obj = clip.object;
   if (obj.kind === "audio") return null;
@@ -438,6 +439,7 @@ const VisualObjectView: React.FC<{
         fonts={fonts}
         fps={fps}
         frame={frame}
+        tailFrames={tailFrames}
         cueOffsetFrames={cueOffsetFrames}
         containerStyle={wholeObjectStyle(clip, frame)}
       />
@@ -490,6 +492,7 @@ export const Video: React.FC<{
 }> = ({ spec, onFontsReady, onFontsError }) => {
   const frame = useCurrentFrame();
   const cueOffsets = new Map((spec.transitions ?? []).map(t => [t.to_clip_id, t.cut_frame - t.start_frame]));
+  const tailFrames = new Map((spec.transitions ?? []).map(t => [t.from_clip_id, t.end_frame - t.cut_frame]));
   const transitionAt = (clipId: string) => {
     for (const transition of spec.transitions ?? []) {
       if (frame < transition.start_frame || frame >= transition.end_frame) continue;
@@ -525,6 +528,7 @@ export const Video: React.FC<{
                   clip={clip}
                   fonts={spec.fonts}
                   fps={spec.fps.num / spec.fps.den}
+                  tailFrames={tailFrames.get(clip.clip_id) ?? 0}
                   cueOffsetFrames={cueOffsets.get(clip.clip_id) ?? 0}
                   gain={gain}
                 />

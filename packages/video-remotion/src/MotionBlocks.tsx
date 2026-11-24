@@ -7,6 +7,16 @@ import { StudioBackdrop, studioInk, type BackdropStyle } from "./engine/backdrop
 import { evaluateCamera, type CameraPreset } from "./engine/camera";
 import { VirtualCursor, type CursorCue } from "./engine/cursor";
 
+import { ImageAdapter, type Frame } from "./blocks/Stage";
+import { ChatDemoBlock } from "./blocks/ChatDemoBlock";
+import { DeviceMockupBlock } from "./blocks/DeviceMockupBlock";
+import { FlowDiagramBlock } from "./blocks/FlowDiagramBlock";
+import { SplitCompareBlock } from "./blocks/SplitCompareBlock";
+import { StepTimelineBlock } from "./blocks/StepTimelineBlock";
+import { BentoFeaturesBlock } from "./blocks/BentoFeaturesBlock";
+import { DataChartBlock } from "./blocks/DataChartBlock";
+import { QuoteProofBlock } from "./blocks/QuoteProofBlock";
+
 function fontStack(fonts: VideoSpec["fonts"]): string {
   const pinned = Array.from(new Set(fonts.map((f) => JSON.stringify(f.family))));
   return [...pinned, '"Inter"', "-apple-system", "BlinkMacSystemFont", '"Segoe UI"', "sans-serif"].join(", ");
@@ -1513,15 +1523,48 @@ const ClosingCtaBlock: React.FC<{
   );
 };
 
+// The API validates each closed prop model before the JSON reaches video-spec.
+function narrative<P>(Block: React.ComponentType<{ props: P; frame: Frame }>) {
+  return (props: VideoMotionBlockObject["props"], frame: Frame) => <Block props={props as P} frame={frame} />;
+}
+
+const narratives = {
+  chat_demo: narrative(ChatDemoBlock),
+  device_mockup: narrative(DeviceMockupBlock),
+  flow_diagram: narrative(FlowDiagramBlock),
+  split_compare: narrative(SplitCompareBlock),
+  step_timeline: narrative(StepTimelineBlock),
+  bento_features: narrative(BentoFeaturesBlock),
+  data_chart: narrative(DataChartBlock),
+  quote_proof: narrative(QuoteProofBlock),
+} as const;
+
 export const MotionBlockView: React.FC<{
   clip: VideoClip & { object: VideoMotionBlockObject };
   fonts: VideoSpec["fonts"];
   fps: number;
   frame: number;
   cueOffsetFrames?: number;
+  tailFrames?: number;
   containerStyle: React.CSSProperties;
-}> = ({ clip, fonts, fps, cueOffsetFrames = 0, frame, containerStyle }) => {
+}> = ({ clip, fonts, fps, cueOffsetFrames = 0, tailFrames = 0, frame, containerStyle }) => {
   const id = clip.object.block_id;
+  if (id in narratives) {
+    const render = narratives[id as keyof typeof narratives];
+    const { layout, resources, props } = clip.object;
+    const timing: Frame = {
+      tSec: (frame - cueOffsetFrames) / fps,
+      durSec: (clip.end_frame - clip.start_frame - cueOffsetFrames - tailFrames) / fps,
+      scaleUnit: Math.min(layout.width / 1920, layout.height / 1080),
+      fontFamily: fontStack(fonts),
+      resources: resources.map((resource, i) => resolveResourceUrl(clip, clip.object, i) ?? resource.url),
+    };
+    return (
+      <div style={containerStyle}>
+        <ImageAdapter.Provider value={Img}>{render(props, timing)}</ImageAdapter.Provider>
+      </div>
+    );
+  }
   return (
     <div style={containerStyle}>
       {id === "product_showcase" ? (
