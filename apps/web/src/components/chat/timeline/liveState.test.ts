@@ -238,7 +238,7 @@ describe("selectChatLiveState", () => {
     expect(streaming.liveFocus).toBeNull()
   })
 
-  it("ignores focus frames inside activities when determining active tool state", () => {
+  it("ignores focus and steps frames inside activities when determining active tool state", () => {
     const fold = makeFold({ liveActivity: undefined, openTail: true })
     const state = selectChatLiveState(
       baseInput({
@@ -246,6 +246,17 @@ describe("selectChatLiveState", () => {
         conversationUnits: [fold],
         activities: [
           { activity_id: "__focus__", seq: 1, kind: "focus", status: "active", key: null, focus: "正在编排" },
+          {
+            activity_id: "__steps__",
+            seq: 2,
+            kind: "steps",
+            status: "active",
+            key: null,
+            steps: [
+              { title: "采集网页", status: "done" },
+              { title: "编排动效", status: "in_progress" },
+            ],
+          },
         ],
         currentActivityRowKeys: new Set(["act-1"]),
       }),

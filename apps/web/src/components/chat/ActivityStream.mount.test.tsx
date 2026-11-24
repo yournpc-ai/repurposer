@@ -309,3 +309,34 @@ it("displays liveFocus header while active and collapses cleanly to Worked on se
   expect(screen.getByRole("button").getAttribute("aria-expanded")).toBe("false")
   expect(screen.getByRole("button").textContent).toBe("chat.activityFold.worked 9s")
 })
+
+it("renders dynamic N/M steps progress ring and collapsible checklist for live and settled turns", () => {
+  const plan = [
+    { title: "采集网页与品牌资产", status: "done" as const },
+    { title: "编写分幕脚本与旁白", status: "done" as const },
+    { title: "编排 6 幕动效与字幕", status: "done" as const },
+    { title: "叠加多轨音效与转场", status: "in_progress" as const },
+    { title: "局部预览与视觉自检", status: "pending" as const },
+  ]
+  const view = render(
+    <WorkSegmentRow
+      liveLabel="正在叠加音效与转场"
+      trail={trail}
+      stepsPlan={plan}
+    />,
+  )
+  const header = screen.getByRole("button")
+  expect(header.getAttribute("aria-expanded")).toBe("true")
+  expect(header.textContent).toContain("chat.activityFold.stepsProgress")
+  expect(screen.getByText("采集网页与品牌资产")).toBeTruthy()
+  expect(screen.getByText("叠加多轨音效与转场")).toBeTruthy()
+
+  // Settle all 5 steps: header collapses with 5/5 badge, expanding reveals persisted checklist
+  const settledPlan = plan.map((s) => ({ ...s, status: "done" as const }))
+  view.rerender(<WorkSegmentRow elapsedMs={14000} trail={trail} stepsPlan={settledPlan} />)
+  expect(header.getAttribute("aria-expanded")).toBe("false")
+  expect(header.textContent).toContain("chat.activityFold.worked 14s")
+  expect(header.textContent).toContain("chat.activityFold.stepsProgress")
+  fireEvent.click(header)
+  expect(screen.getByText("局部预览与视觉自检")).toBeTruthy()
+})

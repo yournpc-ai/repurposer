@@ -17,6 +17,7 @@ import type {
   SfxImportReceipt,
   SfxSearchReceipt,
   SkillSavedReceipt,
+  StepPlanItem,
   ToolCallStatus,
   VideoReviewReceipt,
   VideoRevisionReceipt,
@@ -661,7 +662,7 @@ function trailStep(entry: WorkTrailEntry, live: boolean, t: TFunction, onOpen?: 
 }
 
 export function WorkSegmentRow({
-  trail = [], elapsedMs, startedAtMs, liveLabel, postToolThinking, failure, onOpen,
+  trail = [], elapsedMs, startedAtMs, liveLabel, postToolThinking, failure, onOpen, stepsPlan,
 }: {
   trail?: WorkTrailEntry[]
   elapsedMs?: number | null
@@ -670,6 +671,7 @@ export function WorkSegmentRow({
   postToolThinking?: { label: string; startedAtMs: number | null } | null
   failure?: ActivityRowFrame | null
   onOpen?: (id: string) => void
+  stepsPlan?: StepPlanItem[]
 }) {
   const { t } = useTranslation()
   const live = liveLabel != null
@@ -708,10 +710,18 @@ export function WorkSegmentRow({
   const [override, setOverride] = useState<{ live: boolean; open: boolean } | null>(null)
   if (override && override.live !== live) setOverride(null)
   const open = override?.live === live ? override.open : live
+  const doneStepsCount = stepsPlan?.filter((s) => s.status === "done").length ?? 0
+  const stepsProgressLabel =
+    stepsPlan && stepsPlan.length > 0
+      ? t("chat.activityFold.stepsProgress", { done: doneStepsCount, total: stepsPlan.length })
+      : undefined
   return (
     <div ref={rowRef}>
       <ThinkingState steps={steps} live={live} headerLabel={header} startedAtMs={startedAtMs}
         open={open}
+        stepsPlan={stepsPlan}
+        stepsProgressLabel={stepsProgressLabel}
+        stepsAriaLabel={t("chat.steps.ariaLabel")}
         onOpenChange={nextOpen => {
           anchor(rowRef.current)
           setOverride({ live, open: nextOpen })

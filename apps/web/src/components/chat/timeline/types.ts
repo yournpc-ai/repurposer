@@ -1,6 +1,19 @@
 import type { Output } from "@/lib/types"
 import type { CreditTopupRequest } from "@/lib/credits"
 import type { SkillReference } from "@/lib/skills"
+import type {
+  CompactSummary,
+  MessageFeedbackSummary,
+  StepPlanItem,
+  StepPlanStatus,
+} from "@/lib/workbench"
+
+export type {
+  CompactSummary,
+  MessageFeedbackSummary,
+  StepPlanItem,
+  StepPlanStatus,
+}
 
 /** Shared Chat timeline vocabulary. Pure types only: no React, transport, or
  * layout dependency. Persisted array order and `birthKey ?? id` remain the
@@ -49,11 +62,13 @@ export interface ActivityFramePayload {
   call_state?: string
   error?: string
   seq: number
-  kind: "read" | "draft" | "run" | "repair" | "focus"
+  kind: "read" | "draft" | "run" | "repair" | "focus" | "steps"
   status: "active" | "completed" | "failed" | "cancelled"
   key: string | null
   /** Live-only phase focus summary (never persisted as a detail row). */
   focus?: string
+  /** Live dynamic step checklist emitted by update_steps. */
+  steps?: StepPlanItem[]
   /** Deterministic user-safe semantic detail projected from validated tool args. */
   detail?: ActivitySemanticDetail
   /** 工作会话里程碑 (iter-2 ⑥, N-57): the whitelist's one extension — the
@@ -273,7 +288,7 @@ export interface NativeJobReceipt {
  * activity rows and normalized legacy rows share this single shape. Array
  * position IS the order, so live-channel `seq` bookkeeping is optional;
  * `name`/`total` ride the activity's interpolation fields. */
-export type ActivityRowFrame = Omit<ActivityFramePayload, "seq" | "kind" | "focus"> & {
+export type ActivityRowFrame = Omit<ActivityFramePayload, "seq" | "kind" | "focus" | "steps"> & {
   kind: "read" | "draft" | "run" | "repair"
   jobReceipt?: NativeJobReceipt
   seq?: number
@@ -470,6 +485,10 @@ export interface OverlayMessage {
   /** Server-stamped system notices and domain component references.
    * Absent/empty on every legacy row (读容忍). */
   blocks?: MessageBlock[]
+  /** Finalized step checklist persisted on assistant messages. */
+  steps?: StepPlanItem[]
+  /** Current user's good/bad feedback on an assistant reply. */
+  feedback?: MessageFeedbackSummary | null
 }
 
 /** The candidate card's data (C8-c): ordinal = the member's array index
@@ -537,6 +556,10 @@ export interface QuestionMessage {
   blocks?: MessageBlock[]
   /** Per-conversation transcript position; null only on legacy rows. */
   seq?: number | null
+  /** Persisted finalized step checklist on assistant replies. */
+  steps?: StepPlanItem[] | null
+  /** Current user's feedback on this assistant reply. */
+  feedback?: MessageFeedbackSummary | null
   created_at?: string
 }
 

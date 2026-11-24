@@ -103,7 +103,7 @@ export function selectChatLiveState(input: ChatLiveStateInput): ChatLiveState {
     proseActive &&
     messages.some((m) => m.streaming && m.content.trim().length > 0)
 
-  const activeActivity = activities.find((a) => a.status === "active" && a.kind !== "focus")
+  const activeActivity = activities.find((a) => a.status === "active" && a.kind !== "focus" && a.kind !== "steps")
   const trimmedFocus = rawLiveFocus?.trim() || null
   const liveFocus = chatBusy && !visibleProseTyping && trimmedFocus ? trimmedFocus : null
   const processingAssets = assets.filter(
@@ -117,6 +117,7 @@ export function selectChatLiveState(input: ChatLiveStateInput): ChatLiveState {
       chatBusy &&
       activeActivity &&
       activeActivity.kind !== "focus" &&
+      activeActivity.kind !== "steps" &&
       !(activeActivity.kind === "draft" && DRAFT_OVERRIDE_PHASES.has(thinkingPhase ?? ""))
     ) {
       return activeActivity as NowRowPayload

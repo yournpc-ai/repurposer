@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from "react"
+import { PanelRightOpen } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { Button } from "@/components/ui/button-clean"
+import { useOptionalWorkbench } from "@/components/workbench/WorkbenchContext"
 import { apiFetch } from "@/lib/api"
 import type { VideoStoryboardBlock, VideoScrubTarget } from "../timeline/types"
 import { presentationAckReady } from "../timeline/reveal"
@@ -38,6 +40,7 @@ export function StoryboardCard({
   onReady?: (ready: boolean) => void
 }) {
   const { t } = useTranslation()
+  const workbench = useOptionalWorkbench()
   const [activeVersionId, setActiveVersionId] = useState(block.composition_version_id)
   const [read, setRead] = useState<VideoVersionRead | null>(null)
   const [failed, setFailed] = useState(false)
@@ -184,6 +187,22 @@ export function StoryboardCard({
             {t("chat.videoStoryboard.scrub.openCurrent")}
           </Button>
         )}
+      {workbench && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="mt-1.5 w-fit"
+          icon={<PanelRightOpen className="size-3.5" />}
+          onClick={() =>
+            workbench.openWorkbench({
+              tab: "player",
+              versionId: read.composition_version_id,
+            })
+          }
+        >
+          {t("workbench.openInWorkbench")}
+        </Button>
+      )}
       {SHOW_TEXT_SIZE_SCRUB && (
         <TextSizeScrubInput
           read={read}

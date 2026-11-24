@@ -65,6 +65,14 @@ import { Card, CardHeader } from "@/components/ui/card-clean"
 import { IconButton } from "@/components/ui/icon-button-clean"
 import { Spinner } from "@/components/ui/spinner-clean"
 import { ChatOutputViewer } from "@/components/chat/ChatOutputViewer"
+import { AsyncJobStrip } from "@/components/workbench/AsyncJobStrip"
+import { useOptionalWorkbench } from "@/components/workbench/WorkbenchContext"
+import {
+  notifyConversationsChanged,
+  type CompactSummary,
+  type MessageFeedbackSummary,
+  type StepPlanItem,
+} from "@/lib/workbench"
 import { createSpeechSegments, isSpeechSegmentRow } from "./timeline/speech"
 import { ComposerIconButton } from "@/components/composer/ComposerIconButton"
 import { ComposerSendButton } from "@/components/composer/ComposerSendButton"
@@ -288,6 +296,7 @@ export function dockWorthyQuestion(q: QuestionMessage | null): QuestionMessage |
 
 interface AgentThreadProps {
   projectId: string
+  conversationId?: string
   prompt: string
   /** The composer's draft, handed over via router state: sent as the first
    * /chat message on mount (mentions + persona choice ride along). Null on
@@ -297,17 +306,32 @@ interface AgentThreadProps {
    * router handoff so a refresh cannot auto-send the restored draft again. */
   onFirstMessageRetracted?: () => void
   onProjectChanged: () => void | Promise<void>
-
+  onConversationResolved?: (conversationId: string) => void
+  externalCompactSummary?: CompactSummary | null
 }
 
 export function AgentThread({
   projectId,
+  conversationId,
   firstMessage,
   onFirstMessageRetracted,
   onProjectChanged,
+  onConversationResolved,
+  externalCompactSummary = null,
 }: AgentThreadProps) {
   const { openCreditTopup } = useSettingsDialog()
   const { t } = useTranslation()
+  const workbench = useOptionalWorkbench()
+  const [resolvedConversationId, setResolvedConversationId] = useState<string | null>(
+    conversationId ?? null,
+  )
+  const [compactSummary, setCompactSummary] = useState<CompactSummary | null>(null)
+  const [liveSteps, setLiveSteps] = useState<StepPlanItem[] | null>(null)
+  const conversationResolvedRef = useRef(onConversationResolved)
+  conversationResolvedRef.current = onConversationResolved
+  const conversationQuery = conversationId
+    ? `project_id=${projectId}&conversation_id=${encodeURIComponent(conversationId)}`
+    : `project_id=${projectId}`
   const [pendingQuestion, setPendingQuestion] = useState<QuestionMessage | null>(null)
   const [questionGroupDrafts, setQuestionGroupDrafts] = useState<Record<string, BriefAnswerItem[]>>({})
   const groupDraftsHydrationRef = useRef({ projectId: "", skipSave: true })
@@ -416,6 +440,10 @@ export function AgentThread({
       setLiveFocus(frame.focus?.trim() || null)
       return
     }
+    if (frame.kind === "steps") {
+      setLiveSteps(Array.isArray(frame.steps) && frame.steps.length > 0 ? frame.steps : null)
+      return
+    }
     setActivities((prev) => upsertActivityFrame(prev, frame))
   }, [])
 
@@ -462,6 +490,7 @@ export function AgentThread({
   const settleActivities = useCallback(
     (status: "completed" | "failed" | "cancelled") => {
       setLiveFocus(null)
+      setLiveSteps(null)
       setActivities((prev) => sweepActivities(prev, status))
       setMessages((prev) =>
         prev.map((m) =>
@@ -710,16 +739,20 @@ export function AgentThread({
   // the phase (task_book while confirming, question once the chat loop asks).
   const fetchPendingQuestion = useCallback(async (): Promise<QuestionMessage | null> => {
     try {
-      const res = await apiFetch(`/api/v1/chat/conversation?project_id=${projectId}`, {
+      const res = await apiFetch(`/api/v1/chat/conversation?${conversationQuery}`, {
         toast: false,
       })
       if (!res.ok) return null
-      const data = (await res.json()) as { pending_question?: QuestionMessage | null }
+      const data = (await res.json()) as { id?: string; pending_question?: QuestionMessage | null }
+      if (data.id) {
+        setResolvedConversationId(data.id)
+        conversationResolvedRef.current?.(data.id)
+      }
       return data.pending_question ?? null
     } catch {
       return null
     }
-  }, [projectId])
+  }, [conversationQuery])
 
   /** One server-born speech path for trigger arrival and disconnect recovery.
    * The first actually released non-whitespace fragment marks the message
@@ -840,7 +873,7 @@ export function AgentThread({
     let watchingMedia = false
     const load = async () => {
       try {
-        const convRes = await apiFetch(`/api/v1/chat/conversation?project_id=${projectId}`, {
+        const convRes = await apiFetch(`/api/v1/chat/conversation?${conversationQuery}`, {
           toast: false,
         })
         if (convRes.status === 404) {
@@ -850,15 +883,22 @@ export function AgentThread({
         if (!convRes.ok) throw new Error("Conversation unavailable")
         const conv = (await convRes.json()) as { id?: string }
         if (!conv.id) throw new Error("Conversation unavailable")
+        if (!cancelled) {
+          setResolvedConversationId(conv.id)
+          conversationResolvedRef.current?.(conv.id)
+        }
         const res = await apiFetch(`/api/v1/chat/conversations/${conv.id}/messages`, {
           toast: false,
         })
         if (!res.ok) throw new Error("History unavailable")
-        const data = (await res.json()) as { items?: HistoryRow[] }
+        const data = (await res.json()) as { items?: HistoryRow[]; compact_summary?: CompactSummary | null }
         // The row→flow mapping is the extracted PURE seam (timeline/history.ts,
         // Phase 3 Batch A) — same branches, zero lifecycle derivation: a
         // refresh reads the archive, readiness comes from the stamp alone.
         if (!Array.isArray(data.items)) throw new Error("Invalid history")
+        if (!cancelled) {
+          setCompactSummary(data.compact_summary ?? null)
+        }
         const rows = data.items
         if (!cancelled) setOpeningHistory(rows.some((row) => row.role === "user") ? "occupied" : "empty")
         const active = new Set(rows.filter((r) => r.turn_state === "in_flight").map((r) => r.id))
@@ -903,7 +943,7 @@ export function AgentThread({
       clearTimeout(timer)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId, historyAttempt])
+  }, [projectId, conversationQuery, historyAttempt])
 
   const messagesRef = useRef<OverlayMessage[]>(messages)
   // Stop reads the latest committed render synchronously; an effect-deferred
@@ -958,7 +998,7 @@ export function AgentThread({
           })[]
           try {
             const convRes = await apiFetch(
-              `/api/v1/chat/conversation?project_id=${projectId}`,
+              `/api/v1/chat/conversation?${conversationQuery}`,
               { toast: false },
             )
             if (!convRes.ok) continue
@@ -1178,6 +1218,30 @@ export function AgentThread({
     setViewerOutputId(null)
     requestAnimationFrame(() => editorRef.current?.focus())
   }, [t])
+
+  // Register composer mention injection with the right-hand Studio Workbench so
+  // Inspector region selections flow directly into this conversation's composer.
+  useEffect(() => {
+    if (!workbench) return
+    workbench.registerMentionHandler((mention) => {
+      editorRef.current?.insertMention(mention)
+      requestAnimationFrame(() => editorRef.current?.focus())
+    })
+    return () => workbench.registerMentionHandler(null)
+  }, [workbench])
+
+  const handleFeedbackChange = useCallback(
+    (messageId: string, next: MessageFeedbackSummary | null) => {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.serverMessageId === messageId || m.id === messageId
+            ? { ...m, feedback: next }
+            : m,
+        ),
+      )
+    },
+    [],
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -1788,13 +1852,18 @@ export function AgentThread({
       setMessages((prev) => stampMessagePresentation(prev, streamId, message))
     }
     try {
+      setLiveSteps(null)
       const data = await streamChat<{
+        conversation_id?: string
         user_message: QuestionMessage
         assistant_message: QuestionMessage | null
         answered_question?: QuestionMessage | null
       }>(
         {
           project_id: projectId,
+          ...(resolvedConversationId ?? conversationId
+            ? { conversation_id: (resolvedConversationId ?? conversationId)! }
+            : {}),
           message: text,
           first_message: opts?.firstMessage,
           mentions: opts?.mentions ?? [],
@@ -1941,6 +2010,12 @@ export function AgentThread({
       // reachable in ANY project, not just an empty one) — always refresh
       // the prompt attachments after a turn.
       void fetchAssets()
+      void workbench?.refresh()
+      if (data.conversation_id) {
+        setResolvedConversationId(data.conversation_id)
+        conversationResolvedRef.current?.(data.conversation_id)
+      }
+      notifyConversationsChanged(projectId)
       // This very text settled a pending question server-side — the
       // deterministic autoResume option hit, or the judged settlement
       // (插话支持 ADR-053 R2: the slot handshake / pending_disposition) —
@@ -2891,6 +2966,9 @@ export function AgentThread({
       liveWorkFoldKey={liveWorkFoldKey}
       liveMode={liveState.mode}
       liveFocus={liveState.liveFocus}
+      liveSteps={liveSteps}
+      compactSummary={externalCompactSummary ?? compactSummary}
+      onFeedbackChange={handleFeedbackChange}
       postToolThinkingStartedAtMs={liveState.postToolThinkingStartedAtMs}
       nowRow={nowRow}
       bottomNowRow={bottomNowRow}
@@ -3054,6 +3132,7 @@ export function AgentThread({
       </div>
       <div className={cn("mx-auto w-full shrink-0 px-4 pb-4 pt-2", pillDock ? "max-w-3xl" : "max-w-2xl")}>
           {pillDock && <div className="mb-2 max-h-[55dvh] overflow-y-auto">{pillDock}</div>}
+          <AsyncJobStrip />
           <Card
             className={cn("relative w-full", fileDragging && "outline-2 outline-dashed outline-ring")}
             style={pillDock ? { display: "none" } : undefined}

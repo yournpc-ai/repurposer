@@ -39,6 +39,10 @@
   - **会话上下文压缩（`POST /api/v1/chat/conversations/{conversation_id}/compact`）**：汇总当前会话已结算消息与关键决策写入 `Conversation.context["compact_summary"]`（含 `compacted_through_seq`）；装配送模历史时跳过已压缩旧消息并将摘要注入本轮上下文，历史消息查询接口仍返回完整可读记录与 `compact_summary` 元数据。
   - **回复质量评估快照（`message_feedback` + `POST /api/v1/chat/messages/{message_id}/feedback`）**：回合结算时在助手 `Message.intent["eval_meta"]` 写入轻量 Prompt/模型/版本指纹（对外 API 序列化不可见）；用户点选 `good`/`bad` 反馈时幂等落库 `message_feedback` 并冻结完整 `context_snapshot`（用户开场输入、助手回复与步骤、Prompt 指纹与上下文摘录、工具活动与拒绝取证、作品版本引用及压缩摘要），点取消则删除反馈行。
   - **项目工作台与异步任务投影（`GET /api/v1/projects/{project_id}/workbench`）**：单次 owner 校验请求聚合项目基础信息、全部 `Composition` 及其有序版本、可见 `Output`、项目 `Asset`、活跃后台任务（排队/运行中的 `ExportJob`、`MediaJob` 及处理中 `Asset`）与用户已保存的 `slot_blueprint_v1` 技能摘要。
+- **Studio Workbench 分栏交互与对话流体验（`apps/web/src/components/workbench/`、`ProjectConversationsTree.tsx`、`TurnMinimap.tsx`、`MessageActionBar.tsx`）**：
+  - **左侧 `Project → 多 Conversation` 树**：`/projects/$id` 路由支持可选查询参数 `?c=<conversationId>`，侧栏展开项目对话列表（含活跃后台任务脉冲点、消息计数与相对时间）、新建对话、重命名与上下文压缩；切换会话仅更新左侧 `AgentThread`，右侧 `WorkbenchPane` 持续与同一 `Project` 保持资产与版本同步；会话已压缩时在 `compacted_through_seq` 位置展示温和分割提示而不隐藏可读历史。
+  - **右侧可折叠/可拖拽多 Tab 产物看板（`WorkbenchPane`）**：基于 `motion/react` 平滑滑入滑出并记住拖拽宽度，内含「草稿预览（版本切换与懒加载 `@remotion/player` / 成片 MP4）」「帧与素材（直接挂载 `MediaRegionSelectionOverlay` 拖框选区并一键引用回左侧输入框）」「槽位宣传片（复用 `SlotPreviewContent`）」三组原生标签页；`AssistantText` 拦截 Markdown 内部产物链接（`#workbench:version|output|asset|skill/<id>`）渲染为行内芯片，点击直达对应 Tab，`StoryboardCard` 与 `OutputDeliveryCard` 同步提供右侧打开入口。
+  - **对话流进度与反馈原语**：`ThinkingState` 在顶栏展示进度环与 `done/total steps` 徽章并在展开体顶部渲染动态步骤清单（覆盖实时 SSE `kind="steps"` 与历史 `steps` 回放）；`AsyncJobStrip` 仅在存在活跃后台任务时按 3 秒轻刷并在输入框上方无框提示且不阻断输入；`TurnMinimap` 在桌面端用户轮次 ≥ 3 时提供左侧圆点定位与版本预览；`MessageActionBar` 在每条已结算助手回复底部提供复制、乐观更新 👍/👎 反馈（点 👎 弹出非阻塞标签/原因浮层）与自动刷新的相对时间。
 - 费用批准、Stop、租约与原 opening 的续行仲裁由服务端执行。后台 Worker 分别认领素材、旁白对齐、MediaJob、ExportJob、社交发布及支付告警，并清理暂存对象。Publication 记录外部发帖是否已提交；无法核实的结果需要保留凭据。
 
 模型边界位于 `app/providers/llm`。工具的原生名称、参数 Schema、项目事实与消息回放在模型请求时装配。可复核的实测样本见[原生模型请求](tasks/agent-editor-evidence/iteration-6/6d-native-journey.json)。编辑器产品合同、专业剪辑扩展与阶段验收见[主合同](tasks/new-agent.md)。

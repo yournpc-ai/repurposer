@@ -1,10 +1,11 @@
-import { Link } from "@tanstack/react-router"
+import { Link, useMatch } from "@tanstack/react-router"
 import { FolderKanban, Home, PanelLeft, User } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { AccountConsole } from "@/components/account-console"
 import { LogoMark } from "@/components/LogoMark"
+import { ProjectConversationsTree } from "@/components/project/ProjectConversationsTree"
 import { Avatar } from "@/components/ui/avatar-clean"
 import { Dialog } from "@/components/ui/dialog-clean"
 import { IconButton } from "@/components/ui/icon-button-clean"
@@ -59,6 +60,9 @@ export function AccountMenu({ expanded = false }: { expanded?: boolean }) {
 export function AppSidebar({ defaultOpen }: { defaultOpen: boolean }) {
   const { t } = useTranslation()
   const mobile = useIsMobile()
+  const projectMatch = useMatch({ from: "/_app/projects/$id", shouldThrow: false })
+  const activeProjectId = projectMatch?.params.id
+  const activeConversationId = (projectMatch?.search as { c?: string } | undefined)?.c
   const [expanded, setExpanded] = useState(defaultOpen)
   const [mobileOpen, setMobileOpen] = useState(false)
   function toggle() {
@@ -110,6 +114,13 @@ export function AppSidebar({ defaultOpen }: { defaultOpen: boolean }) {
         closeLabel={t("common.close")}
       >
         {nav}
+        {activeProjectId ? (
+          <ProjectConversationsTree
+            projectId={activeProjectId}
+            activeConversationId={activeConversationId}
+            onNavigate={() => setMobileOpen(false)}
+          />
+        ) : null}
         <AccountMenu expanded />
       </Dialog>
     )
@@ -129,8 +140,14 @@ export function AppSidebar({ defaultOpen }: { defaultOpen: boolean }) {
         />
       </div>
       {nav}
+      {expanded && activeProjectId ? (
+        <ProjectConversationsTree
+          projectId={activeProjectId}
+          activeConversationId={activeConversationId}
+        />
+      ) : null}
       <div className="mt-auto">
-        <AccountMenu expanded />
+        <AccountMenu expanded={expanded} />
       </div>
     </aside>
   )

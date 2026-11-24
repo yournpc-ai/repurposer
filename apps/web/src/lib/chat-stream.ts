@@ -50,6 +50,7 @@ import type {
 export interface ChatTurnBody {
   first_message?: boolean
   project_id: string
+  conversation_id?: string
   message: string
   mentions?: ChatMention[]
   skill?: SkillReference

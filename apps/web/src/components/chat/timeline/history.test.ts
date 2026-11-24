@@ -706,4 +706,41 @@ describe("question groups", () => {
     })
     expect(messages[1].activity?.detail).toBeUndefined()
   })
+
+  it("replays persisted steps and feedback on settled assistant messages", () => {
+    const messages = mapHistoryRows([
+      row({
+        id: "u1",
+        role: "user",
+        content: "做一个 60 秒产品宣传片",
+      }),
+      row({
+        id: "a1",
+        role: "assistant",
+        content: "已生成首版草稿。",
+        steps: [
+          { title: "分析官网与素材", status: "done" },
+          { title: "编排 6 幕动效", status: "done" },
+        ],
+        feedback: {
+          rating: "bad",
+          tags: ["pacing"],
+          reason: "开场稍慢",
+          updated_at: "2026-11-24T12:00:00Z",
+        },
+      }),
+    ], ctx)
+
+    expect(messages).toHaveLength(2)
+    expect(messages[1].steps).toEqual([
+      { title: "分析官网与素材", status: "done" },
+      { title: "编排 6 幕动效", status: "done" },
+    ])
+    expect(messages[1].feedback).toEqual({
+      rating: "bad",
+      tags: ["pacing"],
+      reason: "开场稍慢",
+      updated_at: "2026-11-24T12:00:00Z",
+    })
+  })
 })

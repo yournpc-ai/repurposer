@@ -2,7 +2,9 @@
 "use client";
 
 import { useId, useState, type ReactNode } from "react";
+import { motion, useReducedMotion } from "motion/react";
 import { formatElapsed, useNow } from "@/components/chat/workTiming";
+import type { StepPlanItem } from "@/lib/workbench";
 
 /*
  * Thinking State (Clean) – the "working…" panel of an AI chat, in a single self-contained file.
@@ -32,17 +34,34 @@ export interface ThinkingStateProps {
   open?: boolean;
   defaultOpen?: boolean;
   onOpenChange?: (open: boolean) => void;
+  /** Optional dynamic task checklist from update_steps. */
+  stepsPlan?: StepPlanItem[];
+  /** Localized count label beside the progress ring, e.g. "3/5 steps". */
+  stepsProgressLabel?: string;
+  /** Accessible label for the checklist list. */
+  stepsAriaLabel?: string;
 }
 
 export function ThinkingState({
   steps, live, headerLabel, startedAtMs, open: controlledOpen, defaultOpen = false, onOpenChange,
+  stepsPlan, stepsProgressLabel, stepsAriaLabel,
 }: ThinkingStateProps) {
   const bodyId = useId();
+  const prefersReducedMotion = useReducedMotion();
   const [override, setOverride] = useState({ live, open: defaultOpen });
   if (override.live !== live) setOverride({ live, open: false });
   const open = controlledOpen ?? (override.live === live && override.open);
-  const expandable = steps.length > 0;
+  const hasPlan = Boolean(stepsPlan && stepsPlan.length > 0);
+  const expandable = steps.length > 0 || hasPlan;
   const Header = expandable ? "button" : "div";
+  const planTotal = stepsPlan?.length ?? 0;
+  const planDone = stepsPlan ? stepsPlan.filter((item) => item.status === "done").length : 0;
+  const planHasFailed = stepsPlan ? stepsPlan.some((item) => item.status === "failed") : false;
+  const planRatio = planTotal > 0 ? Math.min(1, Math.max(0, planDone / planTotal)) : 0;
+  const ringRadius = 5;
+  const ringCircumference = 2 * Math.PI * ringRadius;
+  const ringOffset = ringCircumference * (1 - planRatio);
+  const planTone = planHasFailed ? "error" : planDone === planTotal && planTotal > 0 ? "done" : "active";
   return (
     <div className="ui-thinkc" data-done={!live || undefined}>
       {/* React 19 hoists this into <head> once, no matter how many panels render */}
@@ -74,11 +93,73 @@ export function ThinkingState({
             <path d="M4.5 6.25 8 9.75l3.5-3.5" />
           </svg>
         </span>}
+        {hasPlan && (
+          <span className="ui-thinkc__steps-badge" data-tone={planTone}>
+            <svg viewBox="0 0 14 14" className="ui-thinkc__ring" aria-hidden="true">
+              <circle cx="7" cy="7" r={ringRadius} className="ui-thinkc__ring-track" />
+              <circle
+                cx="7"
+                cy="7"
+                r={ringRadius}
+                className="ui-thinkc__ring-arc"
+                strokeDasharray={ringCircumference}
+                strokeDashoffset={ringOffset}
+              />
+            </svg>
+            <span className="ui-thinkc__steps-count">
+              {stepsProgressLabel ?? `${planDone}/${planTotal} steps`}
+            </span>
+          </span>
+        )}
       </Header>
 
       {/* Only the steps fold away – the header row always stays in view */}
       <div className="ui-thinkc__body" id={bodyId} data-open={open} inert={!open} aria-hidden={!open}>
         <div className="ui-thinkc__clip">
+          {hasPlan && stepsPlan && (
+            <ul
+              className="ui-thinkc__plan"
+              data-has-trail={steps.length > 0 || undefined}
+              aria-label={stepsAriaLabel}
+            >
+              {stepsPlan.map((planItem, idx) => (
+                <motion.li
+                  key={`${idx}:${planItem.title}`}
+                  layout={prefersReducedMotion ? false : "position"}
+                  initial={prefersReducedMotion ? false : { opacity: 0, y: 3 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+                  className="ui-thinkc__plan-item"
+                  data-status={planItem.status}
+                >
+                  <span className="ui-thinkc__plan-icon" aria-hidden="true">
+                    {planItem.status === "done" ? (
+                      <svg viewBox="0 0 16 16" className="ui-thinkc__plan-check">
+                        <circle cx="8" cy="8" r="6.5" />
+                        <path d="M5.25 8.1 7.1 10l3.7-3.8" />
+                      </svg>
+                    ) : planItem.status === "in_progress" ? (
+                      <span className="ui-thinkc__plan-pulse" />
+                    ) : planItem.status === "failed" ? (
+                      <svg viewBox="0 0 16 16" className="ui-thinkc__plan-fail">
+                        <circle cx="8" cy="8" r="6.5" />
+                        <path d="M8 5v3.5M8 10.9v.2" />
+                      </svg>
+                    ) : planItem.status === "skipped" ? (
+                      <svg viewBox="0 0 16 16" className="ui-thinkc__plan-skip">
+                        <circle cx="8" cy="8" r="6.5" />
+                        <path d="M5.5 8h5" />
+                      </svg>
+                    ) : (
+                      <span className="ui-thinkc__plan-pending" />
+                    )}
+                  </span>
+                  <span className="ui-thinkc__plan-title" dir="auto">{planItem.title}</span>
+                </motion.li>
+              ))}
+            </ul>
+          )}
+          {steps.length > 0 && (
           <ol className="ui-thinkc__list" aria-live="polite">
             {steps.map((step) => {
               const isActive = live && step.status === "running";
@@ -121,6 +202,7 @@ export function ThinkingState({
               );
             })}
           </ol>
+          )}
         </div>
       </div>
     </div>
@@ -261,6 +343,154 @@ const css = /* css */ `
 }
 .ui-thinkc__head[aria-expanded="true"] .ui-thinkc__chevron svg {
   transform: none;
+}
+
+/* Inline progress ring + N/M steps pill beside the chevron */
+.ui-thinkc__steps-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 20px;
+  padding: 0 7px 0 5px;
+  border-radius: 999px;
+  background: var(--ui-tkc-wash);
+  box-shadow: inset 0 0 0 0.5px var(--ui-tkc-line);
+  font-size: 11.5px;
+  line-height: 16px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--ui-tkc-text);
+  white-space: nowrap;
+}
+.ui-thinkc__ring {
+  width: 13px;
+  height: 13px;
+  transform: rotate(-90deg);
+}
+.ui-thinkc__ring-track {
+  fill: none;
+  stroke: currentColor;
+  stroke-opacity: 0.2;
+  stroke-width: 1.75;
+}
+.ui-thinkc__ring-arc {
+  fill: none;
+  stroke: var(--ui-tkc-accent);
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 280ms var(--ui-tkc-ease), stroke 200ms ease;
+}
+.ui-thinkc__steps-badge[data-tone="done"] .ui-thinkc__ring-arc {
+  stroke: #16a34a;
+}
+.ui-thinkc__steps-badge[data-tone="error"] .ui-thinkc__ring-arc {
+  stroke: var(--aui-danger, #dc2626);
+}
+.ui-thinkc__steps-count {
+  color: var(--ui-tkc-text);
+}
+
+/* Dynamic progress checklist inside the collapsible body */
+.ui-thinkc__plan {
+  margin: 0;
+  padding: 6px 0 8px;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ui-thinkc__plan[data-has-trail] {
+  margin-bottom: 4px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--ui-tkc-line);
+}
+.ui-thinkc__plan-item {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+  line-height: 18px;
+  color: var(--ui-tkc-text);
+}
+.ui-thinkc__plan-icon {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+}
+.ui-thinkc__plan-check {
+  width: 14px;
+  height: 14px;
+}
+.ui-thinkc__plan-check circle {
+  fill: rgba(22, 163, 74, 0.14);
+  stroke: #16a34a;
+  stroke-width: 1.25;
+}
+.ui-thinkc__plan-check path {
+  fill: none;
+  stroke: #16a34a;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.ui-thinkc__plan-pulse {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--ui-tkc-accent);
+  box-shadow: 0 0 0 3px rgba(79, 176, 254, 0.22);
+  animation: ui-thinkc-pulse 1.1s ease-in-out infinite;
+}
+.ui-thinkc__plan-pending {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  border: 1.4px solid var(--ui-tkc-faint);
+}
+.ui-thinkc__plan-fail {
+  width: 14px;
+  height: 14px;
+}
+.ui-thinkc__plan-fail circle {
+  fill: rgba(220, 38, 38, 0.12);
+  stroke: var(--aui-danger, #dc2626);
+  stroke-width: 1.25;
+}
+.ui-thinkc__plan-fail path {
+  fill: none;
+  stroke: var(--aui-danger, #dc2626);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+}
+.ui-thinkc__plan-skip {
+  width: 14px;
+  height: 14px;
+}
+.ui-thinkc__plan-skip circle,
+.ui-thinkc__plan-skip path {
+  fill: none;
+  stroke: var(--ui-tkc-faint);
+  stroke-width: 1.25;
+  stroke-linecap: round;
+}
+.ui-thinkc__plan-item[data-status="in_progress"] .ui-thinkc__plan-title {
+  color: var(--ui-tkc-ink);
+  font-weight: 500;
+}
+.ui-thinkc__plan-item[data-status="done"] .ui-thinkc__plan-title {
+  color: var(--ui-tkc-text);
+}
+.ui-thinkc__plan-item[data-status="pending"] .ui-thinkc__plan-title {
+  color: var(--ui-tkc-muted);
+}
+.ui-thinkc__plan-item[data-status="skipped"] .ui-thinkc__plan-title {
+  color: var(--ui-tkc-muted);
+  text-decoration: line-through;
+}
+.ui-thinkc__plan-item[data-status="failed"] .ui-thinkc__plan-title {
+  color: var(--aui-danger, #dc2626);
 }
 
 

@@ -12,7 +12,7 @@ import type {
   MessageBlock,
 } from "./timeline/types"
 import { stampServerMessageId } from "./timeline/identity"
-import { deliveryOutputRefs, messageReceiptFacts } from "./timeline/history"
+import { deliveryOutputRefs, messageReceiptFacts, parseFeedbackSummary, parseStepsPlan } from "./timeline/history"
 
 export { prependMissingHistory, stampServerMessageId } from "./timeline/identity"
 
@@ -109,18 +109,22 @@ export function buildRecoveredActivityRow({
 export function stampMessagePresentation(
   messages: OverlayMessage[],
   previewId: string,
-  message: { id: string; blocks?: MessageBlock[]; intent?: unknown },
+  message: { id: string; blocks?: MessageBlock[]; intent?: unknown; steps?: unknown; feedback?: unknown },
 ): OverlayMessage[] {
   const blocks = message.blocks?.length ? message.blocks : undefined
   const outputRefs = deliveryOutputRefs(message.intent)
   const facts = messageReceiptFacts(message.intent)
-  if (!blocks && outputRefs.length === 0 && !facts.jobReceipt) return messages
+  const steps = parseStepsPlan(message.steps, message.intent)
+  const feedback = parseFeedbackSummary(message.feedback)
+  if (!blocks && outputRefs.length === 0 && !facts.jobReceipt && !steps && feedback === undefined) return messages
   const targetId = messages.some((row) => row.id === previewId) ? previewId : message.id
   return messages.map((row) => row.id === targetId ? {
     ...row,
     ...(blocks ? { blocks } : {}),
     ...facts,
-    outputRefs,
+    ...(steps ? { steps } : {}),
+    ...(feedback !== undefined ? { feedback } : {}),
+    ...(outputRefs.length > 0 ? { outputRefs } : {}),
   } : row)
 }
 

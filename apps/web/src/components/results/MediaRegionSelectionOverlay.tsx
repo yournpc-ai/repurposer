@@ -18,9 +18,11 @@ const MIN_DRAG_PX = 3
 
 export function MediaRegionSelectionOverlay({
   videoRef,
+  mediaRef,
   control,
 }: {
-  videoRef: RefObject<HTMLVideoElement | null>
+  videoRef?: RefObject<HTMLVideoElement | null>
+  mediaRef?: RefObject<HTMLVideoElement | HTMLImageElement | null>
   control: MediaRegionSelectionControl
 }) {
   const { t } = useTranslation()
@@ -32,30 +34,50 @@ export function MediaRegionSelectionOverlay({
   const [draft, setDraft] = useState<PixelRect | null>(null)
   const [draftSelection, setDraftSelection] = useState<MediaRegionSelection | null>(null)
 
+  const getMediaElement = useCallback(
+    () => mediaRef?.current ?? videoRef?.current ?? null,
+    [mediaRef, videoRef],
+  )
+
+  const getSourceSize = useCallback((el: HTMLVideoElement | HTMLImageElement | null) => {
+    if (!el) return { width: 0, height: 0 }
+    if ("videoWidth" in el) {
+      return { width: el.videoWidth, height: el.videoHeight }
+    }
+    return { width: el.naturalWidth, height: el.naturalHeight }
+  }, [])
+
   const measure = useCallback(() => {
     const overlay = overlayRef.current
-    const video = videoRef.current
-    if (!overlay || !video) return
+    const media = getMediaElement()
+    if (!overlay || !media) return
     const bounds = overlay.getBoundingClientRect()
     setContent(videoContentRect(
       { width: bounds.width, height: bounds.height },
-      { width: video.videoWidth, height: video.videoHeight },
+      getSourceSize(media),
     ))
-  }, [videoRef])
+  }, [getMediaElement, getSourceSize])
 
   useEffect(() => {
-    const video = videoRef.current
+    const media = getMediaElement()
     measure()
-    if (control.enabled) video?.pause()
+    if (control.enabled && media && "pause" in media) media.pause()
     window.addEventListener("resize", measure)
-    video?.addEventListener("loadedmetadata", measure)
-    video?.addEventListener("resize", measure)
+    media?.addEventListener("loadedmetadata", measure)
+    media?.addEventListener("load", measure)
+    media?.addEventListener("resize", measure)
+    const ro = typeof ResizeObserver !== "undefined" && overlayRef.current
+      ? new ResizeObserver(measure)
+      : null
+    if (overlayRef.current) ro?.observe(overlayRef.current)
     return () => {
       window.removeEventListener("resize", measure)
-      video?.removeEventListener("loadedmetadata", measure)
-      video?.removeEventListener("resize", measure)
+      media?.removeEventListener("loadedmetadata", measure)
+      media?.removeEventListener("load", measure)
+      media?.removeEventListener("resize", measure)
+      ro?.disconnect()
     }
-  }, [control.enabled, measure, videoRef])
+  }, [control.enabled, getMediaElement, measure])
 
   const pointInContent = (event: ReactPointerEvent<HTMLDivElement>) => {
     const overlay = overlayRef.current
@@ -79,12 +101,13 @@ export function MediaRegionSelectionOverlay({
     const point = pointInContent(event)
     if (!point) return
     const overlay = overlayRef.current
-    const video = videoRef.current
-    if (!overlay || !video || video.videoWidth <= 0 || video.videoHeight <= 0) return
+    const media = getMediaElement()
+    const sourceSize = getSourceSize(media)
+    if (!overlay || !media || sourceSize.width <= 0 || sourceSize.height <= 0) return
     event.preventDefault()
     event.stopPropagation()
-    video.pause()
-    mediaTimeRef.current = video.currentTime
+    if ("pause" in media) media.pause()
+    mediaTimeRef.current = "currentTime" in media ? media.currentTime : 0
     pointerIdRef.current = event.pointerId
     originRef.current = point
     setDraft({ x: point.x, y: point.y, width: 0, height: 0 })
@@ -110,7 +133,7 @@ export function MediaRegionSelectionOverlay({
       ? makeMediaRegionSelection({
           viewportRect: next,
           viewportSize: { width: content.width, height: content.height },
-          sourceSize: { width: videoRef.current?.videoWidth ?? 0, height: videoRef.current?.videoHeight ?? 0 },
+          sourceSize: getSourceSize(getMediaElement()),
           mediaTimeSeconds: mediaTimeRef.current,
         })
       : null)

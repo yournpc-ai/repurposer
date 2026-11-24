@@ -23,14 +23,65 @@ import type {
   CandidateMemberPayload,
   CandidateSurface,
   ComponentClipReceipt,
+  MessageFeedbackSummary,
   NativeJobReceipt,
   OverlayMessage,
   QuestionAnswer,
   QuestionMessage,
+  StepPlanItem,
+  StepPlanStatus,
   VideoReviewIssueCode,
   VideoReviewReceipt,
   VideoRevisionReceipt,
 } from "./types"
+
+const VALID_STEP_STATUSES = new Set<StepPlanStatus>([
+  "pending",
+  "in_progress",
+  "done",
+  "skipped",
+  "failed",
+])
+
+/** Parse user-safe step checklist from either message.steps or intent.steps. */
+export function parseStepsPlan(
+  stepsField: unknown,
+  intent?: unknown,
+): StepPlanItem[] | undefined {
+  const raw = Array.isArray(stepsField)
+    ? stepsField
+    : Array.isArray((intent as Record<string, unknown> | null)?.steps)
+      ? (intent as Record<string, unknown>).steps
+      : null
+  if (!Array.isArray(raw) || raw.length === 0) return undefined
+  const out: StepPlanItem[] = []
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue
+    const rec = item as Record<string, unknown>
+    const title = typeof rec.title === "string" ? rec.title.trim() : ""
+    const status = typeof rec.status === "string" ? (rec.status as StepPlanStatus) : null
+    if (!title || !status || !VALID_STEP_STATUSES.has(status)) continue
+    out.push({ title, status })
+  }
+  return out.length > 0 ? out : undefined
+}
+
+/** Parse optional persisted feedback summary with read tolerance. */
+export function parseFeedbackSummary(raw: unknown): MessageFeedbackSummary | null | undefined {
+  if (raw === null) return null
+  if (!raw || typeof raw !== "object") return undefined
+  const rec = raw as Record<string, unknown>
+  if (rec.rating !== "good" && rec.rating !== "bad") return undefined
+  const tags = Array.isArray(rec.tags)
+    ? rec.tags.filter((item): item is string => typeof item === "string" && item.length > 0)
+    : []
+  return {
+    rating: rec.rating,
+    reason: typeof rec.reason === "string" ? rec.reason : null,
+    tags,
+    updated_at: typeof rec.updated_at === "string" ? rec.updated_at : null,
+  }
+}
 
 /** Resolve an answer payload to its display line. Bail variants are
  * localized (a graceful exit, never an error); freeform shows its text. */
@@ -689,10 +740,14 @@ export function mapHistoryRows(
   const cardBySetId = new Map<string, OverlayMessage>()
   for (const m of rows) {
     const facts = m.role === "assistant" ? messageReceiptFacts(m.intent) : undefined
+    const rowSteps = m.role === "assistant" ? parseStepsPlan(m.steps, m.intent) : undefined
+    const rowFeedback = m.role === "assistant" ? parseFeedbackSummary(m.feedback) : undefined
     const pushRow = (row: OverlayMessage): OverlayMessage => {
       const positioned = {
         ...row,
         ...(row.id === m.id && facts),
+        ...(row.role === "assistant" && !row.qa && !row.activity && !row.candidates && rowSteps ? { steps: rowSteps } : {}),
+        ...(row.role === "assistant" && !row.qa && !row.activity && !row.candidates && rowFeedback !== undefined ? { feedback: rowFeedback } : {}),
         turnId: m.turn_id ?? undefined,
         serverMessageId: m.id,
         hydrated: true,

@@ -2,13 +2,14 @@
  * The dock owns form geometry and state; this component owns no second message
  * truth and mounts no additional scroller. */
 
-import { Fragment, useEffect, useRef, useState, type RefObject } from "react"
+import { Fragment, useEffect, useMemo, useRef, useState, type RefObject } from "react"
 import { useTranslation } from "react-i18next"
-import { Download } from "lucide-react"
+import { Download, Minimize2 } from "lucide-react"
 
 import { ActivityRow, activityText, WorkSegmentRow, type NowRowPayload } from "@/components/chat/ActivityStream"
 import { AnsweredQuestion } from "@/components/chat/AnsweredQuestion"
 import { CandidateSurfaceCard } from "@/components/chat/CandidateSurface"
+import { TurnMinimap, type TurnMinimapItem } from "@/components/chat/TurnMinimap"
 import { ComponentSlot } from "./blocks/ComponentSlot"
 import type { RegisterStructureVisibility } from "./structureVisibility"
 import { AssistantResponse } from "./blocks/AssistantResponse"
@@ -28,11 +29,16 @@ import { useSettingsDialog } from "@/components/settings/settings-dialog-context
 import type { Output } from "@/lib/types"
 import { skillOptionForReference, type SkillOption } from "@/lib/skills"
 import { AssistantText } from "./rows/AssistantText"
+import { MessageActionBar } from "./rows/MessageActionBar"
 import { FocusRow, TurnErrorRow } from "./rows/MetaRow"
 import { UserBubble } from "./rows/UserMessage"
 import type {
+  CompactSummary,
+  ConversationBlock,
   ConversationUnit,
+  MessageFeedbackSummary,
   OverlayMessage,
+  StepPlanItem,
   SuggestionPill,
 } from "./timeline/types"
 import { buildConversationBlocks } from "./timeline/project"
@@ -53,6 +59,77 @@ function ScrollerSendBridge({
   return null
 }
 
+function ScrollerTurnMinimap({ turns }: { turns: TurnMinimapItem[] }) {
+  const { viewport } = useMessageScroller()
+  return <TurnMinimap turns={turns} viewportRef={viewport} />
+}
+
+function CompactContextDivider({ summary }: { summary: CompactSummary }) {
+  const { t } = useTranslation()
+  return (
+    <div
+      data-slot="compact-divider"
+      role="separator"
+      className="my-2 flex items-center gap-3 text-[11px] text-muted-foreground"
+      title={summary.summary}
+    >
+      <span className="h-px flex-1 bg-border/80" />
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-muted/40 px-2.5 py-0.5">
+        <Minimize2 className="size-3 shrink-0 opacity-75" />
+        <span>{t("chat.compactDivider")}</span>
+        {summary.message_count > 0 ? (
+          <span className="text-muted-foreground/75">
+            · {t("chat.compactDividerDetail", { count: summary.message_count })}
+          </span>
+        ) : null}
+      </span>
+      <span className="h-px flex-1 bg-border/80" />
+    </div>
+  )
+}
+
+function blockMaxSeq(block: ConversationBlock): number | null {
+  let max: number | null = null
+  const note = (seq?: number | null) => {
+    if (typeof seq === "number" && (max == null || seq > max)) max = seq
+  }
+  if (block.kind === "turn" && block.user) note(block.user.seq)
+  for (const unit of block.slots) {
+    if (unit.kind === "message") note(unit.message.seq)
+  }
+  return max
+}
+
+function extractBlockVersionLabel(block: Extract<ConversationBlock, { kind: "turn" }>): string | null {
+  let version: number | null = null
+  for (const slot of block.slots) {
+    if (slot.kind === "activityFold") {
+      for (const row of slot.rows) {
+        if (row.receipt?.kind === "video_revision") {
+          version = row.receipt.version
+        }
+      }
+    } else if (slot.kind === "message" && slot.message.blocks?.length) {
+      for (const b of slot.message.blocks) {
+        if (b.kind === "video_storyboard" && typeof b.version === "number") {
+          version = b.version
+        }
+      }
+    }
+  }
+  return version != null ? `v${version}` : null
+}
+
+function extractBlockStepsPlan(block: ConversationBlock): StepPlanItem[] | undefined {
+  let found: StepPlanItem[] | undefined
+  for (const slot of block.slots) {
+    if (slot.kind === "message" && slot.message.steps?.length) {
+      found = slot.message.steps
+    }
+  }
+  return found
+}
+
 interface ChatConversationProps {
   conversationUnits: ConversationUnit[]
   chatOutputs: Output[]
@@ -66,6 +143,9 @@ interface ChatConversationProps {
   liveWorkFoldKey: string | null
   liveMode?: ChatLiveMode
   liveFocus?: string | null
+  liveSteps?: StepPlanItem[] | null
+  compactSummary?: CompactSummary | null
+  onFeedbackChange?: (messageId: string, next: MessageFeedbackSummary | null) => void
   postToolThinkingStartedAtMs?: number | null
   nowRow: NowRowPayload | null
   bottomNowRow: NowRowPayload | null
@@ -125,6 +205,9 @@ export function ChatConversation({
   liveWorkFoldKey,
   liveMode,
   liveFocus = null,
+  liveSteps = null,
+  compactSummary = null,
+  onFeedbackChange,
   postToolThinkingStartedAtMs,
   nowRow,
   bottomNowRow,
@@ -232,11 +315,22 @@ export function ChatConversation({
         ) : (
           <>
             {m.content ? (
-              <AssistantText
-                text={m.content}
-                streaming={m.streaming}
-                hydrated={m.hydrated}
-              />
+              <>
+                <AssistantText
+                  text={m.content}
+                  streaming={m.streaming}
+                  hydrated={m.hydrated}
+                />
+                {!m.streaming && (m.serverMessageId || m.hydrated) ? (
+                  <MessageActionBar
+                    messageId={m.serverMessageId ?? (m.hydrated ? m.id : undefined)}
+                    text={m.content}
+                    createdAt={m.at}
+                    feedback={m.feedback}
+                    onFeedbackChange={onFeedbackChange}
+                  />
+                ) : null}
+              </>
             ) : null}
             {deliveryOutputSlot}
             {/* 建议 pills (T3 触发回合): the closing review's next steps —
@@ -310,6 +404,7 @@ export function ChatConversation({
    * fragments wait for the seal instead of prematurely saying "Worked". */
   const renderActivityUnit = (
     unit: Exclude<ConversationUnit, { kind: "message" }>,
+    stepsPlan?: StepPlanItem[],
   ) => {
     if (unit.kind === "activity") {
       return (
@@ -324,6 +419,7 @@ export function ChatConversation({
       currentActivityRowKeysRef.current.has(unit.rowKey)
     if (currentOpen && unit.rowKey !== liveWorkFoldKey) return null
     const live = unit.rowKey === liveWorkFoldKey
+    const resolvedStepsPlan = live && liveSteps?.length ? liveSteps : stepsPlan
     const postToolThinking =
       live && liveMode === "live_post_tool_thinking"
         ? {
@@ -334,7 +430,7 @@ export function ChatConversation({
     // An active-only host is a live seat, never an empty settled receipt.
     // Once that attempt is cancelled its visible row retires; a later retry
     // births its own host instead of leaving a struck-through failure row.
-    if (unit.rows.length === 0 && !unit.failure && !live) return null
+    if (unit.rows.length === 0 && !unit.failure && !live && !resolvedStepsPlan?.length) return null
     return (
       <MessageScrollerItem key={unit.rowKey}>
         <WorkSegmentRow
@@ -345,6 +441,7 @@ export function ChatConversation({
           liveLabel={live ? chatStatusLabel : null}
           postToolThinking={postToolThinking}
           failure={unit.failure}
+          stepsPlan={resolvedStepsPlan}
         />
       </MessageScrollerItem>
     )
@@ -362,32 +459,110 @@ export function ChatConversation({
     if (block.turnId === activeTurnId) bottomSeatBlockKey = block.key
   }
 
-  const renderUnit = (unit: ConversationUnit) => unit.kind === "message"
-    ? renderConversationMessage(unit.message) : renderActivityUnit(unit)
+  const minimapTurns = useMemo<TurnMinimapItem[]>(() => {
+    const items: TurnMinimapItem[] = []
+    let turnNumber = 0
+    for (const block of conversationBlocks) {
+      if (block.kind !== "turn" || !block.user) continue
+      turnNumber += 1
+      items.push({
+        id: block.turnId,
+        index: turnNumber,
+        preview: block.user.content,
+        versionLabel: extractBlockVersionLabel(block),
+      })
+    }
+    return items
+  }, [conversationBlocks])
+
+  const compactAfterBlockIndex = useMemo(() => {
+    if (!compactSummary || compactSummary.compacted_through_seq <= 0) return -1
+    let lastIdx = -1
+    for (let i = 0; i < conversationBlocks.length; i += 1) {
+      const maxSeq = blockMaxSeq(conversationBlocks[i])
+      if (maxSeq != null && maxSeq <= compactSummary.compacted_through_seq) {
+        lastIdx = i
+      }
+    }
+    return lastIdx
+  }, [compactSummary, conversationBlocks])
+
+  const renderUnit = (unit: ConversationUnit, stepsPlan?: StepPlanItem[]) => unit.kind === "message"
+    ? renderConversationMessage(unit.message) : renderActivityUnit(unit, stepsPlan)
 
   return (
     <MessageScrollerProvider>
       <ScrollerSendBridge apiRef={scrollerSendRef} />
       <MessageScroller className="h-full">
+        <ScrollerTurnMinimap turns={minimapTurns} />
         <MessageScrollerViewport className="scroll-fade-y thin-scroll">
-          <MessageScrollerContent className="ui-th-col" role="log" aria-busy={chatBusy}>
+          <MessageScrollerContent
+            className="ui-th-col"
+            data-has-minimap={minimapTurns.length >= 3 || undefined}
+            role="log"
+            aria-busy={chatBusy}
+          >
             {/* ONE row stream: transcript rows keep their array order;
                 the run adapter pins bottom while live and anchors at the
                 run end once terminal. */}
-            {conversationBlocks.map((block) => {
-              const slots = block.slots.map(renderUnit)
+            {conversationBlocks.map((block, blockIndex) => {
+              const blockSteps = extractBlockStepsPlan(block)
+              let lastFoldIdx = -1
+              for (let i = block.slots.length - 1; i >= 0; i -= 1) {
+                if (block.slots[i].kind === "activityFold") {
+                  lastFoldIdx = i
+                  break
+                }
+              }
+              const slots = block.slots.map((slot, slotIdx) =>
+                renderUnit(slot, slotIdx === lastFoldIdx ? blockSteps : undefined),
+              )
+              const showStandaloneSteps =
+                lastFoldIdx === -1 &&
+                Boolean(blockSteps?.length) &&
+                !(block.key === bottomSeatBlockKey && bottomStatusLabel !== null)
+              const divider =
+                compactSummary && blockIndex === compactAfterBlockIndex ? (
+                  <CompactContextDivider summary={compactSummary} />
+                ) : null
               if (block.kind === "standalone") {
-                return <AssistantResponse key={block.key}>{slots}</AssistantResponse>
+                return (
+                  <Fragment key={block.key}>
+                    <AssistantResponse>
+                      {showStandaloneSteps ? (
+                        <MessageScrollerItem key={`steps:${block.key}`}>
+                          <WorkSegmentRow stepsPlan={blockSteps} />
+                        </MessageScrollerItem>
+                      ) : null}
+                      {slots}
+                    </AssistantResponse>
+                    {divider}
+                  </Fragment>
+                )
               }
               return (
-                <TurnBlock key={block.key} user={block.user ? renderConversationMessage(block.user) : null}>
-                  {slots}
-                  {block.key === bottomSeatBlockKey && bottomStatusLabel !== null ? (
-                    <MessageScrollerItem key={`now:${block.key}`}>
-                      <WorkSegmentRow liveLabel={bottomStatusLabel} />
-                    </MessageScrollerItem>
-                  ) : null}
-                </TurnBlock>
+                <Fragment key={block.key}>
+                  <TurnBlock
+                    turnMinimapId={block.user ? block.turnId : undefined}
+                    user={block.user ? renderConversationMessage(block.user) : null}
+                  >
+                    {showStandaloneSteps ? (
+                      <MessageScrollerItem key={`steps:${block.key}`}>
+                        <WorkSegmentRow stepsPlan={blockSteps} />
+                      </MessageScrollerItem>
+                    ) : null}
+                    {slots}
+                    {block.key === bottomSeatBlockKey && bottomStatusLabel !== null ? (
+                      <MessageScrollerItem key={`now:${block.key}`}>
+                        <WorkSegmentRow
+                          liveLabel={bottomStatusLabel}
+                          stepsPlan={liveSteps?.length ? liveSteps : undefined}
+                        />
+                      </MessageScrollerItem>
+                    ) : null}
+                  </TurnBlock>
+                  {divider}
+                </Fragment>
               )
             })}
 
@@ -398,7 +573,10 @@ export function ChatConversation({
             {bottomStatusLabel !== null && bottomSeatBlockKey == null ? (
               <AssistantResponse>
                 <MessageScrollerItem>
-                  <WorkSegmentRow liveLabel={bottomStatusLabel} />
+                  <WorkSegmentRow
+                    liveLabel={bottomStatusLabel}
+                    stepsPlan={liveSteps?.length ? liveSteps : undefined}
+                  />
                 </MessageScrollerItem>
               </AssistantResponse>
             ) : null}

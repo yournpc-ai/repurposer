@@ -115,6 +115,9 @@
 @media (max-width: 767px) {
   .ui-th-col { gap: 20px; padding: 12px 16px 24px; }
 }
+@media (min-width: 768px) {
+  .ui-th-col[data-has-minimap] { padding-left: 48px; }
+}
 
 /* Message anatomy from affectUI Agent Thread. */
 .ui-th-message { display: flex; flex-direction: column; min-width: 0; gap: 8px; overflow-wrap: anywhere; }
