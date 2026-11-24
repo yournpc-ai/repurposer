@@ -6,6 +6,8 @@ export {
   backdropStyles,
   cardTreatments,
   headlineTreatments,
+  textBackgroundModes,
+  textTransforms,
   videoStyleSchema,
   videoSpecSchema,
 } from "./schema";

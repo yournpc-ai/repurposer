@@ -17,6 +17,7 @@ from app.editing.catalog import MotionBlockId, SoundRecipeId, VoiceId
 from app.editing.edits import AddClip, AddTrack, BindSource, SetTransition, SplitClip, TemporalEdit, UpdateClip, UpdateScene
 from app.editing.schemas import Animation, ClipSource, EditTarget, MotionBlockObject, ProductShowcaseProps, TimeRange, Transition, TransitionKind
 from app.editing.styles import BackdropStyle, StylePresetId
+from app.editing.text_presets import TextBackgroundMode, TextStylePresetId
 from app.editing.store import (
     RequestMismatch,
     StaleBase,
@@ -227,6 +228,57 @@ class SetCompositionStyleArgs(BaseModel):
     )
 
 
+class ApplyTextStyleArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    scope: Literal["clip", "track", "all_derived_captions"] = Field(
+        description="Target scope: 'clip' (single clip_id), 'track' (all TextObjects on track_id), or 'all_derived_captions' (all derived captions only, strictly protecting independent user-edited captions and non-caption text)."
+    )
+    clip_id: str | None = Field(
+        default=None, min_length=1, max_length=64,
+        description="Required when scope='clip'. Exact TextObject clip ID.",
+    )
+    track_id: str | None = Field(
+        default=None, min_length=1, max_length=64,
+        description="Required when scope='track'. Exact visual track ID.",
+    )
+    preset_id: TextStylePresetId | None = Field(
+        default=None,
+        description="Optional industry text/caption preset from creative_catalog.text_style_presets (clean_broadcast, cinema_glass, minimal_light, vox_label, vox_highlighter, creator_pop, kinetic_impact, editorial_callout, lower_third_tag, karaoke_focus, bilingual_cinema).",
+    )
+    color: str | None = Field(
+        default=None, pattern=r"^#[0-9a-fA-F]{6}$",
+        description="Optional text fill hex color override.",
+    )
+    highlight_color: str | None = Field(
+        default=None, pattern=r"^#[0-9a-fA-F]{6}$",
+        description="Optional active-word highlight hex color for karaoke_focus (defaults to current style accent or #FACC15).",
+    )
+    font_size: int | None = Field(
+        default=None, gt=0, le=400,
+        description="Optional font size override in canvas pixels.",
+    )
+    background: str | None = Field(
+        default=None, pattern=r"^#[0-9a-fA-F]{6}$",
+        description="Optional background pill/chip hex color override.",
+    )
+    background_mode: TextBackgroundMode | None = Field(
+        default=None,
+        description="Optional background wrap mode: 'box' (full box), 'pill' (tight rounded pill), or 'line' (per-line tight sticker chips).",
+    )
+    background_opacity: float | None = Field(
+        default=None, ge=0.0, le=1.0,
+        description="Optional background opacity in [0, 1].",
+    )
+    align: Literal["left", "center", "right"] | None = Field(
+        default=None,
+        description="Optional horizontal text alignment override.",
+    )
+    secondary_line_scale: float | None = Field(
+        default=None, ge=0.4, le=1.0,
+        description="Optional scale factor for line 2+ in single-clip bilingual subtitles (e.g. 0.72).",
+    )
+
+
 class SaveCompositionAsSkillArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     name: str = Field(
@@ -419,6 +471,11 @@ EDITOR_TOOLS = (
         SetCompositionStyleArgs, "setCompositionStyle",
     ),
     _editor_tool(
+        "apply_text_style",
+        "Atomically style native TextObjects or derived captions using one of the 11 industry presets in creative_catalog.text_style_presets (clean_broadcast, cinema_glass, minimal_light, vox_label, vox_highlighter, creator_pop, kinetic_impact, editorial_callout, lower_third_tag, karaoke_focus, bilingual_cinema) plus optional overrides. With scope='all_derived_captions', strictly preserves independent user-edited captions, non-caption text, and all audio tracks.",
+        ApplyTextStyleArgs, "applyTextStyle",
+    ),
+    _editor_tool(
         "set_transition",
         "Add or update a centered transition ('crossfade', 'whip_pan', 'wipe_reveal', 'zoom_through', or 'iris_focus') between two adjacent full-canvas opaque clips (including opaque motion blocks with show_backdrop=True) on the same visual track.",
         SetTransitionArgs, "setTransition",
@@ -508,7 +565,7 @@ WRITE_TOOLS = {
     if t.name == "remove_clip" or t.params_model in (
         SplitClipArgs, TrimClipArgs, MoveClipArgs, TranslateArgs, ScaleArgs, SetKeyframeArgs,
         InsertVisualArgs, InsertAudioArgs, EditAudioClipArgs, InsertMotionBlockArgs, UpdateMotionBlockArgs,
-        SetCompositionStyleArgs, SetTransitionArgs, ExtendStillArgs, BindClipSourceArgs,
+        SetCompositionStyleArgs, ApplyTextStyleArgs, SetTransitionArgs, ExtendStillArgs, BindClipSourceArgs,
     )
 }
 
@@ -987,6 +1044,27 @@ async def edit_clip(
             raise ValueError("The composition already uses this exact visual style.")
         extra["style_summary"] = summary
         extra["style"] = summary["style"]
+    elif isinstance(args, ApplyTextStyleArgs):
+        from app.editing.revisions import apply_text_style_ops
+
+        ops, summary = apply_text_style_ops(
+            content,
+            scope=args.scope,
+            clip_id=args.clip_id,
+            track_id=args.track_id,
+            preset_id=args.preset_id,
+            color=args.color,
+            highlight_color=args.highlight_color,
+            font_size=args.font_size,
+            background=args.background,
+            background_mode=args.background_mode,
+            background_opacity=args.background_opacity,
+            align=args.align,
+            secondary_line_scale=args.secondary_line_scale,
+        )
+        if not ops:
+            raise ValueError("The target text already uses this exact style.")
+        extra["text_style_summary"] = summary
     elif isinstance(args, UpdateMotionBlockArgs):
         target = clips.get(args.clip_id)
         if target is None or not isinstance(target.object, MotionBlockObject):
@@ -1373,6 +1451,8 @@ async def execute_editor(turn, name, args):
                             receipt["fade_out_seconds"] = result.get("fade_out_seconds")
                     if name == "set_composition_style":
                         receipt["style_summary"] = result["style_summary"]
+                    if name == "apply_text_style":
+                        receipt["text_style_summary"] = result["text_style_summary"]
                     if name == "set_transition":
                         receipt["transition"] = result["transition"]
                     if name == "split_clip":

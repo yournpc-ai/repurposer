@@ -1,5 +1,12 @@
 import type { CSSProperties } from "react";
 import { hexToRgba } from "./math";
+import {
+  TEXT_STYLE_PRESETS,
+  cloneTextStylePresetToken,
+  type TextShadowToken,
+  type TextStrokeToken,
+  type TextStylePresetToken,
+} from "./textPresets";
 
 export type StylePresetId =
   | "institutional_dark"
@@ -40,24 +47,9 @@ export interface CompositionStyleInput {
   theme?: "dark" | "light" | null;
 }
 
-export interface CaptionStrokeToken {
-  color: string;
-  width: number;
-}
-
-export interface CaptionShadowToken {
-  color: string;
-  offset: [number, number];
-  blur: number;
-}
-
-export interface CaptionStyleToken {
-  color: string;
-  weight: 400 | 700 | 900;
-  background: string | null;
-  stroke: CaptionStrokeToken | null;
-  shadow: CaptionShadowToken | null;
-}
+export type CaptionStrokeToken = TextStrokeToken;
+export type CaptionShadowToken = TextShadowToken;
+export type CaptionStyleToken = TextStylePresetToken;
 
 export interface ResolvedStyleTokens {
   preset_id: StylePresetId;
@@ -101,13 +93,7 @@ export const STYLE_PRESETS: Record<StylePresetId, ResolvedStyleTokens> = {
     headline_treatment: "clean",
     heading_weight: 700,
     default_transition: "crossfade",
-    caption_style: {
-      color: "#F8FAFC",
-      weight: 700,
-      background: null,
-      stroke: { color: "#0A0F16", width: 3.0 },
-      shadow: { color: "#0A0F16", offset: [0.0, 2.0], blur: 8.0 },
-    },
+    caption_style: cloneTextStylePresetToken(TEXT_STYLE_PRESETS.clean_broadcast),
   },
   swiss_paper: {
     preset_id: "swiss_paper",
@@ -126,13 +112,7 @@ export const STYLE_PRESETS: Record<StylePresetId, ResolvedStyleTokens> = {
     headline_treatment: "swiss_rule",
     heading_weight: 700,
     default_transition: "wipe_reveal",
-    caption_style: {
-      color: "#111820",
-      weight: 700,
-      background: null,
-      stroke: { color: "#F6F5F0", width: 4.0 },
-      shadow: null,
-    },
+    caption_style: cloneTextStylePresetToken(TEXT_STYLE_PRESETS.minimal_light),
   },
   vox_editorial: {
     preset_id: "vox_editorial",
@@ -151,13 +131,7 @@ export const STYLE_PRESETS: Record<StylePresetId, ResolvedStyleTokens> = {
     headline_treatment: "highlight_tape",
     heading_weight: 900,
     default_transition: "wipe_reveal",
-    caption_style: {
-      color: "#FFFDF7",
-      weight: 700,
-      background: "#141413",
-      stroke: null,
-      shadow: null,
-    },
+    caption_style: cloneTextStylePresetToken(TEXT_STYLE_PRESETS.vox_label),
   },
   kinetic_anime: {
     preset_id: "kinetic_anime",
@@ -176,13 +150,7 @@ export const STYLE_PRESETS: Record<StylePresetId, ResolvedStyleTokens> = {
     headline_treatment: "outlined_impact",
     heading_weight: 900,
     default_transition: "whip_pan",
-    caption_style: {
-      color: "#FFFFFF",
-      weight: 900,
-      background: null,
-      stroke: { color: "#0D0B14", width: 4.0 },
-      shadow: { color: "#0D0B14", offset: [3.0, 3.0], blur: 0.0 },
-    },
+    caption_style: cloneTextStylePresetToken(TEXT_STYLE_PRESETS.kinetic_impact),
   },
 };
 
@@ -291,19 +259,7 @@ export function resolveStyleTokens(style: CompositionStyleInput): ResolvedStyleT
   const preset = STYLE_PRESETS[style.preset_id];
   const tokens: ResolvedStyleTokens = {
     ...preset,
-    caption_style: {
-      color: preset.caption_style.color,
-      weight: preset.caption_style.weight,
-      background: preset.caption_style.background,
-      stroke: preset.caption_style.stroke ? { ...preset.caption_style.stroke } : null,
-      shadow: preset.caption_style.shadow
-        ? {
-            color: preset.caption_style.shadow.color,
-            offset: [...preset.caption_style.shadow.offset] as [number, number],
-            blur: preset.caption_style.shadow.blur,
-          }
-        : null,
-    },
+    caption_style: cloneTextStylePresetToken(preset.caption_style),
   };
 
   const themeChanged = style.theme != null && style.theme !== preset.theme;
@@ -316,22 +272,13 @@ export function resolveStyleTokens(style: CompositionStyleInput): ResolvedStyleT
     tokens.secondary_ink = base.secondary_ink;
     tokens.line_color = base.line_color;
     if (tokens.caption_style.background === null) {
-      tokens.caption_style =
+      const preservedWeight = tokens.caption_style.weight;
+      tokens.caption_style = cloneTextStylePresetToken(
         style.theme === "dark"
-          ? {
-              color: "#F8FAFC",
-              weight: tokens.caption_style.weight,
-              background: null,
-              stroke: { color: "#0A0F16", width: 3.0 },
-              shadow: { color: "#0A0F16", offset: [0.0, 2.0], blur: 8.0 },
-            }
-          : {
-              color: "#111820",
-              weight: tokens.caption_style.weight,
-              background: null,
-              stroke: { color: "#F6F5F0", width: 4.0 },
-              shadow: null,
-            };
+          ? TEXT_STYLE_PRESETS.clean_broadcast
+          : TEXT_STYLE_PRESETS.minimal_light,
+      );
+      tokens.caption_style.weight = preservedWeight;
     }
   }
 

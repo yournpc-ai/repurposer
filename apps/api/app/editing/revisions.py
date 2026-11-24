@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import hashlib
+import unicodedata
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.editing.animation import derive_text_parts
 from app.editing.edits import (
     AddClip,
     AddTrack,
@@ -22,15 +24,20 @@ from app.editing.edits import (
     replace_text_ops,
 )
 from app.editing.schemas import (
+    Animation,
     AudioObject,
+    Clip,
     CompositionContent,
+    Easing,
     EditTarget,
     ImageObject,
+    Keyframe,
     LayoutBox,
     MotionBlockObject,
     SourceCaptionDerivation,
     SpeechObject,
     TextObject,
+    TextPartTarget,
     TextShadow,
     TextStroke,
     TimeRange,
@@ -43,7 +50,21 @@ from app.editing.styles import (
     StylePresetId,
     resolve_style_tokens,
 )
-from app.editing.timing import output_ticks_to_source_ticks, seconds_to_ticks
+from app.editing.text_presets import (
+    KARAOKE_ACTIVE_SCALE,
+    KARAOKE_DEFAULT_HIGHLIGHT_COLOR,
+    TEXT_STYLE_PRESETS,
+    TextBackgroundMode,
+    TextStylePresetId,
+    copy_text_preset_token,
+    text_style_updates_from_token,
+)
+from app.editing.timing import (
+    frames_to_ticks,
+    output_ticks_to_source_ticks,
+    seconds_to_ticks,
+    ticks_to_frames,
+)
 
 
 class RevisionInputError(ValueError):
@@ -888,20 +909,7 @@ def set_composition_style_ops(
     transitions_updated = 0
 
     cap_token = tokens["caption_style"]
-    cap_stroke = (
-        TextStroke(color=cap_token["stroke"]["color"], width=cap_token["stroke"]["width"])
-        if cap_token["stroke"] is not None
-        else None
-    )
-    cap_shadow = (
-        TextShadow(
-            color=cap_token["shadow"]["color"],
-            offset=(cap_token["shadow"]["offset"][0], cap_token["shadow"]["offset"][1]),
-            blur=cap_token["shadow"]["blur"],
-        )
-        if cap_token["shadow"] is not None
-        else None
-    )
+    cap_updates = text_style_updates_from_token(cap_token)
 
     for track in content.timeline.tracks:
         if track.kind != "visual":
@@ -930,15 +938,7 @@ def set_composition_style_ops(
                     independent_captions_preserved += 1
                     continue
                 if update_captions and obj.caption.state == "derived":
-                    updated_text_style = obj.style.model_copy(
-                        update={
-                            "color": cap_token["color"],
-                            "background": cap_token["background"],
-                            "weight": cap_token["weight"],
-                            "stroke": cap_stroke,
-                            "shadow": cap_shadow,
-                        }
-                    )
+                    updated_text_style = obj.style.model_copy(update=cap_updates)
                     if updated_text_style != obj.style:
                         updated_obj = obj.model_copy(update={"style": updated_text_style})
                         ops.append(UpdateClip(op="update_clip", clip_id=clip.clip_id, object=updated_obj))
@@ -998,6 +998,435 @@ def apply_composition_style(
     return updated, summary
 
 
+def _has_cjk(text: str) -> bool:
+    return any(
+        0x4E00 <= ord(ch) <= 0x9FFF
+        or 0x3400 <= ord(ch) <= 0x4DBF
+        or 0x3040 <= ord(ch) <= 0x30FF
+        for ch in text
+    )
+
+
+def _is_punct_or_space(text: str) -> bool:
+    return bool(text) and all(unicodedata.category(ch)[0] in {"P", "S", "Z"} for ch in text)
+
+
+def _karaoke_tokens(
+    text: str,
+    *,
+    force_words: bool = False,
+) -> tuple[Literal["word", "grapheme"], list[tuple[list[str], int]]]:
+    """Segment text into deterministic (part_ids, char_weight) karaoke groups."""
+    word_parts = derive_text_parts(text, "word")
+    lexical_words = [part for part in word_parts if not _is_punct_or_space(part.text)]
+    use_cjk_chunks = (
+        not force_words
+        and (
+            (len(lexical_words) == 1 and len(lexical_words[0].text) > 2 and _has_cjk(lexical_words[0].text))
+            or (
+                bool(lexical_words)
+                and any(len(part.text) >= 5 and _has_cjk(part.text) for part in lexical_words)
+            )
+        )
+    )
+    if use_cjk_chunks:
+        graphemes = [
+            part
+            for part in derive_text_parts(text, "grapheme")
+            if part.text.strip() and not _is_punct_or_space(part.text)
+        ]
+        chunks: list[tuple[list[str], int]] = []
+        idx = 0
+        while idx < len(graphemes):
+            first = graphemes[idx]
+            if (
+                idx + 1 < len(graphemes)
+                and graphemes[idx + 1].layout_range == first.layout_range
+                and _has_cjk(first.text)
+                and _has_cjk(graphemes[idx + 1].text)
+            ):
+                pair = [first, graphemes[idx + 1]]
+                chunks.append(([p.part_id for p in pair], 2))
+                idx += 2
+            else:
+                chunks.append(([first.part_id], 1))
+                idx += 1
+        if chunks:
+            return "grapheme", chunks
+
+    chosen = lexical_words or word_parts
+    return "word", [([part.part_id], max(1, len(part.text))) for part in chosen]
+
+
+def _build_karaoke_animations(
+    content: CompositionContent,
+    clip: Clip,
+    *,
+    base_color: str,
+    highlight_color: str,
+    word_timings: list[tuple[float, float]] | list[dict[str, float]] | None = None,
+) -> list[Animation]:
+    """Generate deterministic word/grapheme TextPart karaoke highlight & pop animations."""
+    obj = clip.object
+    if not isinstance(obj, TextObject):
+        return []
+    settings = content.settings
+    clip_ticks = clip.range.duration
+    timebase = settings.timebase
+    fps_num, fps_den = settings.fps.num, settings.fps.den
+    total_frames = ticks_to_frames(clip_ticks, timebase, fps_num, fps_den)
+    if total_frames < 2:
+        return []
+
+    part_kind, tokens = _karaoke_tokens(obj.text, force_words=word_timings is not None)
+    if not tokens:
+        return []
+
+    def frame_to_tick(frame_idx: int) -> int:
+        return min(clip_ticks, max(0, frames_to_ticks(frame_idx, timebase, fps_num, fps_den)))
+
+    frame_ranges: list[tuple[int, int]] = []
+    if word_timings is not None and len(word_timings) == len(tokens):
+        for item in word_timings:
+            if isinstance(item, dict):
+                s_sec, e_sec = float(item["start_s"]), float(item["end_s"])
+            else:
+                s_sec, e_sec = float(item[0]), float(item[1])
+            sf = max(0, min(total_frames - 1, round(s_sec * fps_num / fps_den)))
+            ef = max(sf + 1, min(total_frames, round(e_sec * fps_num / fps_den)))
+            frame_ranges.append((sf, ef))
+    else:
+        total_weight = sum(weight for _, weight in tokens)
+        acc_weight = 0
+        prev_end = 0
+        n_tokens = len(tokens)
+        for idx, (_, weight) in enumerate(tokens):
+            if prev_end >= total_frames:
+                break
+            sf = prev_end
+            if idx == n_tokens - 1:
+                ef = total_frames
+            else:
+                acc_weight += weight
+                remaining = n_tokens - 1 - idx
+                target = round(total_frames * acc_weight / total_weight)
+                max_end = max(sf + 1, total_frames - remaining)
+                ef = min(total_frames, max(sf + 1, min(max_end, target)))
+            if sf < ef <= total_frames:
+                frame_ranges.append((sf, ef))
+                prev_end = ef
+
+    clip_hash = hashlib.sha256(clip.clip_id.encode("utf-8")).hexdigest()[:8]
+    animations: list[Animation] = []
+    pop_in = Easing(kind="cubic_bezier", params=(0.16, 1.0, 0.3, 1.0))
+    pop_out = Easing(kind="cubic_bezier", params=(0.4, 0.0, 0.2, 1.0))
+    hold = Easing(kind="hold")
+    linear = Easing(kind="linear")
+
+    def dedup_keyframes(raw: list[tuple[int, Any, Easing]]) -> list[Keyframe]:
+        out: list[Keyframe] = []
+        seen_ticks: set[int] = set()
+        seen_frames: set[int] = set()
+        for f_idx, val, easing in raw:
+            tick = frame_to_tick(f_idx)
+            q_frame = ticks_to_frames(tick, timebase, fps_num, fps_den)
+            if tick in seen_ticks or q_frame in seen_frames:
+                continue
+            seen_ticks.add(tick)
+            seen_frames.add(q_frame)
+            out.append(Keyframe(at=tick, value=val, easing=easing))
+        return out
+
+    for idx, ((part_ids, _), (sf, ef)) in enumerate(zip(tokens, frame_ranges)):
+        target = TextPartTarget(kind=part_kind, part_ids=part_ids, stagger=0)
+
+        color_raw: list[tuple[int, Any, Easing]] = []
+        if sf == 0:
+            color_raw.append((0, highlight_color, hold))
+            if ef < total_frames:
+                color_raw.append((ef, base_color, hold))
+        else:
+            color_raw.append((0, base_color, hold))
+            color_raw.append((sf, highlight_color, hold))
+            if ef < total_frames:
+                color_raw.append((ef, base_color, hold))
+        color_kfs = dedup_keyframes(color_raw)
+        if color_kfs:
+            animations.append(
+                Animation(
+                    animation_id=f"karaoke_color_{clip_hash}_{idx}",
+                    target_object_id=obj.object_id,
+                    text_part=target,
+                    property="text.color",
+                    keyframes=color_kfs,
+                )
+            )
+
+        span = ef - sf
+        if span >= 2:
+            peak = sf + (2 if span >= 5 else 1)
+            release = ef - 1 if ef - 1 > peak else peak
+            scale_raw: list[tuple[int, Any, Easing]] = []
+            if sf > 0:
+                scale_raw.append((0, 1.0, hold))
+            scale_raw.append((sf, 1.0, pop_in))
+            if release > peak:
+                scale_raw.append((peak, KARAOKE_ACTIVE_SCALE, hold))
+                scale_raw.append((release, KARAOKE_ACTIVE_SCALE, pop_out))
+            else:
+                scale_raw.append((peak, KARAOKE_ACTIVE_SCALE, pop_out))
+            scale_raw.append((ef, 1.0, linear))
+            scale_kfs = dedup_keyframes(scale_raw)
+            if len(scale_kfs) >= 2:
+                animations.append(
+                    Animation(
+                        animation_id=f"karaoke_scale_{clip_hash}_{idx}",
+                        target_object_id=obj.object_id,
+                        text_part=target,
+                        property="transform.scale",
+                        keyframes=scale_kfs,
+                    )
+                )
+
+    return animations
+
+
+def apply_text_style_ops(
+    content: CompositionContent,
+    *,
+    scope: Literal["clip", "track", "all_derived_captions"],
+    clip_id: str | None = None,
+    track_id: str | None = None,
+    preset_id: TextStylePresetId | None = None,
+    color: str | None = None,
+    highlight_color: str | None = None,
+    font_size: int | None = None,
+    background: str | None = None,
+    background_mode: TextBackgroundMode | None = None,
+    background_opacity: float | None = None,
+    align: Literal["left", "center", "right"] | None = None,
+    secondary_line_scale: float | None = None,
+    word_timings: list[tuple[float, float]] | list[dict[str, float]] | None = None,
+) -> tuple[list[Op], dict[str, Any]]:
+    """Build atomic edit ops to style native TextObjects and derived captions.
+
+    Guardrails:
+    - Never touches any audio track (``track.kind == "audio"``).
+    - With ``scope="all_derived_captions"``, strictly skips ``independent``
+      captions and non-caption text clips.
+    - Applying ``karaoke_focus`` replaces any prior ``karaoke_*`` TextPart
+      animations with fresh deterministic word/grapheme keyframes; switching to
+      any other preset cleanly strips prior ``karaoke_*`` animations.
+    """
+    has_override = any(
+        v is not None
+        for v in (
+            preset_id,
+            color,
+            highlight_color,
+            font_size,
+            background,
+            background_mode,
+            background_opacity,
+            align,
+            secondary_line_scale,
+        )
+    )
+    if not has_override:
+        raise RevisionInputError(
+            "Provide preset_id or at least one explicit text style override.",
+            kind="revision_input",
+        )
+
+    targets: list[Clip] = []
+    independent_captions_preserved = 0
+    non_caption_text_preserved = 0
+
+    if scope == "clip":
+        if not clip_id:
+            raise RevisionInputError("scope='clip' requires clip_id.", loc=["clip_id"])
+        matches = _clip_locations(content, clip_id)
+        if not matches:
+            raise RevisionInputError(
+                f"clip {clip_id!r} does not exist in the base version",
+                loc=["clip_id"],
+                kind="target_not_found",
+            )
+        track, clip = matches[0]
+        if track.kind != "visual" or not isinstance(clip.object, TextObject):
+            raise RevisionInputError(
+                "apply_text_style targets visual TextObject clips only.",
+                loc=["clip_id"],
+                kind="unsupported_target",
+            )
+        targets.append(clip)
+    elif scope == "track":
+        if not track_id:
+            raise RevisionInputError("scope='track' requires track_id.", loc=["track_id"])
+        track = next((t for t in content.timeline.tracks if t.track_id == track_id), None)
+        if track is None:
+            raise RevisionInputError(
+                f"track {track_id!r} does not exist in the base version",
+                loc=["track_id"],
+                kind="target_not_found",
+            )
+        if track.kind != "visual":
+            raise RevisionInputError(
+                "apply_text_style never operates on audio tracks.",
+                loc=["track_id"],
+                kind="unsupported_target",
+            )
+        targets.extend(c for c in track.clips if isinstance(c.object, TextObject))
+        if not targets:
+            raise RevisionInputError(
+                f"track {track_id!r} has no TextObject clips to style.",
+                loc=["track_id"],
+                kind="target_not_found",
+            )
+    elif scope == "all_derived_captions":
+        for track in content.timeline.tracks:
+            if track.kind != "visual":
+                continue
+            for clip in track.clips:
+                obj = clip.object
+                if not isinstance(obj, TextObject):
+                    continue
+                if obj.caption is None:
+                    non_caption_text_preserved += 1
+                    continue
+                if obj.caption.state == "independent":
+                    independent_captions_preserved += 1
+                    continue
+                if obj.caption.state == "derived":
+                    targets.append(clip)
+        if not targets:
+            raise RevisionInputError(
+                "No derived caption clips found to style.",
+                loc=["scope"],
+                kind="target_not_found",
+            )
+    else:
+        raise RevisionInputError(f"Unsupported scope {scope!r}.", loc=["scope"])
+
+    style_tokens = (
+        resolve_style_tokens(content.settings.style)
+        if content.settings.style is not None
+        else None
+    )
+
+    ops: list[Op] = []
+    updated_clip_ids: list[str] = []
+    karaoke_clips_updated = 0
+    karaoke_clips_cleared = 0
+
+    for clip in targets:
+        obj = clip.object
+        assert isinstance(obj, TextObject)
+        updates: dict[str, Any] = {}
+        if preset_id is not None:
+            token = copy_text_preset_token(TEXT_STYLE_PRESETS[preset_id])
+            if (
+                preset_id == "lower_third_tag"
+                and style_tokens is not None
+                and token["border"] is not None
+            ):
+                token["border"]["color"] = style_tokens["accent"]
+            updates.update(text_style_updates_from_token(token))
+
+        if color is not None:
+            updates["color"] = color.upper()
+        if font_size is not None:
+            updates["font_size"] = font_size
+        if background is not None:
+            updates["background"] = background.upper()
+        if background_mode is not None:
+            updates["background_mode"] = background_mode
+        if background_opacity is not None:
+            updates["background_opacity"] = background_opacity
+        if align is not None:
+            updates["align"] = align
+        if secondary_line_scale is not None:
+            updates["secondary_line_scale"] = secondary_line_scale
+
+        new_style = obj.style.model_copy(update=updates)
+        if background_mode in ("pill", "line") and new_style.background_padding == (0.0, 0.0):
+            default_pad = (24.0, 10.0) if background_mode == "pill" else (20.0, 8.0)
+            default_rad = 12.0 if background_mode == "pill" else 4.0
+            new_style = new_style.model_copy(
+                update={
+                    "background_padding": default_pad,
+                    "background_radius": new_style.background_radius or default_rad,
+                }
+            )
+
+        had_karaoke = any(a.animation_id.startswith("karaoke_") for a in clip.animations)
+        kept_anims = [a for a in clip.animations if not a.animation_id.startswith("karaoke_")]
+        new_animations = list(clip.animations)
+
+        if preset_id == "karaoke_focus":
+            eff_highlight = (
+                highlight_color.upper()
+                if highlight_color is not None
+                else (style_tokens["accent"] if style_tokens is not None else KARAOKE_DEFAULT_HIGHLIGHT_COLOR)
+            )
+            karaoke_anims = _build_karaoke_animations(
+                content,
+                clip,
+                base_color=new_style.color,
+                highlight_color=eff_highlight,
+                word_timings=word_timings,
+            )
+            new_animations = kept_anims + karaoke_anims
+            karaoke_clips_updated += 1
+        elif preset_id is not None and had_karaoke:
+            new_animations = kept_anims
+            karaoke_clips_cleared += 1
+        elif preset_id is None and highlight_color is not None and had_karaoke:
+            karaoke_anims = _build_karaoke_animations(
+                content,
+                clip,
+                base_color=new_style.color,
+                highlight_color=highlight_color.upper(),
+                word_timings=word_timings,
+            )
+            new_animations = kept_anims + karaoke_anims
+            karaoke_clips_updated += 1
+
+        if new_style != obj.style or new_animations != clip.animations:
+            updated_obj = obj.model_copy(update={"style": new_style})
+            ops.append(
+                UpdateClip(
+                    op="update_clip",
+                    clip_id=clip.clip_id,
+                    object=updated_obj,
+                    animations=new_animations,
+                )
+            )
+            updated_clip_ids.append(clip.clip_id)
+
+    summary: dict[str, Any] = {
+        "scope": scope,
+        "preset_id": preset_id,
+        "clips_updated": len(updated_clip_ids),
+        "updated_clip_ids": updated_clip_ids,
+        "independent_captions_preserved": independent_captions_preserved,
+        "non_caption_text_preserved": non_caption_text_preserved,
+        "karaoke_clips_updated": karaoke_clips_updated,
+        "karaoke_clips_cleared": karaoke_clips_cleared,
+    }
+    return ops, summary
+
+
+def apply_text_style(
+    content: CompositionContent,
+    **kwargs: Any,
+) -> tuple[CompositionContent, dict[str, Any]]:
+    """Pure deterministic text/caption style transformation returning (new_content, summary)."""
+    ops, summary = apply_text_style_ops(content, **kwargs)
+    updated = apply_ops(content, ops, {}) if ops else content.model_copy(deep=True)
+    return updated, summary
+
+
 __all__ = [
     "AddAudioEffectOp",
     "AddNarrationOp",
@@ -1009,6 +1438,8 @@ __all__ = [
     "SetNarrationOp",
     "SetTextOp",
     "apply_composition_style",
+    "apply_text_style",
+    "apply_text_style_ops",
     "expand_revision_op",
     "set_composition_style_ops",
     "set_narration_ops",

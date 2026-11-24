@@ -16,6 +16,7 @@ from app.editing.schemas import (
     speech_text_digest,
 )
 from app.editing.source_selection import SourceSentence
+from app.editing.text_presets import default_caption_text_style
 from app.editing.timing import seconds_to_ticks, source_ticks_to_output_ticks
 
 
@@ -35,6 +36,12 @@ def source_caption_ops(
     if any(track.track_id == track_id for track in content.timeline.tracks):
         raise ValueError(f"caption track {track_id!r} already exists")
     timebase = content.settings.timebase
+    default_style = default_caption_text_style(
+        content.settings,
+        font_size=max(28, round(content.settings.width * 38 / 1920)),
+        align="center",
+        line_height=1.3,
+    )
     ops: list[Op] = []
     clips: list[Clip] = []
     for sentence in sentences:
@@ -69,14 +76,7 @@ def source_caption_ops(
                     width=content.settings.width * 0.84,
                     height=130,
                 ),
-                style=TextStyle(
-                    font_size=max(28, round(content.settings.width * 38 / 1920)),
-                    color="#FFFFFF",
-                    background=None,
-                    weight=600,
-                    align="center",
-                    line_height=1.3,
-                ),
+                style=default_style.model_copy(deep=True),
                 caption=SourceCaptionDerivation(
                     snapshot_id=snapshot_id,
                     snapshot_digest=snapshot_digest,

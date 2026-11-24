@@ -149,6 +149,15 @@ class FontRef(BaseModel):
     digest: str = FONT_SET_DIGEST
 
 
+class TextBorder(BaseModel):
+    """与渲染器无关的文字底块边框，宽度以画布像素计。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    color: str = _HEX_COLOR
+    width: float = Field(ge=0.0, le=16.0, description="边框宽度，单位为画布像素。")
+
+
 class TextStroke(BaseModel):
     """与渲染器无关的文字描边，宽度以画布像素计。"""
 
@@ -168,6 +177,9 @@ class TextShadow(BaseModel):
     blur: float = Field(ge=0, le=100, description="阴影模糊半径，单位为画布像素。")
 
 
+_PADDING_PX = Annotated[float, Field(ge=0.0, le=120.0)]
+
+
 class TextStyle(BaseModel):
     """使用封闭的文字样式集合，不接受自由 CSS（§11.1）。"""
 
@@ -176,12 +188,36 @@ class TextStyle(BaseModel):
     font_size: int = Field(gt=0, le=400, description="字号，单位为画布像素。")
     color: str = _HEX_COLOR
     background: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$")
+    background_mode: Literal["box", "pill", "line"] = Field(
+        default="box", exclude_if=lambda v: v == "box"
+    )
+    background_opacity: float = Field(
+        default=1.0, ge=0.0, le=1.0, exclude_if=lambda v: v == 1.0
+    )
+    background_padding: tuple[_PADDING_PX, _PADDING_PX] = Field(
+        default=(0.0, 0.0), exclude_if=lambda v: v == (0.0, 0.0)
+    )
+    background_radius: float = Field(
+        default=0.0, ge=0.0, le=999.0, exclude_if=lambda v: v == 0.0
+    )
+    border: TextBorder | None = Field(
+        default=None, exclude_if=lambda v: v is None
+    )
     weight: Literal[400, 500, 600, 700, 800, 900] = 600
     align: Literal["left", "center", "right"] = "left"
     line_height: float = Field(default=1.2, gt=0, description="相对字号的行高倍数，不使用像素。")
     letter_spacing: float = Field(
         default=0.0, ge=-0.2, le=0.5,
         description="相对字号的字间距，单位为 em，有效范围 [-0.2, 0.5]。不要填像素或未经换算的像素数。",
+    )
+    text_transform: Literal["none", "uppercase"] = Field(
+        default="none", exclude_if=lambda v: v == "none"
+    )
+    secondary_line_scale: float = Field(
+        default=1.0, ge=0.4, le=1.0, exclude_if=lambda v: v == 1.0
+    )
+    secondary_line_opacity: float = Field(
+        default=1.0, ge=0.2, le=1.0, exclude_if=lambda v: v == 1.0
     )
     stroke: TextStroke | None = None
     shadow: TextShadow | None = None

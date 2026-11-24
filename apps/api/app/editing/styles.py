@@ -17,6 +17,14 @@ from typing import Any, Literal, TypedDict
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.editing.text_presets import (
+    TEXT_STYLE_PRESETS,
+    TextShadowToken,
+    TextStrokeToken,
+    TextStylePresetToken,
+    copy_text_preset_token,
+)
+
 StylePresetId = Literal[
     "institutional_dark",
     "swiss_paper",
@@ -89,23 +97,9 @@ class CompositionStyle(BaseModel):
     )
 
 
-class CaptionStrokeToken(TypedDict):
-    color: str
-    width: float
-
-
-class CaptionShadowToken(TypedDict):
-    color: str
-    offset: list[float]
-    blur: float
-
-
-class CaptionStyleToken(TypedDict):
-    color: str
-    weight: Literal[400, 700, 900]
-    background: str | None
-    stroke: CaptionStrokeToken | None
-    shadow: CaptionShadowToken | None
+CaptionStrokeToken = TextStrokeToken
+CaptionShadowToken = TextShadowToken
+CaptionStyleToken = TextStylePresetToken
 
 
 class ResolvedStyleTokens(TypedDict):
@@ -147,13 +141,7 @@ STYLE_PRESETS: dict[StylePresetId, ResolvedStyleTokens] = {
         "headline_treatment": "clean",
         "heading_weight": 700,
         "default_transition": "crossfade",
-        "caption_style": {
-            "color": "#F8FAFC",
-            "weight": 700,
-            "background": None,
-            "stroke": {"color": "#0A0F16", "width": 3.0},
-            "shadow": {"color": "#0A0F16", "offset": [0.0, 2.0], "blur": 8.0},
-        },
+        "caption_style": copy_text_preset_token(TEXT_STYLE_PRESETS["clean_broadcast"]),
     },
     "swiss_paper": {
         "preset_id": "swiss_paper",
@@ -172,13 +160,7 @@ STYLE_PRESETS: dict[StylePresetId, ResolvedStyleTokens] = {
         "headline_treatment": "swiss_rule",
         "heading_weight": 700,
         "default_transition": "wipe_reveal",
-        "caption_style": {
-            "color": "#111820",
-            "weight": 700,
-            "background": None,
-            "stroke": {"color": "#F6F5F0", "width": 4.0},
-            "shadow": None,
-        },
+        "caption_style": copy_text_preset_token(TEXT_STYLE_PRESETS["minimal_light"]),
     },
     "vox_editorial": {
         "preset_id": "vox_editorial",
@@ -197,13 +179,7 @@ STYLE_PRESETS: dict[StylePresetId, ResolvedStyleTokens] = {
         "headline_treatment": "highlight_tape",
         "heading_weight": 900,
         "default_transition": "wipe_reveal",
-        "caption_style": {
-            "color": "#FFFDF7",
-            "weight": 700,
-            "background": "#141413",
-            "stroke": None,
-            "shadow": None,
-        },
+        "caption_style": copy_text_preset_token(TEXT_STYLE_PRESETS["vox_label"]),
     },
     "kinetic_anime": {
         "preset_id": "kinetic_anime",
@@ -222,13 +198,7 @@ STYLE_PRESETS: dict[StylePresetId, ResolvedStyleTokens] = {
         "headline_treatment": "outlined_impact",
         "heading_weight": 900,
         "default_transition": "whip_pan",
-        "caption_style": {
-            "color": "#FFFFFF",
-            "weight": 900,
-            "background": None,
-            "stroke": {"color": "#0D0B14", "width": 4.0},
-            "shadow": {"color": "#0D0B14", "offset": [3.0, 3.0], "blur": 0.0},
-        },
+        "caption_style": copy_text_preset_token(TEXT_STYLE_PRESETS["kinetic_impact"]),
     },
 }
 
@@ -370,24 +340,9 @@ def ensure_contrast_text(
 def resolve_style_tokens(style: CompositionStyle) -> ResolvedStyleTokens:
     """Deterministically expand a CompositionStyle into closed render tokens."""
     preset = STYLE_PRESETS[style.preset_id]
-    caption_raw = preset["caption_style"]
     tokens: ResolvedStyleTokens = {
         **preset,
-        "caption_style": {
-            "color": caption_raw["color"],
-            "weight": caption_raw["weight"],
-            "background": caption_raw["background"],
-            "stroke": dict(caption_raw["stroke"]) if caption_raw["stroke"] is not None else None,
-            "shadow": (
-                {
-                    "color": caption_raw["shadow"]["color"],
-                    "offset": list(caption_raw["shadow"]["offset"]),
-                    "blur": caption_raw["shadow"]["blur"],
-                }
-                if caption_raw["shadow"] is not None
-                else None
-            ),
-        },
+        "caption_style": copy_text_preset_token(preset["caption_style"]),
     }
 
     theme_changed = style.theme is not None and style.theme != preset["theme"]
@@ -400,22 +355,10 @@ def resolve_style_tokens(style: CompositionStyle) -> ResolvedStyleTokens:
         tokens["secondary_ink"] = base["secondary_ink"]
         tokens["line_color"] = base["line_color"]
         if tokens["caption_style"]["background"] is None:
-            if style.theme == "dark":
-                tokens["caption_style"] = {
-                    "color": "#F8FAFC",
-                    "weight": tokens["caption_style"]["weight"],
-                    "background": None,
-                    "stroke": {"color": "#0A0F16", "width": 3.0},
-                    "shadow": {"color": "#0A0F16", "offset": [0.0, 2.0], "blur": 8.0},
-                }
-            else:
-                tokens["caption_style"] = {
-                    "color": "#111820",
-                    "weight": tokens["caption_style"]["weight"],
-                    "background": None,
-                    "stroke": {"color": "#F6F5F0", "width": 4.0},
-                    "shadow": None,
-                }
+            preserved_weight = tokens["caption_style"]["weight"]
+            fallback_id = "clean_broadcast" if style.theme == "dark" else "minimal_light"
+            tokens["caption_style"] = copy_text_preset_token(TEXT_STYLE_PRESETS[fallback_id])
+            tokens["caption_style"]["weight"] = preserved_weight
 
     if style.backdrop_style is not None:
         tokens["backdrop_style"] = style.backdrop_style

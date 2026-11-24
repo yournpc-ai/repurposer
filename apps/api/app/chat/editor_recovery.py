@@ -19,6 +19,7 @@ EDIT_LABELS = {
     "insert_motion_block": ("加入动效组件", "insert motion block"),
     "update_motion_block": ("调整动效组件", "update motion block"),
     "set_composition_style": ("切换整片视觉风格", "apply visual style"),
+    "apply_text_style": ("调整文字与字幕样式", "style text and captions"),
     "edit_audio_clip": ("调整音频片段", "edit audio clip"),
     "set_transition": ("设置转场", "set transition"),
     "insert_visual": ("插入图片", "insert image"),

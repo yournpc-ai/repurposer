@@ -114,7 +114,10 @@ function buildPreviewSpec(skin: SkinBlock): VideoSpec {
     layout: { x: 54, y: Math.max(0, position.y * 1920 - 90), width: 972, height: 180 },
     style: {
       font_size: size, color: skin.captionColor, background: null,
+      background_mode: "box", background_opacity: 1, background_padding: [0, 0],
+      background_radius: 0, border: null,
       weight: 600, align: "center", line_height: 1.3, letter_spacing: 0,
+      text_transform: "none", secondary_line_scale: 1, secondary_line_opacity: 1,
       stroke: null, shadow: null, font: { font_id: "noto-sans-sc", digest: "85571c8f24f75610320baf3cec0302ba4766b15cea9efc9782b38ecc2b96511c" },
     },
     transform: { x: 0, y: 0, scale: 1, rotation: 0, origin: "center" },

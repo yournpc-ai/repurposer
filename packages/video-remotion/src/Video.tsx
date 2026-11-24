@@ -23,6 +23,7 @@ import {
   type VideoTextObject,
   type VideoTextPart,
 } from "@repurposer/video-spec";
+import { hexToRgba } from "./engine/math";
 import { evaluateTransition } from "./engine/transitions";
 import { MotionBlockView } from "./MotionBlocks";
 
@@ -232,6 +233,8 @@ function textPartStyle(
     ...textPaintStyle(clip, frame, part.part_id),
     display: line ? "block" : "inline-block",
     whiteSpace: line ? "pre-wrap" : "pre",
+    position: !line && scale !== 1 ? "relative" : undefined,
+    zIndex: !line && scale > 1.001 ? 2 : undefined,
     opacity,
     filter: blur > 0 ? `blur(${blur}px)` : undefined,
     letterSpacing: `${letterSpacing}em`,
@@ -258,12 +261,60 @@ function targetedParts(
 const TextLine: React.FC<{
   clip: VideoClip & { object: VideoTextObject };
   line: VideoTextPart;
+  lineIndex: number;
   granular: "word" | "grapheme" | null;
   frame: number;
-}> = ({ clip, line, granular, frame }) => {
+  lineChipStyle?: React.CSSProperties;
+}> = ({ clip, line, lineIndex, granular, frame, lineChipStyle }) => {
   const object = clip.object;
+  const bgMode = object.style.background_mode ?? "box";
+  const secondaryScale = object.style.secondary_line_scale ?? 1;
+  const secondaryOpacity = object.style.secondary_line_opacity ?? 1;
+  const isSecondary = lineIndex >= 1 && (secondaryScale < 1 || secondaryOpacity < 1);
+  const partStyle = textPartStyle(clip, line, frame, true);
+  const baseOpacity = typeof partStyle.opacity === "number" ? partStyle.opacity : 1;
+  const baseStrokeWidth =
+    typeof partStyle.WebkitTextStrokeWidth === "number" ? partStyle.WebkitTextStrokeWidth : 0;
+  const secondaryOverrides: React.CSSProperties = isSecondary
+    ? {
+        fontSize:
+          secondaryScale < 1
+            ? Math.max(12, Math.round(object.style.font_size * secondaryScale))
+            : undefined,
+        opacity: baseOpacity * secondaryOpacity,
+        marginTop:
+          bgMode !== "line"
+            ? Math.max(4, Math.round(object.style.font_size * 0.14))
+            : undefined,
+        ...(baseStrokeWidth > 0 && secondaryScale < 1
+          ? {
+              WebkitTextStrokeWidth: Math.max(
+                1.5,
+                Math.round(baseStrokeWidth * secondaryScale * 10) / 10,
+              ),
+            }
+          : {}),
+      }
+    : {};
+  const layoutOverrides: React.CSSProperties =
+    bgMode === "line"
+      ? {
+          display: "inline-block",
+          width: "fit-content",
+          maxWidth: "100%",
+          boxSizing: "border-box",
+          ...lineChipStyle,
+        }
+      : bgMode === "pill"
+        ? { width: "fit-content", maxWidth: "100%" }
+        : { width: "100%" };
+  const mergedLineStyle: React.CSSProperties = {
+    ...partStyle,
+    ...layoutOverrides,
+    ...secondaryOverrides,
+  };
   if (!granular) {
-    return <div style={textPartStyle(clip, line, frame, true)}>{line.text || "​"}</div>;
+    return <div style={mergedLineStyle}>{line.text || "\u200b"}</div>;
   }
   const parts = targetedParts(object, granular, line);
   const chars = Array.from(object.text);
@@ -284,8 +335,8 @@ const TextLine: React.FC<{
     cursor = part.text_range.end;
   }
   if (cursor < line.text_range.end) children.push(chars.slice(cursor, line.text_range.end).join(""));
-  if (children.length === 0) children.push("​");
-  return <div style={textPartStyle(clip, line, frame, true)}>{children}</div>;
+  if (children.length === 0) children.push("\u200b");
+  return <div style={mergedLineStyle}>{children}</div>;
 };
 
 const TextObjectView: React.FC<{
@@ -313,30 +364,87 @@ const TextObjectView: React.FC<{
     evaluateProperty(clip.animations, object.object_id, "text.letter_spacing", frame),
     object.style.letter_spacing,
   );
+  const bgMode = object.style.background_mode ?? "box";
+  const bgOpacity = object.style.background_opacity ?? 1;
+  const [padX, padY] = object.style.background_padding ?? [0, 0];
+  const bgRadius = object.style.background_radius ?? 0;
+  const border = object.style.border ?? null;
+  const textTransform = object.style.text_transform ?? "none";
+
+  const bgColor = object.style.background
+    ? bgOpacity < 1
+      ? hexToRgba(object.style.background, bgOpacity)
+      : object.style.background
+    : null;
+  const paddingCss = padX > 0 || padY > 0 ? `${padY}px ${padX}px` : undefined;
+  const radiusCss = bgRadius > 0 ? bgRadius : undefined;
+  const borderCss =
+    border && border.width > 0 ? `${border.width}px solid ${border.color}` : undefined;
+  const surfaceStyle: React.CSSProperties = {
+    background: bgColor ?? "transparent",
+    padding: paddingCss,
+    borderRadius: radiusCss,
+    border: borderCss,
+  };
+  const alignItems: React.CSSProperties["alignItems"] =
+    object.style.align === "center"
+      ? "center"
+      : object.style.align === "right"
+        ? "flex-end"
+        : "flex-start";
+
+  const lineElements = lines.map((line, lineIndex) => (
+    <TextLine
+      key={line.part_id}
+      clip={clip}
+      line={line}
+      lineIndex={lineIndex}
+      granular={granular}
+      frame={frame}
+      lineChipStyle={bgMode === "line" ? surfaceStyle : undefined}
+    />
+  ));
+
   return (
     <div
       style={{
         ...wholeObjectStyle(clip, frame),
         ...textPaintStyle(clip, frame),
-        background: object.style.background ?? "transparent",
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "center",
+        alignItems,
+        boxSizing: "border-box",
+        gap:
+          bgMode === "line" ? Math.max(6, Math.round(object.style.font_size * 0.16)) : undefined,
+        ...(bgMode === "box" ? surfaceStyle : { background: "transparent" }),
         fontFamily: families.map((resource) => resource.family).join(", "),
         fontSynthesis: "none",
         fontSize: object.style.font_size,
         textAlign: object.style.align,
+        textTransform: textTransform === "uppercase" ? "uppercase" : undefined,
         letterSpacing: `${letterSpacing}em`,
         lineHeight: object.style.line_height,
         whiteSpace: "pre-wrap",
       }}
     >
-      {lines.map((line) => (
-        <TextLine
-          key={line.part_id}
-          clip={clip}
-          line={line}
-          granular={granular}
-          frame={frame}
-        />
-      ))}
+      {bgMode === "pill" ? (
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems,
+            width: "fit-content",
+            maxWidth: "100%",
+            boxSizing: "border-box",
+            ...surfaceStyle,
+          }}
+        >
+          {lineElements}
+        </div>
+      ) : (
+        lineElements
+      )}
     </div>
   );
 };

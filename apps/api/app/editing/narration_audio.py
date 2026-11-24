@@ -18,6 +18,7 @@ from app.editing.schemas import (
     Track,
     speech_text_digest,
 )
+from app.editing.text_presets import default_caption_text_style
 from app.editing.timing import source_ticks_to_output_ticks
 
 
@@ -94,6 +95,12 @@ def narration_audio_ops(
                 clips=[],
             ),
         ))
+    default_style = default_caption_text_style(
+        content.settings,
+        font_size=max(28, round(content.settings.width * 38 / 1920)),
+        align="center",
+        line_height=1.3,
+    )
     for sentence, source_start, source_end in caption_sentences:
         output_start = scene.range.start + source_ticks_to_output_ticks(
             source_start, content.settings.timebase
@@ -122,14 +129,7 @@ def narration_audio_ops(
                         width=content.settings.width * 0.84,
                         height=130,
                     ),
-                    style=TextStyle(
-                        font_size=max(28, round(content.settings.width * 38 / 1920)),
-                        color="#FFFFFF",
-                        background=None,
-                        weight=600,
-                        align="center",
-                        line_height=1.3,
-                    ),
+                    style=default_style.model_copy(deep=True),
                     caption=SourceCaptionDerivation(
                         snapshot_id=snapshot_id,
                         snapshot_digest=snapshot_digest,

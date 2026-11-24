@@ -164,3 +164,46 @@ test("video-spec accepts optional closed style tokens and keeps legacy specs sty
     }),
   );
 });
+
+test("text style closed primitives default cleanly for legacy specs and validate pill/line/bilingual fields", () => {
+  const legacy = videoSpecSchema.parse(textSpec());
+  const legacyObj = legacy.tracks[0].clips[0].object;
+  assert.equal(legacyObj.kind, "text");
+  if (legacyObj.kind === "text") {
+    assert.equal(legacyObj.style.background_mode, "box");
+    assert.equal(legacyObj.style.background_opacity, 1);
+    assert.deepEqual(legacyObj.style.background_padding, [0, 0]);
+    assert.equal(legacyObj.style.background_radius, 0);
+    assert.equal(legacyObj.style.border, null);
+    assert.equal(legacyObj.style.text_transform, "none");
+    assert.equal(legacyObj.style.secondary_line_scale, 1);
+    assert.equal(legacyObj.style.secondary_line_opacity, 1);
+  }
+
+  const rich = textSpec();
+  Object.assign(rich.tracks[0].clips[0].object.style, {
+    background: "#0B1016",
+    background_mode: "pill",
+    background_opacity: 0.72,
+    background_padding: [26, 10],
+    background_radius: 12,
+    border: { color: "#14B8A6", width: 2 },
+    text_transform: "uppercase",
+    secondary_line_scale: 0.72,
+    secondary_line_opacity: 0.86,
+  });
+  const parsedRich = videoSpecSchema.parse(rich);
+  const richObj = parsedRich.tracks[0].clips[0].object;
+  assert.equal(richObj.kind, "text");
+  if (richObj.kind === "text") {
+    assert.equal(richObj.style.background_mode, "pill");
+    assert.equal(richObj.style.background_opacity, 0.72);
+    assert.deepEqual(richObj.style.background_padding, [26, 10]);
+    assert.equal(richObj.style.border?.width, 2);
+    assert.equal(richObj.style.secondary_line_scale, 0.72);
+  }
+
+  const badMode = textSpec();
+  Object.assign(badMode.tracks[0].clips[0].object.style, { background_mode: "floating" });
+  assert.throws(() => videoSpecSchema.parse(badMode));
+});

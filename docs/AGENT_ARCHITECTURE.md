@@ -9,6 +9,7 @@
 | 图片、旁白、音乐 | MediaJob 复用媒体领域实现，固定 SourceSnapshot，结算已有钱包 | 项目、opening、call、Job、claim_token |
 | 音效合成 | `generate_sfx` 经 `apps/render` 调 `@repurposer/sound-engine` v2 零积分确定性合成 48 kHz WAV，固定为 SourceSnapshot | owner、project、spec_sha256、wav_digest |
 | 整片风格换装 | `set_composition_style` 经 `apply_composition_edits` 原子切换 `settings.style`、画布底色、Motion Block 继承与派生字幕（保护 `independent` 字幕与全部音频轨不动） | 原生调用、版本、风格回执 |
+| 文字与字幕样式 | `apply_text_style` 经 `apply_composition_edits` 按 `clip`/`track`/`all_derived_captions` 原子套用 11 套行业文字/字幕预设（含 `bilingual_cinema` 单 Clip 双语排版与 `karaoke_focus` 逐词 `TextPart` 动画），严格保护 `independent` 字幕、非字幕文字与音频轨 | 原生调用、版本、样式回执 |
 | 模板固化与换料 | `save_composition_as_skill` 脱敏提取 `slot_blueprint_v1`（含 `blueprint.style`）；`instantiate_skill_blueprint` 按槽位与可选 `style_preset`/`accent_color` 跨风格换料并原子提交新版本 | SkillVersion、blueprint digest、CompositionVersion |
 | 正式导出 | ExportJob 锁定版本，Renderer 上传后核对 MP4，提交 Output、资金和回执 | 版本、Job、对象 key、实际字节摘要 |
 | 审阅、交付 | review_video 读取实际 Output，deliver_video 核对已审阅身份 | 持久消息、版本和 Output 引用 |
@@ -26,7 +27,7 @@
 
 ## Chat 对话过程呈现契约与视频编辑提示词组织
 
-- **视频编辑系统提示词（`apps/api/app/prompts/chat/video_editor.j2`）**：`assemble_video_round` 复用共享的 `_identity_menu.j2`、`_interaction_constitution.j2` 与 `_markdown_speech.j2`，以 5 节结构化 Markdown 明确 5 步剪辑闭环、双主时钟 Beat Sheet、正交风格包与多轨声画/自检纪律、局部修订/Skill 规则及硬安全边界；所有工具参数语法、4 套风格包、13 个 Motion Block 与 22 个 v2 音效配方归位到 `app/chat/editor.py` Schema 与 `creative_catalog`。
+- **视频编辑系统提示词（`apps/api/app/prompts/chat/video_editor.j2`）**：`assemble_video_round` 复用共享的 `_identity_menu.j2`、`_interaction_constitution.j2` 与 `_markdown_speech.j2`，以 5 节结构化 Markdown 明确 5 步剪辑闭环、双主时钟 Beat Sheet、正交风格包与多轨声画/自检纪律、局部修订/Skill 规则及硬安全边界；所有工具参数语法、4 套风格包、11 套文字与字幕预设、13 个 Motion Block 与 22 个 v2 音效配方归位到 `app/chat/editor.py` Schema 与 `creative_catalog`。
 - **脱敏中段播报与三段式无框工作轨（`tool_loop.py` + `timeline/liveState.ts` + `ActivityStream.tsx`）**：
   - 服务端在存在 `editor_labels` 时保持关闭原始 `on_delta` 防内部 ID 泄露，同时保留经 `project_editor_reply` 脱敏后的阶段说明经 `on_interim_prose` 持久并实时下发；
   - 前端以纯状态机 `timeline/liveState.ts` 统一驱动基于 `@affectui/thinking-state-clean` 的三段式体验：① **直播期（`live_working`）**默认展开，工具步骤（覆盖全部 46 个高频工具双语动词，详细回执按行折叠）与同事口吻阶段说明自然交替呈现；② **末段思考期（`live_post_tool_thinking`）**在工具全部结算后、最终回复吐字前平滑展示实时计时 `Thinking Xs` 状态行；③ **终态（`settled`）**自动将全过程收拢为单条无框 `Worked for Xs ›` 置于最终回复正文上方，点击可完整回溯。真实交互与交付实体（`ask_user` 决策卡、单层 `ApprovalCard`、音频候选、固定 Output 交付卡、孤立终态失败）始终独立留驻、不被吞并。

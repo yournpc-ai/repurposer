@@ -560,11 +560,11 @@ def _expand_caption_phrases(
         raise PresetError("caption-phrases needs a visual caption track")
     width, height = content.settings.width, content.settings.height
     layout = params.layout or LayoutBox(x=160.0, y=float(height - 170), width=float(width - 320), height=120.0)
-    style = params.style or TextStyle(
+    from app.editing.text_presets import default_caption_text_style
+
+    style = params.style or default_caption_text_style(
+        content.settings,
         font_size=max(24, round(width * 34 / 1920)),
-        color="#FFFFFF",
-        background="#000000",
-        weight=600,
         align="center",
         line_height=1.3,
     )

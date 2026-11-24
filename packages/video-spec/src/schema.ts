@@ -48,6 +48,13 @@ const fontResourceSchema = z
   })
   .strict();
 
+const textBorderSchema = z
+  .object({
+    color: hexColor,
+    width: z.number().finite().min(0).max(16),
+  })
+  .strict();
+
 const textStrokeSchema = z
   .object({
     color: hexColor,
@@ -63,11 +70,21 @@ const textShadowSchema = z
   })
   .strict();
 
+export const textBackgroundModes = ["box", "pill", "line"] as const;
+export const textTransforms = ["none", "uppercase"] as const;
+
 const textStyleSchema = z
   .object({
     font_size: z.number().int().positive().max(400),
     color: hexColor,
     background: hexColor.nullable(),
+    background_mode: z.enum(textBackgroundModes).default("box"),
+    background_opacity: z.number().finite().min(0).max(1).default(1),
+    background_padding: z
+      .tuple([z.number().finite().min(0).max(120), z.number().finite().min(0).max(120)])
+      .default([0, 0]),
+    background_radius: z.number().finite().min(0).max(999).default(0),
+    border: textBorderSchema.nullable().default(null),
     weight: z.union([
       z.literal(400),
       z.literal(500),
@@ -79,6 +96,9 @@ const textStyleSchema = z
     align: z.enum(["left", "center", "right"]),
     line_height: z.number().finite().positive(),
     letter_spacing: z.number().finite().min(-0.2).max(0.5).default(0),
+    text_transform: z.enum(textTransforms).default("none"),
+    secondary_line_scale: z.number().finite().min(0.4).max(1).default(1),
+    secondary_line_opacity: z.number().finite().min(0.2).max(1).default(1),
     stroke: textStrokeSchema.nullable().default(null),
     shadow: textShadowSchema.nullable().default(null),
     font: fontRefSchema,
@@ -448,10 +468,27 @@ export const headlineTreatments = [
 const videoCaptionStyleSchema = z
   .object({
     color: hexColor,
-    weight: z.union([z.literal(400), z.literal(700), z.literal(900)]),
+    weight: z.union([
+      z.literal(400),
+      z.literal(500),
+      z.literal(600),
+      z.literal(700),
+      z.literal(800),
+      z.literal(900),
+    ]),
     background: hexColor.nullable(),
+    background_mode: z.enum(textBackgroundModes).default("box"),
+    background_opacity: z.number().finite().min(0).max(1).default(1),
+    background_padding: z
+      .tuple([z.number().finite().min(0).max(120), z.number().finite().min(0).max(120)])
+      .default([0, 0]),
+    background_radius: z.number().finite().min(0).max(999).default(0),
+    border: textBorderSchema.nullable().default(null),
     stroke: textStrokeSchema.nullable(),
     shadow: textShadowSchema.nullable(),
+    text_transform: z.enum(textTransforms).default("none"),
+    secondary_line_scale: z.number().finite().min(0.4).max(1).default(1),
+    secondary_line_opacity: z.number().finite().min(0.2).max(1).default(1),
   })
   .strict();
 
