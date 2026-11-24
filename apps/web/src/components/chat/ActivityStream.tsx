@@ -6,6 +6,7 @@ import { ChevronRight, Film, TriangleAlert } from "lucide-react"
 
 import type {
   ActivityReceipt,
+  ActivitySemanticDetail,
   WorkTrailEntry,
   ActivityRowFrame,
   ComponentClipReceipt,
@@ -35,6 +36,114 @@ const LazySlotPreviewDialog = lazy(() =>
 
 export type { NowRowPayload } from "./timeline/types"
 
+function lookupSemanticToken(t: TFunction, key: string): string | null {
+  const value = t(key, { defaultValue: "" })
+  if (!value || value === key) return null
+  return value
+}
+
+export function semanticActivityLabel(
+  detail: ActivitySemanticDetail | undefined,
+  completed: boolean,
+  t: TFunction,
+): string | null {
+  if (!detail) return null
+  const done = completed ? "Done" : ""
+  const sep = lookupSemanticToken(t, "chat.activitySemantic.listSep") ?? " / "
+  const withWindow = (base: string, window?: string) =>
+    window ? t("chat.activitySemantic.withWindow", { base, window, defaultValue: `${base} (${window})` }) : base
+
+  switch (detail.kind) {
+    case "style": {
+      if (!detail.preset) return null
+      const preset = lookupSemanticToken(t, `chat.activitySemantic.styles.${detail.preset}`)
+      if (!preset) return null
+      return t(`chat.activitySemantic.style${done}`, { preset })
+    }
+    case "motion_block_insert": {
+      if (!detail.block) return null
+      const block = lookupSemanticToken(t, `chat.activitySemantic.blocks.${detail.block}`)
+      if (!block) return null
+      return detail.window
+        ? t(`chat.activitySemantic.motionBlockInsertWindow${done}`, { block, window: detail.window })
+        : t(`chat.activitySemantic.motionBlockInsert${done}`, { block })
+    }
+    case "motion_block_update": {
+      const aspects = (detail.aspects ?? [])
+        .map((a) => lookupSemanticToken(t, `chat.activitySemantic.aspects.${a}`))
+        .filter((v): v is string => Boolean(v))
+      return aspects.length > 0
+        ? t(`chat.activitySemantic.motionBlockUpdateAspects${done}`, { aspects: aspects.join(sep) })
+        : t(`chat.activitySemantic.motionBlockUpdate${done}`)
+    }
+    case "text_caption_from_audio": {
+      const preset = detail.preset
+        ? lookupSemanticToken(t, `chat.activitySemantic.textPresets.${detail.preset}`)
+        : null
+      return preset
+        ? t(`chat.activitySemantic.textCaptionFromAudioPreset${done}`, { preset })
+        : t(`chat.activitySemantic.textCaptionFromAudio${done}`)
+    }
+    case "text_insert": {
+      const preset = detail.preset
+        ? lookupSemanticToken(t, `chat.activitySemantic.textPresets.${detail.preset}`)
+        : null
+      const position = detail.position
+        ? lookupSemanticToken(t, `chat.activitySemantic.positions.${detail.position}`)
+        : null
+      if (detail.bilingual || detail.preset === "bilingual_cinema") {
+        const base = t(`chat.activitySemantic.textInsertBilingual${done}`)
+        return withWindow(base, detail.window)
+      }
+      if (preset && position) {
+        const base = t(`chat.activitySemantic.textInsertPresetPos${done}`, { position, preset })
+        return detail.snippet ? `${base} · ${detail.snippet}` : withWindow(base, detail.window)
+      }
+      if (preset) {
+        const base = t(`chat.activitySemantic.textInsertPreset${done}`, { preset })
+        return detail.snippet ? `${base} · ${detail.snippet}` : withWindow(base, detail.window)
+      }
+      const base = t(`chat.activitySemantic.textInsertGeneric${done}`)
+      const withText = detail.snippet ? `${base} · ${detail.snippet}` : base
+      return withWindow(withText, detail.window)
+    }
+    case "text_edit": {
+      const preset = detail.preset
+        ? lookupSemanticToken(t, `chat.activitySemantic.textPresets.${detail.preset}`)
+        : null
+      if (preset) {
+        return detail.scope === "all_derived_captions"
+          ? t(`chat.activitySemantic.textEditPresetCaptions${done}`, { preset })
+          : t(`chat.activitySemantic.textEditPreset${done}`, { preset })
+      }
+      if (detail.snippet) {
+        return t(`chat.activitySemantic.textEditSnippet${done}`, { snippet: detail.snippet })
+      }
+      return t(`chat.activitySemantic.textEditGeneric${done}`)
+    }
+    case "sfx": {
+      if (!detail.recipe) return null
+      const recipe = lookupSemanticToken(t, `chat.activitySemantic.sfxRecipes.${detail.recipe}`)
+      if (!recipe) return null
+      return t(`chat.activitySemantic.sfx${done}`, { recipe })
+    }
+    case "audio_edit": {
+      const aspects = (detail.aspects ?? [])
+        .map((a) => lookupSemanticToken(t, `chat.activitySemantic.aspects.${a}`))
+        .filter((v): v is string => Boolean(v))
+      return aspects.length > 0
+        ? t(`chat.activitySemantic.audioEditAspects${done}`, { aspects: aspects.join(sep) })
+        : t(`chat.activitySemantic.audioEdit${done}`)
+    }
+    case "transition": {
+      if (!detail.preset) return null
+      const preset = lookupSemanticToken(t, `chat.activitySemantic.transitions.${detail.preset}`)
+      if (!preset) return null
+      return t(`chat.activitySemantic.transition${done}`, { preset })
+    }
+  }
+}
+
 export function activityText(activity: NowRowPayload, t: TFunction): string {
   const { status } = activity
   if (activity.jobReceipt) {
@@ -44,6 +153,10 @@ export function activityText(activity: NowRowPayload, t: TFunction): string {
     }
   }
   if (activity.call_state === "queued") return t("agentReceipt.queued")
+  if ((status === "active" || status === "completed") && activity.detail) {
+    const semantic = semanticActivityLabel(activity.detail, status === "completed", t)
+    if (semantic) return semantic
+  }
   const action = activity.tool_name && TOOL_ACTIONS[activity.tool_name]
   if (!activity.key && action && (status === "active" || status === "completed")) {
     return t(`chat.activity.${action}${status === "completed" ? "Done" : ""}`)
@@ -510,7 +623,9 @@ function trailStep(entry: WorkTrailEntry, live: boolean, t: TFunction, onOpen?: 
   const toolLabel = tool ? t(`chat.toolName.${tool}`, { defaultValue: t("agentReceipt.job") }) : t("agentReceipt.job")
   let label = tool ? toolLabel : activityText(row, t)
   if (success || running) {
-    if (action) label = t(`chat.activity.${action}${success ? "Done" : ""}`)
+    const semantic = semanticActivityLabel(row.detail, success, t)
+    if (semantic) label = semantic
+    else if (action) label = t(`chat.activity.${action}${success ? "Done" : ""}`)
     else if (row.key) label = activityText(row, t)
   } else if (failed && !tool) {
     label = activityText({ ...row, status: "failed" }, t)

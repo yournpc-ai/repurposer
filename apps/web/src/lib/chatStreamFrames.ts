@@ -13,6 +13,7 @@
 
 import type {
   ActivityFramePayload,
+  ActivityRowFrame,
   CandidateMemberPayload,
   CandidateSurface,
   MessageBlock,
@@ -83,7 +84,8 @@ export interface RowAppendPayload {
  * the wire ``ActivityFramePayload`` minus its live-channel bookkeeping
  * (`seq` — the array position already carries order), plus the settle
  * merge's stamps. */
-export type ActivityRowFramePayload = Omit<ActivityFramePayload, "seq"> & {
+export type ActivityRowFramePayload = Omit<ActivityFramePayload, "seq" | "kind" | "focus"> & {
+  kind: ActivityRowFrame["kind"]
   seq?: number
 }
 

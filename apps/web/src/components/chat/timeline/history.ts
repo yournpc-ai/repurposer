@@ -16,6 +16,8 @@ import type { SkillReference } from "@/lib/skills"
 import type {
   ActivityReceipt,
   ActivityRowFrame,
+  ActivitySemanticDetail,
+  ActivitySemanticDetailKind,
   AudioCandidateReceipt,
   BriefAnswerItem,
   CandidateMemberPayload,
@@ -407,6 +409,39 @@ export function parseActivityReceipt(value: unknown): ActivityReceipt | undefine
  * Read tolerance: an off-shape frame parses to undefined and the ROW is
  * skipped by the caller (a malformed activity entry never becomes an empty
  * bubble). */
+const SEMANTIC_DETAIL_KINDS = new Set<ActivitySemanticDetailKind>([
+  "style",
+  "motion_block_insert",
+  "motion_block_update",
+  "text_insert",
+  "text_caption_from_audio",
+  "text_edit",
+  "sfx",
+  "audio_edit",
+  "transition",
+])
+
+export function parseActivitySemanticDetail(value: unknown): ActivitySemanticDetail | undefined {
+  const root = receiptRecord(value)
+  if (!root || typeof root.kind !== "string" || !SEMANTIC_DETAIL_KINDS.has(root.kind as ActivitySemanticDetailKind)) {
+    return undefined
+  }
+  const aspects = receiptStrings(root.aspects)?.filter((s) => s.length > 0)
+  return {
+    kind: root.kind as ActivitySemanticDetailKind,
+    preset: receiptString(root.preset),
+    block: receiptString(root.block),
+    recipe: receiptString(root.recipe),
+    position: receiptString(root.position),
+    role: receiptString(root.role),
+    scope: receiptString(root.scope),
+    snippet: receiptString(root.snippet),
+    window: receiptString(root.window),
+    aspects: aspects?.length ? aspects : undefined,
+    bilingual: root.bilingual === true ? true : undefined,
+  }
+}
+
 export function activityRowFrame(intent: unknown): ActivityRowFrame | undefined {
   const data = (intent ?? {}) as Record<string, unknown>
   if (data.type !== "activity") return undefined
@@ -441,6 +476,7 @@ export function activityRowFrame(intent: unknown): ActivityRowFrame | undefined 
     duration_ms: typeof d.duration_ms === "number" ? d.duration_ms : undefined,
     assetType: typeof d.asset_type === "string" ? d.asset_type : undefined,
     receipt: parseActivityReceipt(d.receipt),
+    detail: parseActivitySemanticDetail(d.detail),
   }
 }
 

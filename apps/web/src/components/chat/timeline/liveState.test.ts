@@ -65,6 +65,7 @@ describe("selectChatLiveState", () => {
     expect(state).toEqual({
       mode: "idle",
       nowRow: null,
+      liveFocus: null,
       liveWorkFoldKey: null,
       bottomNowRow: null,
       postToolThinkingStartedAtMs: null,
@@ -206,5 +207,50 @@ describe("selectChatLiveState", () => {
     expect(state.mode).toBe("live_working")
     expect(state.bottomNowRow?.key).toBe("chat.material.transcribing")
     expect(state.bottomNowRow?.name).toBe("demo.mp4")
+  })
+
+  it("surfaces trimmed liveFocus only while chatBusy and not streaming final prose", () => {
+    const busy = selectChatLiveState(
+      baseInput({
+        chatBusy: true,
+        liveFocus: "  正在将 6 幕脚本编排为 Vox 风格  ",
+      }),
+    )
+    expect(busy.liveFocus).toBe("正在将 6 幕脚本编排为 Vox 风格")
+
+    const idle = selectChatLiveState(
+      baseInput({
+        chatBusy: false,
+        liveFocus: "正在将 6 幕脚本编排为 Vox 风格",
+      }),
+    )
+    expect(idle.liveFocus).toBeNull()
+
+    const streaming = selectChatLiveState(
+      baseInput({
+        chatBusy: true,
+        proseActive: true,
+        liveFocus: "正在将 6 幕脚本编排为 Vox 风格",
+        messages: [{ id: "m1", role: "assistant", content: "已完成编排", streaming: true }],
+      }),
+    )
+    expect(streaming.mode).toBe("streaming_final")
+    expect(streaming.liveFocus).toBeNull()
+  })
+
+  it("ignores focus frames inside activities when determining active tool state", () => {
+    const fold = makeFold({ liveActivity: undefined, openTail: true })
+    const state = selectChatLiveState(
+      baseInput({
+        chatBusy: true,
+        conversationUnits: [fold],
+        activities: [
+          { activity_id: "__focus__", seq: 1, kind: "focus", status: "active", key: null, focus: "正在编排" },
+        ],
+        currentActivityRowKeys: new Set(["act-1"]),
+      }),
+    )
+    expect(state.mode).toBe("live_post_tool_thinking")
+    expect(state.nowRow?.kind).toBe("think")
   })
 })

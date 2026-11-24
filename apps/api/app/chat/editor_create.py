@@ -71,7 +71,13 @@ class CreateVideoArgs(BaseModel):
         exclude_if=lambda v: v is None,
         description="Optional hex accent override paired with style_preset.",
     )
-    pending_disposition: Literal["answer", "skip", "none"] = "none"
+    pending_disposition: Literal["answer", "skip", "none"] = Field(
+        default="none",
+        description=(
+            "When a pending_question exists in context: use 'skip' if the user explicitly "
+            "pivoted away from or cancelled it, 'answer' if the user answered it, or 'none' otherwise."
+        ),
+    )
 
 
 def _creation_context(db, turn):

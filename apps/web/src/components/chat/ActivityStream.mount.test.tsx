@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, expect, it, vi } from "vitest"
-import type { WorkTrailEntry } from "./timeline/types"
-import { TOOL_ACTIONS, WorkSegmentRow } from "./ActivityStream"
+import type { ActivitySemanticDetail, WorkTrailEntry } from "./timeline/types"
+import { semanticActivityLabel, TOOL_ACTIONS, WorkSegmentRow } from "./ActivityStream"
 import en from "@/lib/i18n/locales/en"
 import zh from "@/lib/i18n/locales/zh"
+import type { TFunction } from "i18next"
 
 const { anchor } = vi.hoisted(() => ({ anchor: vi.fn() }))
 vi.mock("@/components/chat/MessageScroller", () => ({
@@ -183,4 +184,128 @@ it("covers 100% of high-frequency video tools in TOOL_ACTIONS, en.ts, and zh.ts 
     expect(enToolName[tool]).not.toBe(en.agentReceipt.job)
     expect(zhToolName[tool]).not.toBe(zh.agentReceipt.job)
   }
+})
+
+function makeLocaleT(dict: Record<string, unknown>): TFunction {
+  const resolve = (key: string): string | undefined => {
+    const parts = key.split(".")
+    let cur: unknown = dict
+    for (const part of parts) {
+      if (cur == null || typeof cur !== "object") return undefined
+      cur = (cur as Record<string, unknown>)[part]
+    }
+    return typeof cur === "string" ? cur : undefined
+  }
+  return ((key: string, opts?: Record<string, unknown>) => {
+    const raw = resolve(key)
+    if (raw === undefined) {
+      return typeof opts?.defaultValue === "string" ? opts.defaultValue : key
+    }
+    if (!opts) return raw
+    return raw.replace(/\{\{(\w+)\}\}/g, (_, k: string) => String(opts[k] ?? ""))
+  }) as unknown as TFunction
+}
+
+it("renders deterministic semantic parameter labels in both ZH and EN for all 8 high-frequency tools", () => {
+  const tZh = makeLocaleT(zh as unknown as Record<string, unknown>)
+  const tEn = makeLocaleT(en as unknown as Record<string, unknown>)
+
+  const cases: { detail: ActivitySemanticDetail; zhActive: string; enActive: string; zhDone: string; enDone: string }[] = [
+    {
+      detail: { kind: "style", preset: "vox_editorial" },
+      zhActive: "切换整片为Vox 报刊风格",
+      zhDone: "已切换整片为Vox 报刊风格",
+      enActive: "Switching style to Vox Editorial",
+      enDone: "Switched style to Vox Editorial",
+    },
+    {
+      detail: { kind: "motion_block_insert", block: "data_chart", window: "12–17s" },
+      zhActive: "加入数据图表幕（12–17s）",
+      zhDone: "已加入数据图表幕（12–17s）",
+      enActive: "Adding Data Chart act (12–17s)",
+      enDone: "Added Data Chart act (12–17s)",
+    },
+    {
+      detail: { kind: "motion_block_update", aspects: ["camera", "callout"] },
+      zhActive: "调整动效幕 · 镜头运镜 / 焦点标注",
+      zhDone: "已调整动效幕 · 镜头运镜 / 焦点标注",
+      enActive: "Updating motion block · camera / callouts",
+      enDone: "Updated motion block · camera / callouts",
+    },
+    {
+      detail: { kind: "text_insert", preset: "lower_third_tag", position: "bottom_left", snippet: "SARAH LIN" },
+      zhActive: "左下角加入人名条 · SARAH LIN",
+      zhDone: "左下角已加入人名条 · SARAH LIN",
+      enActive: "Adding Lower Third (bottom-left) · SARAH LIN",
+      enDone: "Added Lower Third (bottom-left) · SARAH LIN",
+    },
+    {
+      detail: { kind: "text_insert", preset: "bilingual_cinema", bilingual: true, window: "0.5–4s" },
+      zhActive: "加入双语字幕（0.5–4s）",
+      zhDone: "已加入双语字幕（0.5–4s）",
+      enActive: "Adding bilingual captions (0.5–4s)",
+      enDone: "Added bilingual captions (0.5–4s)",
+    },
+    {
+      detail: { kind: "text_edit", scope: "all_derived_captions", preset: "karaoke_focus" },
+      zhActive: "字幕切换为逐词高亮",
+      zhDone: "已将字幕切换为逐词高亮",
+      enActive: "Switching captions to Karaoke Focus",
+      enDone: "Switched captions to Karaoke Focus",
+    },
+    {
+      detail: { kind: "sfx", recipe: "sub_swell" },
+      zhActive: "合成音效 · 低频起势",
+      zhDone: "已合成音效 · 低频起势",
+      enActive: "Synthesizing SFX · Sub Swell",
+      enDone: "Synthesized SFX · Sub Swell",
+    },
+    {
+      detail: { kind: "audio_edit", aspects: ["gain", "fade"] },
+      zhActive: "调整音频 · 电平 / 淡入淡出",
+      zhDone: "已调整音频 · 电平 / 淡入淡出",
+      enActive: "Adjusting audio · gain / fades",
+      enDone: "Adjusted audio · gain / fades",
+    },
+    {
+      detail: { kind: "transition", preset: "zoom_through" },
+      zhActive: "设置镜头转场 · 推进缩放",
+      zhDone: "已设置镜头转场 · 推进缩放",
+      enActive: "Setting transition · Zoom Through",
+      enDone: "Set transition · Zoom Through",
+    },
+  ]
+
+  for (const c of cases) {
+    expect(semanticActivityLabel(c.detail, false, tZh)).toBe(c.zhActive)
+    expect(semanticActivityLabel(c.detail, true, tZh)).toBe(c.zhDone)
+    expect(semanticActivityLabel(c.detail, false, tEn)).toBe(c.enActive)
+    expect(semanticActivityLabel(c.detail, true, tEn)).toBe(c.enDone)
+  }
+
+  // Unknown enum tokens gracefully return null so callers fall back to static TOOL_ACTIONS
+  expect(semanticActivityLabel({ kind: "style", preset: "unknown_style" }, false, tEn)).toBeNull()
+  expect(semanticActivityLabel({ kind: "sfx", recipe: "unknown_recipe" }, true, tZh)).toBeNull()
+})
+
+it("displays liveFocus header while active and collapses cleanly to Worked on settlement", () => {
+  const semanticTrail: WorkTrailEntry[] = [
+    {
+      kind: "activity",
+      rowKey: "a1",
+      activity: {
+        activity_id: "a1",
+        kind: "read",
+        status: "completed",
+        tool_name: "set_composition_style",
+        key: "chat.activity.setCompositionStyleDone",
+        detail: { kind: "style", preset: "vox_editorial" },
+      },
+    },
+  ]
+  const view = render(<WorkSegmentRow liveLabel="正在将 6 幕脚本编排为 Vox 风格" trail={semanticTrail} />)
+  expect(screen.getByRole("button").textContent).toContain("正在将 6 幕脚本编排为 Vox 风格")
+  view.rerender(<WorkSegmentRow elapsedMs={9000} trail={semanticTrail} />)
+  expect(screen.getByRole("button").getAttribute("aria-expanded")).toBe("false")
+  expect(screen.getByRole("button").textContent).toBe("chat.activityFold.worked 9s")
 })

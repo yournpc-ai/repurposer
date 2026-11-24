@@ -24,6 +24,7 @@ export interface ChatLiveStateInput {
   conversationUnits: readonly ConversationUnit[]
   activities: readonly ActivityFramePayload[]
   thinkingPhase: string | null
+  liveFocus?: string | null
   assets: readonly ProjectAsset[]
   sentAssetIds: ReadonlySet<string>
   currentActivityRowKeys: ReadonlySet<string>
@@ -34,6 +35,7 @@ export interface ChatLiveStateInput {
 export interface ChatLiveState {
   mode: ChatLiveMode
   nowRow: NowRowPayload | null
+  liveFocus: string | null
   liveWorkFoldKey: string | null
   bottomNowRow: NowRowPayload | null
   postToolThinkingStartedAtMs: number | null
@@ -78,6 +80,7 @@ export function selectChatLiveState(input: ChatLiveStateInput): ChatLiveState {
     conversationUnits,
     activities,
     thinkingPhase,
+    liveFocus: rawLiveFocus = null,
     assets,
     sentAssetIds,
     currentActivityRowKeys,
@@ -100,7 +103,9 @@ export function selectChatLiveState(input: ChatLiveStateInput): ChatLiveState {
     proseActive &&
     messages.some((m) => m.streaming && m.content.trim().length > 0)
 
-  const activeActivity = activities.find((a) => a.status === "active")
+  const activeActivity = activities.find((a) => a.status === "active" && a.kind !== "focus")
+  const trimmedFocus = rawLiveFocus?.trim() || null
+  const liveFocus = chatBusy && !visibleProseTyping && trimmedFocus ? trimmedFocus : null
   const processingAssets = assets.filter(
     (a) =>
       sentAssetIds.has(a.id) &&
@@ -111,9 +116,10 @@ export function selectChatLiveState(input: ChatLiveStateInput): ChatLiveState {
     if (
       chatBusy &&
       activeActivity &&
+      activeActivity.kind !== "focus" &&
       !(activeActivity.kind === "draft" && DRAFT_OVERRIDE_PHASES.has(thinkingPhase ?? ""))
     ) {
-      return activeActivity
+      return activeActivity as NowRowPayload
     }
     if (workFold && recoveredJobTurn && workFold.turnId === recoveredJobTurn && workFold.liveActivity) {
       return workFold.liveActivity
@@ -183,6 +189,7 @@ export function selectChatLiveState(input: ChatLiveStateInput): ChatLiveState {
   return {
     mode,
     nowRow,
+    liveFocus,
     liveWorkFoldKey,
     bottomNowRow,
     postToolThinkingStartedAtMs,

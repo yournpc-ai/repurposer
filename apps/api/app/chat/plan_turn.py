@@ -561,6 +561,8 @@ class PlanTurn:
         iterates — 终态工具一调即停 covers the terminal tools only)."""
         from app.chat.editor import EDITOR_NAMES, execute_editor
 
+        if name == "update_focus":
+            return ToolObservation("Focus updated.", ok=True, context_lifetime="call", persist=False)
         if name in EDITOR_NAMES:
             return await execute_editor(self, name, params)
         if name == "read_conversation_context":
@@ -586,9 +588,7 @@ class PlanTurn:
             and "pending_disposition" not in params.model_fields_set
         ):
             return (
-                "a question is pending and this write omitted pending_disposition. "
-                "Judge the current message as answer/skip/none and retry the intended call "
-                "with that field; no write was executed."
+                "当前仍有待处理的问题，请在调用参数中明确填写 pending_disposition（answer / skip / none）后重试。"
             )
         disposition = (
             getattr(params, "pending_disposition", "none") if params is not None else "none"
@@ -705,15 +705,30 @@ class PlanTurn:
             deferred.disarm()
 
     async def _settle_pending_by_disposition(self, disposition: str) -> None:
-        """Settle the pending plain question by the accepted call's judgment
-        (2026-09-27, the plan path's seat — the chat path's
-        ``_settle_by_disposition`` mirror). A blank turn never settles (the
-        judgable law — the chat path's ``pending_judgable`` guard's plan
-        twin); the reminder tail keys off ``self.pending_q``, so a settled
-        row also silences the tail."""
+        """Settle the pending plain question or decline a pending media authorization
+        when the user explicitly pivoted away."""
         pending = self.pending_q
         if pending is None or disposition == "none" or not self.text.strip():
             return
+        if (pending.intent or {}).get("media_permission"):
+            if disposition != "skip":
+                # Paid media/export authorizations must be confirmed via the
+                # explicit card action, never auto-approved from free text.
+                return
+            pending.intent = {**(pending.intent or {}), "media_result": {"status": "declined"}}
+            row_id = (pending.intent or {}).get("activity_id")
+            if row_id:
+                try:
+                    act_row = await self.db.get(Message, UUID(str(row_id)))
+                except (ValueError, TypeError):
+                    act_row = None
+                if act_row is not None:
+                    frame = (act_row.intent or {}).get("frame") or {}
+                    if frame.get("call_state") == "awaiting_authorization":
+                        act_row.intent = {
+                            **(act_row.intent or {}),
+                            "frame": {**frame, "status": "cancelled", "call_state": "cancelled"},
+                        }
         pending.answer = AnswerPayload(
             kind="freeform" if disposition == "answer" else "bail",
             text=self.text if disposition == "answer" else None,
@@ -803,19 +818,12 @@ class PlanTurn:
                 return "every requested Brief field is already present; do not re-ask it"
             group_digest = question_group_digest(group_items, merged_brief)
         if not params.question.strip():
-            return (
-                "empty question — speak the framing as your message text and "
-                "pass the bare question or group title, or call answer "
-                "instead."
-            )
+            return "问题内容不能为空。请提供具体问题，或改用 answer 直接回复用户。"
         # Keep the original question until the user answers or dismisses it.
         if self.pending_q is not None:
             return (
-                "a question of yours is still awaiting the user's answer — "
-                "this message is an interjection, not a new question. Call "
-                "answer with your reply instead (the pending question stays "
-                "open and the code adds the reminder tail); never raise a "
-                "second question while one is pending."
+                "当前已有一张待用户确认的问题卡。请直接用用户的语言自然回答用户刚发的消息，"
+                "并在结尾温和提醒原待确认事项，不要再发起第二个问题。"
             )
         if params.slot is not None and params.slot in merged_brief.asked:
             # The ask loop is bounded (每个槽位至多询问一次, each slot asks at most
@@ -930,28 +938,14 @@ class PlanTurn:
             getattr(params, "material_urls", None),
         )
         if not prose.strip():
-            return (
-                "an empty reply says nothing — speak the answer as your "
-                "message text, then call answer."
-            )
-        # Capability question: the reply lands as a plain assistant message
-        # and the stored plan stays untouched — an answer turn never
-        # overwrites the plan the user is confirming. When a question
-        # survived the turn unsettled (an interjection, ADR-053 R2), the
-        # code-composed reminder rides a system block after the prose.
-        blocks = None
-        if self.pending_q is not None:
-            blocks = [_reminder_block(
-                self.text,
-                _bare_question(self.pending_q),
-                (self.pending_q.question or {}).get("default_path"),
-            )]
+            return "请在消息正文中直接用用户的语言给出完整答复，再调用 answer。"
+        await self._settle_pending_by_disposition(params.pending_disposition)
         assistant_message = await _create_message(
             self.db,
             self.conversation_id,
             "assistant",
             prose,
-            blocks=blocks,
+            blocks=None,
         )
         self.outcome = (assistant_message, self.settled_pending)
         return None
@@ -1046,19 +1040,12 @@ class PlanTurn:
                 )
                 if result.version_saved else _cannot_do_text(self.text)
             )
-            blocks = None
-            if self.pending_q is not None:
-                blocks = [_reminder_block(
-                    self.text,
-                    _bare_question(self.pending_q),
-                    (self.pending_q.question or {}).get("default_path"),
-                )]
             assistant_message = await _create_message(
                 self.db,
                 self.conversation_id,
                 "assistant",
                 content,
-                blocks=blocks,
+                blocks=None,
             )
             # The bare reply IS the presentation when the model closed a
             # design beat without a further call — same association seat.

@@ -362,6 +362,7 @@ export function AgentThread({
   // both stream paths reset at envelope AND failure, never leaving a stale
   // label in state).
   const [thinkingPhase, setThinkingPhase] = useState<string | null>(null)
+  const [liveFocus, setLiveFocus] = useState<string | null>(null)
 
   // The turn's Activity Stream (ADR-087 §3 Phase 2): the LIVE transient
   // channel — it feeds only the now-line (the active row's content). The
@@ -411,6 +412,10 @@ export function AgentThread({
   // The reducer pair is the extracted PURE seam (activityReducer.ts, Phase
   // 3 Batch A) — same upsert/sweep semantics, contract-tested.
   const handleActivityFrame = useCallback((frame: ActivityFramePayload) => {
+    if (frame.kind === "focus") {
+      setLiveFocus(frame.focus?.trim() || null)
+      return
+    }
     setActivities((prev) => upsertActivityFrame(prev, frame))
   }, [])
 
@@ -456,6 +461,7 @@ export function AgentThread({
   // transient now-line list and the array rows embedded in `messages`.
   const settleActivities = useCallback(
     (status: "completed" | "failed" | "cancelled") => {
+      setLiveFocus(null)
       setActivities((prev) => sweepActivities(prev, status))
       setMessages((prev) =>
         prev.map((m) =>
@@ -1640,6 +1646,7 @@ export function AgentThread({
     }, STREAM_WATCHDOG_TICK_MS)
     setProseActive(false)
     setThinkingPhase(null)
+    setLiveFocus(null)
     resetInterimActivityGates()
     setActivities(resetActivities()) // the new turn's own now-line stream starts empty
     currentActivityRowKeysRef.current = new Set()
@@ -2309,6 +2316,7 @@ export function AgentThread({
     setChatBusy(true)
     setProseActive(false)
     setThinkingPhase(null)
+    setLiveFocus(null)
     resetInterimActivityGates()
     setActivities(resetActivities()) // the answer continuation is its own turn — new stream
     currentActivityRowKeysRef.current = new Set()
@@ -2830,6 +2838,7 @@ export function AgentThread({
     conversationUnits,
     activities,
     thinkingPhase,
+    liveFocus,
     assets,
     sentAssetIds,
     currentActivityRowKeys: currentActivityRowKeysRef.current,
@@ -2881,6 +2890,7 @@ export function AgentThread({
       currentActivityRowKeysRef={currentActivityRowKeysRef}
       liveWorkFoldKey={liveWorkFoldKey}
       liveMode={liveState.mode}
+      liveFocus={liveState.liveFocus}
       postToolThinkingStartedAtMs={liveState.postToolThinkingStartedAtMs}
       nowRow={nowRow}
       bottomNowRow={bottomNowRow}

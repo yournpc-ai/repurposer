@@ -14,6 +14,31 @@ import type { SkillReference } from "@/lib/skills"
  * past-tense form, failed/cancelled = the active form, the ✗ says the rest).
  * The field set is the contract's whitelist — no params, raw results, or
  * reasoning; accepted typed work receipts are the sole exception. */
+export type ActivitySemanticDetailKind =
+  | "style"
+  | "motion_block_insert"
+  | "motion_block_update"
+  | "text_insert"
+  | "text_caption_from_audio"
+  | "text_edit"
+  | "sfx"
+  | "audio_edit"
+  | "transition"
+
+export interface ActivitySemanticDetail {
+  kind: ActivitySemanticDetailKind
+  preset?: string
+  block?: string
+  recipe?: string
+  position?: string
+  role?: string
+  scope?: string
+  snippet?: string
+  window?: string
+  aspects?: string[]
+  bilingual?: boolean
+}
+
 export interface ActivityFramePayload {
   activity_id: string
   group_id?: string
@@ -24,9 +49,13 @@ export interface ActivityFramePayload {
   call_state?: string
   error?: string
   seq: number
-  kind: "read" | "draft" | "run" | "repair"
+  kind: "read" | "draft" | "run" | "repair" | "focus"
   status: "active" | "completed" | "failed" | "cancelled"
   key: string | null
+  /** Live-only phase focus summary (never persisted as a detail row). */
+  focus?: string
+  /** Deterministic user-safe semantic detail projected from validated tool args. */
+  detail?: ActivitySemanticDetail
   /** 工作会话里程碑 (iter-2 ⑥, N-57): the whitelist's one extension — the
    * artifact count on `chat.explore.*Ready` frames, absent elsewhere. */
   count?: number
@@ -244,7 +273,8 @@ export interface NativeJobReceipt {
  * activity rows and normalized legacy rows share this single shape. Array
  * position IS the order, so live-channel `seq` bookkeeping is optional;
  * `name`/`total` ride the activity's interpolation fields. */
-export type ActivityRowFrame = Omit<ActivityFramePayload, "seq"> & {
+export type ActivityRowFrame = Omit<ActivityFramePayload, "seq" | "kind" | "focus"> & {
+  kind: "read" | "draft" | "run" | "repair"
   jobReceipt?: NativeJobReceipt
   seq?: number
   name?: string

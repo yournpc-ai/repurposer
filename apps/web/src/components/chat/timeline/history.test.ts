@@ -663,4 +663,47 @@ describe("question groups", () => {
     expect(messages).toHaveLength(1)
     expect(messages[0].content).toBe("Brand evidence is ready.")
   })
+
+  it("replays persisted semantic activity detail and ignores malformed detail safely", () => {
+    const messages = mapHistoryRows([
+      row({
+        id: "act-semantic",
+        content: "",
+        intent: {
+          type: "activity",
+          frame: {
+            activity_id: "a-sem",
+            kind: "read",
+            status: "completed",
+            tool_name: "insert_motion_block",
+            key: "chat.activity.insertMotionBlockDone",
+            detail: { kind: "motion_block_insert", block: "data_chart", window: "12–17s" },
+          },
+        },
+      }),
+      row({
+        id: "act-bad-detail",
+        content: "",
+        intent: {
+          type: "activity",
+          frame: {
+            activity_id: "a-bad",
+            kind: "read",
+            status: "completed",
+            tool_name: "insert_motion_block",
+            key: "chat.activity.insertMotionBlockDone",
+            detail: { kind: "unknown_future_kind", foo: 123 },
+          },
+        },
+      }),
+    ], ctx)
+
+    expect(messages).toHaveLength(2)
+    expect(messages[0].activity?.detail).toEqual({
+      kind: "motion_block_insert",
+      block: "data_chart",
+      window: "12–17s",
+    })
+    expect(messages[1].activity?.detail).toBeUndefined()
+  })
 })

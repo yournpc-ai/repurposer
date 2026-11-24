@@ -103,6 +103,16 @@ def _native_creation_tools(tools, *, facts):
     return projected
 
 
+def _pending_question_context(pending) -> dict | None:
+    payload = getattr(pending, "question", None)
+    if not isinstance(payload, dict):
+        return None
+    result = dict(payload)
+    if ((getattr(pending, "intent", None) or {}).get("media_permission")):
+        result["awaiting_media_authorization"] = True
+    return result
+
+
 def assemble_video_round(facts: dict) -> RoundAssembly:
     confirmation = facts.get("video_confirmation")
     if confirmation and confirmation["action"] in {"wait", "stale", "existing_export"}:
@@ -130,21 +140,25 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
         re.sub(r"不(?:要|用|需要)?(?:导出|交付|制作成片)|(?:do not|don't) (?:export|deliver|render)", "", user_text, flags=re.I),
         re.I,
     )
+    pending = facts.get("pending_question")
+    if callable(pending):
+        pending = pending()
     if facts.get("version_saved") and (
         not works or (draft_requested and not additional_work and not facts.get("production_requested"))
     ):
         presentation = jinja_env.get_template("chat/_video_presentation.j2").render()
+        present_ctx: dict = {"video_stage": "version_present"}
+        if pending and (pending_ctx := _pending_question_context(pending)):
+            present_ctx["pending_question"] = pending_ctx
         return RoundAssembly(
             tools=[tool for tool in facts["tools"] if tool.name == "answer"],
-            system="用用户在本次对话中使用的语言作答。作品已经保存。根据本次保存回执展示实际版本，然后调用 answer。\n" + presentation,
-            context="当前视频轮次（目标和状态由服务端提供）：\n{\"video_stage\": \"version_present\"}",
+            system="用用户在本次对话中使用的语言作答。作品已经保存。根据本次保存回执展示实际版本，然后调用 answer（若无需结算待决卡也可直接在正文答复）。\n" + presentation,
+            context="当前视频轮次（目标和状态由服务端提供）：\n" + json.dumps(present_ctx, ensure_ascii=False),
             stage="version_present", include_project_context=False,
             include_observation_media=False, observation_tools=frozenset({"create_video", "instantiate_skill_blueprint"}),
+            allow_bare_reply=True,
         )
 
-    pending = facts.get("pending_question")
-    if callable(pending):
-        pending = pending()
     from app.chat.readiness import compute_source_readiness
 
     creative_state = facts.get("creative_state")
@@ -154,9 +168,11 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
     if confirmation and confirmation["action"] == "produce" and not hint:
         ref = confirmation["base_ref"]
         hint = {"composition_id": ref["composition_id"], "version_id": ref["composition_version_id"]}
+    has_pending_group = bool(pending and ((getattr(pending, "question", None) or {}).get("items")))
     native_creation = (
         not works and not hint and not facts.get("active_repair")
-        and not facts.get("version_saved") and (not pending or facts.get("group_answer_submitted"))
+        and not facts.get("version_saved")
+        and (not has_pending_group or facts.get("group_answer_submitted"))
         and any(tool.name == "create_video" for tool in facts["tools"])
     )
     if native_creation or works or hint.get("unavailable") or hint.get("composition_id"):
@@ -233,7 +249,7 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
         if selected and last_preview.get("version_id") == selected["version_id"]:
             context["observed_preview"] = last_preview
         names = set(EDITOR_NAMES) | {
-            "read_conversation_context", "answer", "ask_user", "list_project_media",
+            "update_focus", "read_conversation_context", "answer", "ask_user", "list_project_media",
             "review_video", "align_recording", "get_narration_alignment", "annotate_narration",
             "search_music", "show_music_candidates", "select_music",
         }
@@ -407,8 +423,8 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
             }
             if facts["authorized_media"].get("role") == "export":
                 context["authorized_deliverable"] = "The user approved the exact Output above. Review it and deliver that version when it meets the request. Respect instructions to retain the edit. Report defects if it cannot be delivered."
-        if pending:
-            context["pending_question"] = getattr(pending, "question", None)
+        if pending and (pending_ctx := _pending_question_context(pending)):
+            context["pending_question"] = pending_ctx
         media_ready = bool(facts.get("media_receipts")) or facts.get("new_result_tool") in {
             "generate_voice", "generate_music", "generate_image", "generate_sfx",
         }
@@ -427,10 +443,24 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
                            lambda text: project_editor_reply(text, facts.get("editor_labels", {}), user_text)),
             caller_state={"video_target": selected},
             invitation_tool="ask_user" if any(t.name == "ask_user" for t in tools) else None,
+            allow_bare_reply=True,
+        )
+    if pending and (pending_ctx := _pending_question_context(pending)):
+        return RoundAssembly(
+            tools=[tool for tool in facts["tools"] if tool.name == "answer"],
+            system=(
+                "用用户在本次对话中使用的语言自然、完整地回答用户刚发的消息。"
+                "当前仍有待确认的问题卡：若用户只是顺口提问，保持 pending_disposition='none' 并在结尾用一句同事口吻温和拉回原问题；"
+                "若用户明确取消或改走新方向，传入 pending_disposition='skip'。不要暴露内部机制，也无需重复提问。"
+            ),
+            context=json.dumps({"pending_question": pending_ctx}, ensure_ascii=False),
+            include_project_context=False, opening_text=user_text, enforce_offered_tools=True,
+            allow_bare_reply=True,
         )
     return RoundAssembly(
         tools=[tool for tool in facts["tools"] if tool.name == "answer"],
         system="保留现有成果。当前无法确定可编辑作品时，如实说明，不调用旧创作协议。",
         context=json.dumps({"video_target": "unresolved"}, ensure_ascii=False),
         include_project_context=False, opening_text=user_text, enforce_offered_tools=True,
+        allow_bare_reply=True,
     )

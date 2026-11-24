@@ -296,3 +296,182 @@ async def test_progress_survives_reload_and_settles_the_original_message(databas
     final_id, final = await reload_frame()
     assert final_id == row_id
     assert final["status"] == ("cancelled" if cancel else "completed")
+
+
+def test_update_focus_emits_lightweight_sanitized_frame_without_persisting():
+    from app.chat.activity import KIND_FOCUS, frame_persistence, sanitize_focus_text
+    from app.chat.turn_tools import UPDATE_FOCUS_TOOL, UpdateFocusArgs
+
+    assert UPDATE_FOCUS_TOOL.batchable is True
+    assert UPDATE_FOCUS_TOOL.terminal is False
+    projector = ActivityProjector([UPDATE_FOCUS_TOOL])
+    assert projector.name_known("update_focus") == []
+    assert projector.open_activity() is None
+
+    raw = f"正在将 6 幕脚本编排为 Vox 风格 clip_id=clp_01 {uuid4()} /Users/demo/a.mp4"
+    frames = projector.feed_event(
+        ReadExecuting(tool_name="update_focus", params=UpdateFocusArgs(focus=raw), call_id="f1")
+    )
+    assert len(frames) == 1
+    frame = frames[0]
+    assert frame.kind == KIND_FOCUS
+    assert frame.status == "active"
+    assert frame.focus == "正在将 6 幕脚本编排为 Vox 风格"
+    assert frame_persistence(frame) is None
+    assert projector.open_activity() is None
+    assert not projector.has_active()
+    assert projector.feed_event(ReadAccepted(tool_name="update_focus", ok=True)) == []
+    assert projector.settled_frames() == []
+    assert sanitize_focus_text("a" * 80, max_len=20).endswith("…")
+
+
+def test_project_tool_detail_covers_all_high_frequency_editor_tools_without_internal_ids():
+    from app.chat.activity import project_tool_detail
+    from app.chat.editor import (
+        AudioDuckWindowArgs,
+        EditAudioClipArgs,
+        EditTextArgs,
+        GenerateSfxArgs,
+        InsertMotionBlockArgs,
+        InsertTextArgs,
+        SetCompositionStyleArgs,
+        SetTransitionArgs,
+        UpdateMotionBlockArgs,
+    )
+
+    leaked_id = str(uuid4())
+    cases = [
+        (
+            "set_composition_style",
+            SetCompositionStyleArgs(preset_id="vox_editorial"),
+            {"kind": "style", "preset": "vox_editorial"},
+        ),
+        (
+            "insert_motion_block",
+            InsertMotionBlockArgs(
+                block_id="data_chart",
+                start_seconds=12.0,
+                end_seconds=17.0,
+                props={"title": "Growth", "bars": [{"label": "Q1", "value": 10}]},
+            ),
+            {"kind": "motion_block_insert", "block": "data_chart", "window": "12–17s"},
+        ),
+        (
+            "update_motion_block",
+            UpdateMotionBlockArgs(
+                clip_id="clp_motion_99",
+                props_patch={"camera_preset": "dolly_zoom", "callout_steps": []},
+            ),
+            {"kind": "motion_block_update", "aspects": ["camera", "callout"]},
+        ),
+        (
+            "insert_text",
+            InsertTextArgs(
+                text="SARAH LIN · HEAD OF DESIGN",
+                start_seconds=0.5,
+                end_seconds=4.0,
+                preset_id="lower_third_tag",
+                position="bottom_left",
+            ),
+            {
+                "kind": "text_insert",
+                "preset": "lower_third_tag",
+                "position": "bottom_left",
+                "role": "title",
+                "window": "0.5–4s",
+                "snippet": "SARAH LIN · HEAD…",
+            },
+        ),
+        (
+            "insert_text",
+            InsertTextArgs(
+                text="第一行中文\nSecond English line",
+                start_seconds=0.5,
+                end_seconds=4.0,
+                preset_id="bilingual_cinema",
+                role="caption",
+            ),
+            {
+                "kind": "text_insert",
+                "preset": "bilingual_cinema",
+                "role": "caption",
+                "bilingual": True,
+                "window": "0.5–4s",
+                "snippet": "第一行中文",
+            },
+        ),
+        (
+            "insert_text",
+            InsertTextArgs(from_audio_clip_id="clp_voice_01", preset_id="karaoke_focus"),
+            {"kind": "text_caption_from_audio", "preset": "karaoke_focus"},
+        ),
+        (
+            "edit_text",
+            EditTextArgs(scope="all_derived_captions", preset_id="karaoke_focus"),
+            {"kind": "text_edit", "scope": "all_derived_captions", "preset": "karaoke_focus"},
+        ),
+        (
+            "generate_sfx",
+            GenerateSfxArgs(recipe_id="sub_swell", base_clip_id="clp_sfx_01"),
+            {"kind": "sfx", "recipe": "sub_swell"},
+        ),
+        (
+            "edit_audio_clip",
+            EditAudioClipArgs(
+                clip_id="clp_bgm_01",
+                gain_db=-24.0,
+                fade_in_seconds=0.5,
+                duck_windows=[AudioDuckWindowArgs(start_seconds=1.0, end_seconds=4.0)],
+            ),
+            {"kind": "audio_edit", "aspects": ["gain", "fade"]},
+        ),
+        (
+            "set_transition",
+            SetTransitionArgs(from_clip_id="clp_1", to_clip_id="clp_2", kind="zoom_through"),
+            {"kind": "transition", "preset": "zoom_through"},
+        ),
+    ]
+    for tool_name, params, expected in cases:
+        detail = project_tool_detail(tool_name, params)
+        assert detail == expected, (tool_name, detail)
+        serialized = str(detail)
+        assert "clp_" not in serialized
+        assert leaked_id not in serialized
+
+
+@pytest.mark.asyncio
+async def test_semantic_detail_persists_through_activity_row_lifecycle(database, monkeypatch):
+    import asyncio
+    from app.chat.editor import EDITOR_TOOLS, InsertMotionBlockArgs
+    from app.chat.routes import _make_activity_persister, _make_loop_event_hook
+
+    monkeypatch.setattr(database_module, "AsyncSessionLocal", database)
+    async with database() as db:
+        user = User(email=f"{uuid4()}@example.test", name="test")
+        db.add(user)
+        await db.flush()
+        project = Project(user_id=user.id, title="Semantic Detail")
+        db.add(project)
+        await db.flush()
+        conversation = Conversation(user_id=user.id, project_id=project.id)
+        db.add(conversation)
+        await db.commit()
+        conversation_id = conversation.id
+
+    projector = ActivityProjector(EDITOR_TOOLS)
+    queue = asyncio.Queue()
+    append, mirror, _cancel = _make_activity_persister(queue, projector, conversation_id)
+    emit = _make_loop_event_hook(queue, projector, append, mirror)
+
+    projector.name_known("insert_motion_block")
+    params = InsertMotionBlockArgs(
+        block_id="data_chart", start_seconds=12.0, end_seconds=17.0, props={"title": "Revenue"}
+    )
+    await emit(ReadExecuting("insert_motion_block", params, "call-mb-1"))
+    await emit(ReadAccepted("insert_motion_block", ok=True))
+
+    async with database() as db:
+        row = (await db.scalars(select(Message).where(Message.conversation_id == conversation_id))).one()
+        frame = row.intent["frame"]
+        assert frame["status"] == "completed"
+        assert frame["detail"] == {"kind": "motion_block_insert", "block": "data_chart", "window": "12–17s"}

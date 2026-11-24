@@ -69,10 +69,11 @@ attempt stays auditable.
 
 from __future__ import annotations
 
+import re
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import cast
+from typing import Any, cast
 from uuid import uuid4
 
 from app.agents.tool_loop import (
@@ -102,6 +103,205 @@ KIND_READ = "read"
 KIND_DRAFT = "draft"
 KIND_RUN = "run"
 KIND_REPAIR = "repair"
+KIND_FOCUS = "focus"
+
+_UUID_RE = re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b", re.I)
+_INTERNAL_ID_RE = re.compile(
+    r"\b(?:clip_id|track_id|object_id|snapshot_id|version_id|composition_id|output_id|asset_id|base_clip_id|from_clip_id|to_clip_id)\b(?:\s*[:=]\s*[\w-]+)?"
+    r"|\b(?:clp|trk|obj|scn|snap|comp|ver)_[a-zA-Z0-9_-]{2,}\b",
+    re.I,
+)
+_FILE_PATH_RE = re.compile(r"(?:(?:/[\w.-]+){2,}|(?:apps|packages|src)/[\w./-]+)")
+_SNAKE_TOOL_RE = re.compile(
+    r"\b(?:update_focus|set_composition_style|insert_motion_block|update_motion_block|"
+    r"insert_text|edit_text|generate_sfx|edit_audio_clip|set_transition|create_video|"
+    r"preview_range|inspect_timeline|inspect_clip)\b"
+)
+
+_MOTION_ASPECT_MAP: tuple[tuple[frozenset[str], str], ...] = (
+    (frozenset({"camera_preset", "scroll_from_y", "scroll_to_y"}), "camera"),
+    (frozenset({"callout_steps", "callout", "cursor"}), "callout"),
+    (frozenset({"backdrop_style", "theme", "accent_color", "surface_style", "text_color"}), "style"),
+    (frozenset({"items", "bars", "points", "left_items", "right_items", "messages", "steps", "work_steps"}), "content"),
+    (frozenset({"headline", "title", "quote", "subheadline", "eyebrow", "brand_name", "tagline", "cta_label", "url_bar"}), "copy"),
+    (frozenset({"entrance_duration_s", "highlight_at_s", "reveal_at_s", "highlight_index"}), "timing"),
+)
+
+
+def _clean_user_safe_text(raw: str | None) -> str:
+    if not isinstance(raw, str):
+        return ""
+    cleaned = _UUID_RE.sub("", raw)
+    cleaned = _FILE_PATH_RE.sub("", cleaned)
+    cleaned = _INTERNAL_ID_RE.sub("", cleaned)
+    cleaned = _SNAKE_TOOL_RE.sub("", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" \t\r\n·,:;-–—")
+    return cleaned
+
+
+def sanitize_focus_text(raw: str | None, *, max_len: int = 60) -> str | None:
+    """Sanitize a live focus label: user-safe, single-line, length-bounded."""
+    cleaned = _clean_user_safe_text(raw)
+    if len(cleaned) < 2:
+        return None
+    if len(cleaned) > max_len:
+        cleaned = cleaned[: max_len - 1].rstrip() + "…"
+    return cleaned
+
+
+def sanitize_snippet(raw: str | None, *, max_len: int = 18) -> str | None:
+    """Extract a short user-safe single-line preview snippet."""
+    if not isinstance(raw, str):
+        return None
+    first_line = next((line.strip() for line in raw.splitlines() if line.strip()), "")
+    cleaned = _clean_user_safe_text(first_line)
+    if not cleaned:
+        return None
+    if len(cleaned) > max_len:
+        cleaned = cleaned[: max_len - 1].rstrip() + "…"
+    return cleaned
+
+
+def _fmt_sec(value: float) -> str:
+    rounded = round(float(value), 1)
+    if rounded == int(rounded):
+        return str(int(rounded))
+    return f"{rounded:.1f}"
+
+
+def _format_window(start: float | None, end: float | None) -> str | None:
+    if start is None or end is None:
+        return None
+    if end <= start:
+        return None
+    return f"{_fmt_sec(start)}–{_fmt_sec(end)}s"
+
+
+def project_tool_detail(tool_name: str, params: object | None) -> dict[str, Any] | None:
+    """Deterministically project validated editor tool params into a closed,
+    user-safe, bilingual-renderable semantic detail payload (never leaks UUIDs,
+    clip_ids, track_ids, or raw code)."""
+    if params is None:
+        return None
+
+    if tool_name == "set_composition_style":
+        preset = getattr(params, "preset_id", None)
+        if isinstance(preset, str) and preset:
+            return {"kind": "style", "preset": preset}
+        return None
+
+    if tool_name == "insert_motion_block":
+        block = getattr(params, "block_id", None)
+        if isinstance(block, str) and block:
+            detail: dict[str, Any] = {"kind": "motion_block_insert", "block": block}
+            window = _format_window(
+                getattr(params, "start_seconds", None),
+                getattr(params, "end_seconds", None),
+            )
+            if window:
+                detail["window"] = window
+            return detail
+        return None
+
+    if tool_name == "update_motion_block":
+        patch = getattr(params, "props_patch", None)
+        aspects: list[str] = []
+        if isinstance(patch, dict):
+            keys = set(patch.keys())
+            for candidate_keys, aspect in _MOTION_ASPECT_MAP:
+                if keys & candidate_keys:
+                    aspects.append(aspect)
+                if len(aspects) >= 2:
+                    break
+        detail = {"kind": "motion_block_update"}
+        if aspects:
+            detail["aspects"] = aspects
+        return detail
+
+    if tool_name == "insert_text":
+        from_audio = getattr(params, "from_audio_clip_id", None)
+        preset = getattr(params, "preset_id", None)
+        if from_audio:
+            detail = {"kind": "text_caption_from_audio"}
+            if isinstance(preset, str) and preset:
+                detail["preset"] = preset
+            return detail
+        raw_text = getattr(params, "text", None)
+        if isinstance(raw_text, str) and raw_text.strip():
+            detail = {"kind": "text_insert"}
+            if isinstance(preset, str) and preset:
+                detail["preset"] = preset
+            position = getattr(params, "position", None)
+            if isinstance(position, str) and position:
+                detail["position"] = position
+            role = getattr(params, "role", None)
+            if isinstance(role, str) and role:
+                detail["role"] = role
+            if "\n" in raw_text.strip():
+                detail["bilingual"] = True
+            window = _format_window(
+                getattr(params, "start_seconds", None),
+                getattr(params, "end_seconds", None),
+            )
+            if window:
+                detail["window"] = window
+            snippet = sanitize_snippet(raw_text)
+            if snippet:
+                detail["snippet"] = snippet
+            return detail
+        return None
+
+    if tool_name == "edit_text":
+        detail = {"kind": "text_edit"}
+        scope = getattr(params, "scope", None)
+        if isinstance(scope, str) and scope:
+            detail["scope"] = scope
+        preset = getattr(params, "preset_id", None)
+        if isinstance(preset, str) and preset:
+            detail["preset"] = preset
+        position = getattr(params, "position", None)
+        if isinstance(position, str) and position:
+            detail["position"] = position
+        snippet = sanitize_snippet(getattr(params, "text", None))
+        if snippet:
+            detail["snippet"] = snippet
+        aspects: list[str] = []
+        if getattr(params, "color", None) or getattr(params, "highlight_color", None) or getattr(params, "background", None) or getattr(params, "clear_background", False):
+            aspects.append("style")
+        if getattr(params, "font_size", None) is not None or getattr(params, "align", None):
+            aspects.append("layout")
+        if aspects:
+            detail["aspects"] = aspects
+        return detail
+
+    if tool_name == "generate_sfx":
+        recipe = getattr(params, "recipe_id", None)
+        if isinstance(recipe, str) and recipe:
+            return {"kind": "sfx", "recipe": recipe}
+        return None
+
+    if tool_name == "edit_audio_clip":
+        aspects = []
+        if getattr(params, "gain_db", None) is not None:
+            aspects.append("gain")
+        if getattr(params, "fade_in_seconds", None) is not None or getattr(params, "fade_out_seconds", None) is not None:
+            aspects.append("fade")
+        if getattr(params, "duck_windows", None) is not None:
+            aspects.append("duck")
+        if getattr(params, "source_id", None) is not None:
+            aspects.append("source")
+        detail = {"kind": "audio_edit"}
+        if aspects:
+            detail["aspects"] = aspects[:2]
+        return detail
+
+    if tool_name == "set_transition":
+        kind = getattr(params, "kind", None)
+        if isinstance(kind, str) and kind:
+            return {"kind": "transition", "preset": kind}
+        return None
+
+    return None
 
 # Frame statuses (对账规则 6 — the explicit lifecycle).
 STATUS_ACTIVE = "active"
@@ -202,6 +402,8 @@ def frame_persistence(frame: ActivityFrame) -> str | None:
       ACTIVE frame (the row appends at ReadExecuting, never at name_known —
       appending there would seat the row before the waiter interim_prose's).
     """
+    if frame.kind == KIND_FOCUS:
+        return None
     if frame.kind == KIND_READ:
         return None if frame.status == STATUS_ACTIVE else "settle"
     if frame.kind == KIND_REPAIR and frame.status in (STATUS_COMPLETED, STATUS_FAILED):
@@ -243,6 +445,10 @@ class ActivityFrame:
     # Typed evidence is an accepted settle's only result-bearing exception to
     # the no-params/no-results whitelist. Each tool admits only its own model.
     receipt: ActivityReceipt | None = None
+    # Lightweight live phase focus text (live-only, never persisted as a row).
+    focus: str | None = None
+    # Deterministic user-safe semantic detail projected from validated tool args.
+    detail: dict[str, Any] | None = None
 
     def to_dict(self) -> dict:
         d = {
@@ -259,6 +465,10 @@ class ActivityFrame:
             d["duration_ms"] = self.duration_ms
         if self.receipt is not None:
             d["receipt"] = self.receipt.model_dump(mode="json")
+        if self.focus is not None:
+            d["focus"] = self.focus
+        if self.detail is not None:
+            d["detail"] = self.detail
         return d
 
 
@@ -280,6 +490,7 @@ class ActivityProjector:
         }
         self._executing_id = None
         self._completion_keys: dict[str, str] = {}
+        self._details: dict[str, dict[str, Any]] = {}
         self._seq = 0
         # open call slot: (tool_name, activity_id | None)
         self._open_call: tuple[str, str | None] | None = None
@@ -308,18 +519,30 @@ class ActivityProjector:
         count: int | None = None,
         duration_ms: int | None = None,
         receipt: ActivityReceipt | None = None,
+        focus: str | None = None,
+        detail: dict[str, Any] | None = None,
     ) -> ActivityFrame:
         self._seq += 1
         return ActivityFrame(
             activity_id=activity_id, seq=self._seq, kind=kind, status=status, key=key,
             count=count, at=datetime.now(UTC).isoformat(), duration_ms=duration_ms,
-            receipt=receipt,
+            receipt=receipt, focus=focus, detail=detail,
         )
 
-    def _start(self, kind: str, key: str | None, *, count: int | None = None, activity_id: str | None = None) -> tuple[str, ActivityFrame]:
+    def _start(
+        self,
+        kind: str,
+        key: str | None,
+        *,
+        count: int | None = None,
+        activity_id: str | None = None,
+        detail: dict[str, Any] | None = None,
+    ) -> tuple[str, ActivityFrame]:
         activity_id = activity_id or uuid4().hex
         self._active[activity_id] = (kind, key, time.monotonic())
-        return activity_id, self._frame(activity_id, kind, STATUS_ACTIVE, key, count=count)
+        if detail is not None:
+            self._details[activity_id] = detail
+        return activity_id, self._frame(activity_id, kind, STATUS_ACTIVE, key, count=count, detail=detail)
 
     def _settle(
         self,
@@ -330,6 +553,7 @@ class ActivityProjector:
         receipt: ActivityReceipt | None = None,
     ) -> ActivityFrame:
         self._completion_keys.pop(activity_id, None)
+        detail = self._details.pop(activity_id, None)
         kind, active_key, started = self._active.pop(activity_id)
         duration_ms = (
             max(0, int((time.monotonic() - started) * 1000))
@@ -339,7 +563,7 @@ class ActivityProjector:
         receipt = receipt if status == STATUS_COMPLETED else None
         frame = self._frame(
             activity_id, kind, status, key,
-            duration_ms=duration_ms, receipt=receipt,
+            duration_ms=duration_ms, receipt=receipt, detail=detail,
         )
         # 落定即退役 (2026-09-28 用户拍板; 2026-09-29 扩到 run 跨度): a
         # draft/run span's settle rides the live wire (the row leaves the
@@ -409,7 +633,7 @@ class ActivityProjector:
             # The loop's dropped parallel extras (it executes call[0] only).
             return []
         presentation = self._presentations.get(tool_name)
-        if presentation is None or presentation.kind == "native" or (presentation.defer_start or presentation.kind == KIND_READ):
+        if presentation is None or presentation.kind in ("native", KIND_FOCUS) or (presentation.defer_start or presentation.kind == KIND_READ):
             self._open_call = (tool_name, None)
             return []
         activity_id, frame = self._start(presentation.kind, presentation.active_key)
@@ -596,9 +820,14 @@ class ActivityProjector:
         name, activity_id = self._open_call
         if activity_id is None:
             presentation = self._presentations.get(name)
-            if presentation is None or not (
-                presentation.defer_start or presentation.kind == KIND_READ
-            ):
+            if presentation is None:
+                return []
+            if presentation.kind == KIND_FOCUS:
+                focus = sanitize_focus_text(getattr(event.params, "focus", None))
+                if not focus:
+                    return []
+                return [self._frame("__focus__", KIND_FOCUS, STATUS_ACTIVE, None, focus=focus)]
+            if not (presentation.defer_start or presentation.kind == KIND_READ):
                 return []
             count = None
             if presentation.policy == "design":
@@ -609,7 +838,14 @@ class ActivityProjector:
                     presentation,
                 )
                 keys = (display.active_key, display.done_key)
-            activity_id, frame = self._start(presentation.kind, keys[0], count=count, activity_id=event.call_id if event.group_id else None)
+            detail = project_tool_detail(name, event.params)
+            activity_id, frame = self._start(
+                presentation.kind,
+                keys[0],
+                count=count,
+                activity_id=event.call_id if event.group_id else None,
+                detail=detail,
+            )
             if presentation.steps and keys[1]:
                 self._completion_keys[activity_id] = keys[1]
             self._open_call = (name, activity_id)
@@ -694,6 +930,9 @@ class ActivityProjector:
         kind, key, _started = self._active[activity_id]
         return (activity_id, kind, key)
 
+    def open_activity_detail(self, activity_id: str) -> dict[str, Any] | None:
+        return self._details.get(activity_id)
+
     def has_active(self) -> bool:
         return bool(self._active)
 
@@ -720,6 +959,7 @@ __all__ = [
     "ActivityFrame",
     "ActivityProjector",
     "KIND_DRAFT",
+    "KIND_FOCUS",
     "KIND_READ",
     "KIND_REPAIR",
     "KIND_RUN",
@@ -728,4 +968,6 @@ __all__ = [
     "STATUS_COMPLETED",
     "STATUS_FAILED",
     "frame_persistence",
+    "project_tool_detail",
+    "sanitize_focus_text",
 ]

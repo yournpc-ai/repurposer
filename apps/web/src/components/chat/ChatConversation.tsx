@@ -65,6 +65,7 @@ interface ChatConversationProps {
   currentActivityRowKeysRef: RefObject<Set<string>>
   liveWorkFoldKey: string | null
   liveMode?: ChatLiveMode
+  liveFocus?: string | null
   postToolThinkingStartedAtMs?: number | null
   nowRow: NowRowPayload | null
   bottomNowRow: NowRowPayload | null
@@ -123,6 +124,7 @@ export function ChatConversation({
   currentActivityRowKeysRef,
   liveWorkFoldKey,
   liveMode,
+  liveFocus = null,
   postToolThinkingStartedAtMs,
   nowRow,
   bottomNowRow,
@@ -132,8 +134,13 @@ export function ChatConversation({
   const { t } = useTranslation()
   const { openCreditTopup } = useSettingsDialog()
   const liveActivity = liveWorkFoldKey != null ? nowRow : bottomNowRow
+  const rawStatusLabel = liveFocus && chatBusy
+    ? liveFocus
+    : liveActivity
+      ? activityText(liveActivity, t)
+      : null
   const chatStatusLabel = useChatStatusLabel(
-    liveActivity ? activityText(liveActivity, t) : null,
+    rawStatusLabel,
     liveWorkFoldKey == null,
   )
   const bottomStatusLabel = bottomNowRow != null ? chatStatusLabel : null
@@ -320,7 +327,7 @@ export function ChatConversation({
     const postToolThinking =
       live && liveMode === "live_post_tool_thinking"
         ? {
-            label: chatStatusLabel ?? t("chat.thinking"),
+            label: liveFocus ? t("chat.thinking") : (chatStatusLabel ?? t("chat.thinking")),
             startedAtMs: postToolThinkingStartedAtMs ?? unit.startedAtMs,
           }
         : null

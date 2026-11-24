@@ -35,6 +35,7 @@ from app.chat.activity import (
     STATUS_ACTIVE,
     ActivityProjector,
     frame_persistence,
+    project_tool_detail,
 )
 from app.chat.service import (
     TurnStopped,
@@ -265,6 +266,10 @@ def _make_activity_persister(
             if event.call_id in open_rows:
                 row_id, frame = open_rows[event.call_id]
                 merged = {**frame, "call_state": event.state, "key": event.key}
+                if event.params is not None:
+                    detail = project_tool_detail(event.tool_name, event.params)
+                    if detail is not None:
+                        merged["detail"] = detail
                 if event.user_error:
                     merged["error"] = event.user_error[:500]
                 if event.state == "running":
@@ -286,10 +291,18 @@ def _make_activity_persister(
         if desc is None:
             return None
         activity_id, kind, key = desc
+        detail = projector.open_activity_detail(activity_id)
+        if detail is None and event is not None:
+            detail = project_tool_detail(event.tool_name, getattr(event, "params", None))
         if activity_id in open_rows and event and event.group_id:
             row_id, frame = open_rows[activity_id]
-            merged = {**frame, "call_state": "running", "key": key,
-                      "started_at": datetime.now(UTC).isoformat()}
+            merged = {
+                **frame,
+                "call_state": "running",
+                "key": key,
+                "started_at": datetime.now(UTC).isoformat(),
+                **({"detail": detail} if detail is not None else {}),
+            }
             open_rows[activity_id] = (row_id, merged)
             await update_row(row_id, merged)
             return
@@ -303,6 +316,7 @@ def _make_activity_persister(
                 "status": STATUS_ACTIVE,
                 "key": key,
                 "at": datetime.now(UTC).isoformat(),
+                **({"detail": detail} if detail is not None else {}),
             }
         )
 
@@ -340,6 +354,8 @@ def _make_activity_persister(
         }
         if frame.duration_ms is not None:
             merged["duration_ms"] = frame.duration_ms
+        if frame.detail is not None:
+            merged["detail"] = frame.detail
         if frame.receipt is not None and frame.receipt.kind != "skill_read":
             merged["receipt"] = frame.receipt.model_dump(mode="json")
         try:

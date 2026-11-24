@@ -346,6 +346,8 @@ class RoundAssembly:
     # A caller may acknowledge a settled user action when the first tool response is silent.
     acknowledgment: str | None = None
     project_reply: Callable[[str], str] | None = None
+    # When true, non-empty prose with no tool calls settles cleanly as a direct reply.
+    allow_bare_reply: bool = False
 
 
 @dataclass(frozen=True)
@@ -549,6 +551,7 @@ class BatchMember:
     state: str = "queued"
     duration_ms: int | None = None
     user_error: str | None = None
+    params: BaseModel | None = None
 
 
 @dataclass(frozen=True)
@@ -1268,7 +1271,10 @@ class ToolLoopAgent:
                         return stopped
                     continue
                 required_feedback = assembled.missing_tool_feedback
-                editor_can_finish = assembled.project_reply is not None and bool(observation_scopes)
+                editor_can_finish = (
+                    assembled.allow_bare_reply
+                    or (assembled.project_reply is not None and bool(observation_scopes))
+                )
                 if self.service_per_call and not required_feedback and not editor_can_finish:
                     required_feedback = "在助手消息正文中回答，并调用合适的终结工具。"
                 if required_feedback:
@@ -1326,16 +1332,19 @@ class ToolLoopAgent:
                 for index, (request, wire) in enumerate(zip(result.tool_calls, wire_calls, strict=True)):
                     declared = by_name.get(request.name)
                     presentation = declared.presentation if declared else None
+                    if presentation is not None and presentation.kind == "focus":
+                        continue
                     member = BatchMember(group_id, wire["id"], request.name, index, len(wire_calls),
                                          presentation.active_key if presentation else None)
                     members[wire["id"]] = member
-                await _emit(on_loop_event, BatchDeclared(tuple(members.values())))
+                if members:
+                    await _emit(on_loop_event, BatchDeclared(tuple(members.values())))
 
             async def remember(call, call_id, observation, executed_arguments=None, *,
                                candidate_record: CandidateRecord | None = None,
                                candidate_active: bool = True,
                                target_tool: str | None = None):
-                if group_id and call_id not in started:
+                if group_id and call_id in members and call_id not in started:
                     await _emit(on_loop_event, replace(members[call_id], state="not_executed"))
                 if group_id and observation.valid_for_key:
                     batch_keys[call_id] = observation.project_text or observation.text
@@ -1672,7 +1681,7 @@ class ToolLoopAgent:
                     # reads themselves run concurrently, on a single observed version.
                     for member, validated in zip(members.values(), parallel_params, strict=True):
                         await _emit(on_tool_ready, member.tool_name, validated)
-                        await _emit(on_loop_event, replace(member, state="running"))
+                        await _emit(on_loop_event, replace(member, state="running", params=validated))
                         started.add(member.call_id)
                     pending = [asyncio.create_task(inspect_member(member, validated))
                                for member, validated in zip(members.values(), parallel_params, strict=True)]
@@ -1748,20 +1757,20 @@ class ToolLoopAgent:
                         candidate_active=False,
                         target_tool=dispatch_name if is_correction else None,
                     )
-                    if group_id and not parallel_params and not outcome.ok and outcome.user_error:
+                    if group_id and call_id in members and not parallel_params and not outcome.ok and outcome.user_error:
                         await _emit(on_loop_event, replace(members[call_id],
                                     state="provider_unknown" if outcome.provider_outcome_unknown else "failed",
                                     user_error=outcome.user_error))
-                    elif group_id and outcome.provider_outcome_unknown:
+                    elif group_id and call_id in members and outcome.provider_outcome_unknown:
                         await _emit(on_loop_event, replace(members[call_id], state="provider_unknown"))
-                    if group_id and outcome.awaiting_authorization:
+                    if group_id and call_id in members and outcome.awaiting_authorization:
                         await _emit(on_loop_event, replace(members[call_id], state="awaiting_authorization"))
                     if not parallel_params:
                         await _emit(on_loop_event, ReadAccepted(
                             tool_name=dispatch_name, ok=outcome.ok, receipt=outcome.receipt,
                             awaiting_authorization=outcome.awaiting_authorization,
                         ))
-                    if group_id and not parallel_params and not outcome.awaiting_authorization:
+                    if group_id and call_id in members and not parallel_params and not outcome.awaiting_authorization:
                         # Presentations with their own receipt already closed the row.
                         # Native-only tools still settle the declared member.
                         await _emit(on_loop_event, replace(members[call_id], state="completed" if outcome.ok else "failed"))

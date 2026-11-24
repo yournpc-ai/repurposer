@@ -2,6 +2,8 @@
 
 import re
 
+from pydantic import BaseModel, ConfigDict, Field
+
 from app.agents.tool_loop import ChatTool, NATIVE_PRESENTATION, ToolPresentation, ToolPresentationVariant, ToolRejected, prune_wire_parameters
 from app.chat.editor import EDITOR_TOOLS
 from app.chat.perception import perception_chat_tools
@@ -344,7 +346,34 @@ PLAN_TOOLS = [
     ),
 ]
 
+class UpdateFocusArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    focus: str = Field(
+        min_length=2,
+        max_length=120,
+        description=(
+            "Concise present-tense phase summary (3-12 words / short Chinese phrase) in the user's language, "
+            "e.g. '正在将 6 幕脚本编排为 Vox 风格' or 'Composing 6-act Vox storyboard'. "
+            "Never include internal IDs, clip_id, track_id, file paths, or tool names."
+        ),
+    )
+
+
+UPDATE_FOCUS_TOOL = ChatTool(
+    name="update_focus",
+    terminal=False,
+    batchable=True,
+    description=(
+        "更新当前轮的实时阶段状态标题，零副作用。多步骤创作进入或切换工作阶段时，与该阶段首个真实工具并行调用一次；"
+        "不要单独调用，单步简单回复无需调用。使用用户当前语言，3–12 个词，不暴露内部标识。"
+    ),
+    params_model=UpdateFocusArgs,
+    presentation=ToolPresentation(kind="focus", active_key="chat.activity.focus"),
+)
+
+
 PLAN_READ_TOOLS = [
+    UPDATE_FOCUS_TOOL,
     *perception_chat_tools(
         "get_understanding", "get_asset", "search_music", "search_transcript",
         "get_segment", "get_web_page", "search_web", "list_project_media",
