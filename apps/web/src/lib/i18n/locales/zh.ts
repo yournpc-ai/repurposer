@@ -174,16 +174,11 @@ const zh: Resources = {
   },
   home: {
     newChat: "新对话",
-    // Studio hero：composer 上方的一行问句——下方轮换 placeholder 用三条
-    // 示例 prompt 作答。
-    heroQuestion: "今天做点什么？",
-    // Composer placeholder：三条第一人称示例 prompt 轮换（Lovart 式），
-    // 无前缀——每条都是用户口吻的完整请求，即上方 hero 问句的答句。
-    // 每条保持简短，钉底条里不超一行。
+    heroQuestion: "你好，我是 Rookie，今天想做点什么？",
     placeholderPrompts: [
-      "把产品图片叠在这个镜头上",
-      "剪掉片头的停顿",
-      "把标题往左移，再播放这一段",
+      "用这几张产品截图，剪一支 25 秒无旁白强鼓点发布片",
+      "根据我的官网链接，做一支暖黑影棚风产品宣传片",
+      "把这段品牌文案做成 15 秒高对比动态文字短片",
     ],
     selectPersona: "人设",
     noPromptError: "先说说想做什么",
@@ -192,9 +187,9 @@ const zh: Resources = {
   landing: {
 
   meta: {
-    description: "把素材和想法交给 RookieCut AI 视频剪辑师。看过第一版，在同一段对话里指出想改的画面，继续打磨这支片子。",
+    description: "把素材和想法交给 Rookie AI 视频剪辑师。看过第一版，在同一段对话里指出想改的画面，继续打磨这支片子。",
   },
-  "heroEyebrow": "你的 AI 视频 Agent",
+  "heroEyebrow": "你的下一代 AI 视频剪辑师",
   "showcase": {
     "label": "视频制作演示",
     "types": "视频类型",
@@ -313,7 +308,7 @@ const zh: Resources = {
     },
     "material": {
       "question": "手头只有一个想法，可以开始吗？",
-      "answer": "可以先聊你想表达什么，RookieCut 会告诉你还缺哪些素材。有现成的文稿、图片或视频，可以直接发到对话里。做产品介绍时，也可以贴上网站链接。"
+      "answer": "可以先聊你想表达什么，Rookie 会告诉你还缺哪些素材。有现成的文稿、图片或视频，可以直接发到对话里。做产品介绍时，也可以贴上网站链接。"
     },
     "revision": {
       "question": "成片里只有一处不满意，可以单独改吗？",
@@ -329,18 +324,34 @@ const zh: Resources = {
     }
   },
   "footerItems": {
-    "pricing": "定价",
     "changelog": "更新日志",
     "terms": "使用条款",
     "privacy": "隐私政策"
   }
 ,
     nav: {
-      features: "使用方式",
-      pricing: "定价",
+      features: "功能",
       faq: "常见问题",
       earlyAccess: "内测",
     },
+    features: [
+      {
+        title: "对话式精剪",
+        description: "从初剪到单幕微调，一切都在同一段对话里完成。",
+      },
+      {
+        title: "高质量影棚预设",
+        description: "画面动效、字体排印、光影质感与影棚音效开箱即用。",
+      },
+      {
+        title: "模板一键同款",
+        description: "看中任意成片节奏，替换文案与素材即可复刻。",
+      },
+      {
+        title: "多素材与官网直采",
+        description: "官网链接、录屏、实拍、图片与文字稿自由混剪。",
+      },
+    ],
     signIn: "登录",
     openStudio: "开始对话",
     headerCta: "开始对话",
@@ -349,10 +360,7 @@ const zh: Resources = {
       navigation: "主导航",
       community: "加入社群",
     },
-    heroTitle1: "人人都能剪出好视频",
-    heroTitle2: "",
-    heroSubtitle:
-      "通过对话，轻松制作融合动态图形、\n丰富动画与精细剪辑的视频。",
+    heroTitle: "探索剪辑的艺术",
     earlyAccess: {
       title: "你手上有什么想剪的？",
       description: "一段素材、一份想法，或是一支想再改改的片子，都可以发来。",
@@ -388,7 +396,7 @@ const zh: Resources = {
       },
     },
     footer: {
-      tagline: "你说，我来剪。",
+      tagline: "AI 视频剪辑 Agent",
       autoTheme: "自动",
       columns: {
         company: "公司",
@@ -407,14 +415,14 @@ const zh: Resources = {
       wechat: {
         title: "加入微信群",
         description: "使用微信扫码，加入产品交流与内测反馈群。",
-        qrAlt: "RookieCut 微信群二维码",
+        qrAlt: "Rookie 微信群二维码",
       },
       legal: {
         terms: "服务条款",
         privacy: "隐私政策",
         refund: "退款政策",
       },
-      copyright: "© {{year}} RookieCut。保留所有权利。",
+      copyright: "© {{year}} Rookie。保留所有权利。",
       backToTop: "回到顶部",
     },
   },
@@ -1069,7 +1077,7 @@ const zh: Resources = {
       floatPanel: "浮动面板",
       // dock 常驻免责行（ADR-051）——指向真实风险点：即将发布的内容，而非
       // 事实问答。基础形态钉在输入区上方，提问形态随输入行隐藏。
-      honesty: "RookieCut 可能出错，发布前请检查。",
+      honesty: "Rookie 可能出错，发布前请检查。",
     },
     // 画布产物卡（ADR-041 D5）：常驻操作带按钮文案。（无「预览」——视频内联自
     // 播，hover 放大开大屏；2026-08-16 走查拍板。）
@@ -1239,7 +1247,7 @@ const zh: Resources = {
   chat: {
     scrollToStart: "滚动到开头",
     scrollToEnd: "滚动到末尾",
-    assistantLabel: "RookieCut",
+    assistantLabel: "Rookie",
     userLabel: "你",
     thinking: "思考中...",
     thinkingPhases: {
@@ -2084,7 +2092,7 @@ const zh: Resources = {
     shareCopied: "链接已复制",
   },
   login: {
-    title: "登录 RookieCut",
+    title: "登录 Rookie",
     subtitle: "输入邮箱接收登录验证码，无需密码；首次登录会自动创建账号。",
     emailLabel: "邮箱地址",
     emailPlaceholder: "you@company.com",

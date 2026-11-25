@@ -57,12 +57,11 @@ describe("i18n EN <-> ZH dictionary parity", () => {
   })
 
   it("contains no unexpected empty translation strings in either locale", () => {
-    const allowedEmpty = new Set(["landing.heroTitle2"])
     const emptyEn = Object.entries(enLeaves)
-      .filter(([k, v]) => !allowedEmpty.has(k) && v.trim().length === 0)
+      .filter(([, v]) => v.trim().length === 0)
       .map(([k]) => k)
     const emptyZh = Object.entries(zhLeaves)
-      .filter(([k, v]) => !allowedEmpty.has(k) && v.trim().length === 0)
+      .filter(([, v]) => v.trim().length === 0)
       .map(([k]) => k)
     expect(emptyEn).toEqual([])
     expect(emptyZh).toEqual([])

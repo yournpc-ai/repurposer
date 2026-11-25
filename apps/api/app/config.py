@@ -185,7 +185,7 @@ class Settings(BaseSettings):
 
     # Auth / email
     resend_api_key: str = ""
-    from_email: str = "Rookie Cut <no-reply@repurposer.local>"
+    from_email: str = "Rookie <no-reply@repurposer.local>"
     jwt_secret_key: str = "dev-secret-change-in-production"
     jwt_expire_days: int = 1
 

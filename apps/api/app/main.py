@@ -69,7 +69,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Rookie Cut API",
+    title="Rookie API",
     description="Conversational editor for persistent video compositions",
     version="0.1.0",
     lifespan=lifespan,

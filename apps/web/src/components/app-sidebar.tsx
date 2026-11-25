@@ -110,7 +110,7 @@ export function AppSidebar({ defaultOpen }: { defaultOpen: boolean }) {
       <Dialog
         open={mobileOpen}
         onOpenChange={setMobileOpen}
-        title="RookieCut"
+        title="Rookie"
         closeLabel={t("common.close")}
       >
         {nav}
@@ -129,7 +129,7 @@ export function AppSidebar({ defaultOpen }: { defaultOpen: boolean }) {
       <div className="flex items-center">
         <div aria-hidden={!expanded} className="ui-as-side__label flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
           <LogoMark className="size-6" />
-          <span className="text-sm font-medium">RookieCut</span>
+          <span className="text-sm font-medium">Rookie</span>
         </div>
         <IconButton
           className="ui-as-side__toggle"

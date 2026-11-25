@@ -35,7 +35,7 @@ export function StudioHeader() {
           <LogoMark className="h-6 w-6" />
           {!left && (
             <span className="font-semibold tracking-tight max-[400px]:hidden">
-              RookieCut
+              Rookie
             </span>
           )}
         </Link>

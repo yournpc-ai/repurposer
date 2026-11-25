@@ -1,5 +1,5 @@
 import { useNavigate } from "@tanstack/react-router"
-import { Menu } from "lucide-react"
+import { ChevronDown, Menu } from "lucide-react"
 import { useState, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -8,6 +8,7 @@ import { IconButton } from "@/components/ui/icon-button-clean"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { Button } from "@/components/ui/button-clean"
 import { Dialog } from "@/components/ui/dialog-clean"
+import { FeatureList } from "./FeatureList"
 import { useAuth } from "@/lib/auth-context"
 
 export function MobileNavigation(): ReactNode {
@@ -27,7 +28,7 @@ export function MobileNavigation(): ReactNode {
       <Dialog
         open={open}
         onOpenChange={setOpen}
-        title="RookieCut"
+        title="Rookie"
         closeLabel={t("common.close")}
         trigger={<IconButton label={t("landing.entry.navigation")} icon={<Menu />} />}
       >
@@ -39,19 +40,20 @@ export function MobileNavigation(): ReactNode {
           >
             {t("landing.nav.earlyAccess")}
           </a>
-          {[
-            ["#pricing", "landing.nav.pricing"],
-            ["#faq", "landing.nav.faq"],
-          ].map(([href, key]) => (
-            <a
-              key={href}
-              href={href}
-              onClick={() => setOpen(false)}
-              className="flex h-12 items-center rounded-md px-3 text-base transition-colors hover:bg-accent"
-            >
-              {t(key)}
-            </a>
-          ))}
+          <details className="group">
+            <summary className="flex h-12 cursor-pointer list-none items-center justify-between rounded-md px-3 text-base hover:bg-accent [&::-webkit-details-marker]:hidden">
+              {t("landing.nav.features")}
+              <ChevronDown aria-hidden="true" className="size-4 text-muted-foreground group-open:rotate-180" />
+            </summary>
+            <FeatureList className="grid gap-4 px-3 py-3" />
+          </details>
+          <a
+            href="#faq"
+            onClick={() => setOpen(false)}
+            className="flex h-12 items-center rounded-md px-3 text-base transition-colors hover:bg-accent"
+          >
+            {t("landing.nav.faq")}
+          </a>
         </nav>
 
         <div className="flex items-center gap-5 border-t border-subtle px-6 py-4">

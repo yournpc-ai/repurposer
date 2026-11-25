@@ -186,17 +186,11 @@ const en = {
   },
   home: {
     newChat: "New chat",
-    // Studio hero: one question line above the composer — the rotating
-    // placeholder below answers it with three example prompts.
-    heroQuestion: "What should we make today?",
-    // Composer placeholder: three first-person example prompts rotating
-    // (Lovart-style), NO prefix — each is a complete request in the user's
-    // own voice, answering the hero question above. Keep each short enough
-    // to stay one line in the docked bar.
+    heroQuestion: "Hi, I'm Rookie. What would you like to make?",
     placeholderPrompts: [
-      "Put the product photo over this shot",
-      "Trim the pause at the beginning",
-      "Move the title left and play this part",
+      "Cut a 25s beat-led launch video from these product screenshots",
+      "Make a warm obsidian studio promo from my website URL",
+      "Turn this brand copy into a 15s high-contrast kinetic typography video",
     ],
     selectPersona: "Persona",
     noPromptError: "Say what you want to make first",
@@ -205,9 +199,9 @@ const en = {
   landing: {
 
   meta: {
-    description: "Share footage and ideas with RookieCut, your AI video editor. Preview the first cut and refine the same video in chat.",
+    description: "Share footage and ideas with Rookie, your AI video editor. Preview the first cut and refine the same video in chat.",
   },
-  "heroEyebrow": "Your AI video agent",
+  "heroEyebrow": "Your next-generation AI video editor",
   "showcase": {
     "label": "Video creation demonstration",
     "types": "Video types",
@@ -326,7 +320,7 @@ const en = {
     },
     "material": {
       "question": "Can I start with just an idea?",
-      "answer": "Yes. Describe your idea and RookieCut will ask for any material it needs. If you already have a script, images, or footage, add them to the chat. For a product video, you can also share a website link."
+      "answer": "Yes. Describe your idea and Rookie will ask for any material it needs. If you already have a script, images, or footage, add them to the chat. For a product video, you can also share a website link."
     },
     "revision": {
       "question": "Can I change just one part of the video?",
@@ -342,18 +336,34 @@ const en = {
     }
   },
   "footerItems": {
-    "pricing": "Pricing",
     "changelog": "Changelog",
     "terms": "Terms of Service",
     "privacy": "Privacy Policy"
   }
 ,
     nav: {
-      features: "How it works",
-      pricing: "Pricing",
+      features: "Features",
       faq: "FAQ",
       earlyAccess: "Early access",
     },
+    features: [
+      {
+        title: "Conversational Editing",
+        description: "Go from a rough cut to fine-tuning a single scene in the same conversation.",
+      },
+      {
+        title: "Studio Presets",
+        description: "Start with ready-to-use motion, typography, lighting, and studio sound effects.",
+      },
+      {
+        title: "Instant Remix",
+        description: "Keep the rhythm of a finished video and make it your own with your copy and footage.",
+      },
+      {
+        title: "Multi-Source Cuts",
+        description: "Edit website content, screen recordings, footage, images, and scripts together.",
+      },
+    ],
     signIn: "Sign in",
     openStudio: "Start a chat",
     headerCta: "Start a chat",
@@ -362,10 +372,7 @@ const en = {
       navigation: "Main navigation",
       community: "Join the community",
     },
-    heroTitle1: "Rookies can make great videos too.",
-    heroTitle2: "",
-    heroSubtitle:
-      "No complex timelines or keyframes.\nCreate animated promos and explainer videos—just by chatting.",
+    heroTitle: "Explore the art of the cut.",
     earlyAccess: {
       title: "What are you working on?",
       description: "Bring a clip, a brief, or a cut you want to revisit.",
@@ -401,7 +408,7 @@ const en = {
       },
     },
     footer: {
-      tagline: "You call the cut.",
+      tagline: "AI Video Editing Agent",
       autoTheme: "Auto",
       columns: {
         company: "Company",
@@ -420,14 +427,14 @@ const en = {
       wechat: {
         title: "Join the WeChat group",
         description: "Scan the QR code with WeChat to join the conversation.",
-        qrAlt: "RookieCut WeChat group QR code",
+        qrAlt: "Rookie WeChat group QR code",
       },
       legal: {
         terms: "Terms of Service",
         privacy: "Privacy Policy",
         refund: "Refund Policy",
       },
-      copyright: "© {{year}} RookieCut. All rights reserved.",
+      copyright: "© {{year}} Rookie. All rights reserved.",
       backToTop: "Back to top",
     },
   },
@@ -1100,7 +1107,7 @@ const en = {
       // point: content about to go out, not factual Q&A. ABOVE the input
       // container since the 2026-09-06 FAUNA-parity ruling, hidden with
       // the input on the question morph.
-      honesty: "RookieCut can make mistakes — review before you publish.",
+      honesty: "Rookie can make mistakes — review before you publish.",
     },
     // Canvas product-card chrome (ADR-041 D5): the always-on action band's
     // labels. (No "preview" — the video plays inline, the hover expand opens
@@ -1286,7 +1293,7 @@ const en = {
   chat: {
     scrollToStart: "Scroll to start",
     scrollToEnd: "Scroll to end",
-    assistantLabel: "RookieCut",
+    assistantLabel: "Rookie",
     userLabel: "You",
     thinking: "Thinking...",
     thinkingPhases: {
@@ -2171,7 +2178,7 @@ const en = {
     shareCopied: "Link copied",
   },
   login: {
-    title: "Sign in to RookieCut",
+    title: "Sign in to Rookie",
     subtitle:
       "Enter your email and we'll send you a sign-in code — no password, and new accounts are created automatically.",
     emailLabel: "Email address",
@@ -2259,7 +2266,7 @@ const en = {
     profileDescription: "Manage your personal details.",
     profileNote: "Changes to your profile apply across your devices.",
     avatar: "Profile picture",
-    preferencesDescription: "Choose how RookieCut looks and when your assistant asks for confirmation.",
+    preferencesDescription: "Choose how Rookie looks and when your assistant asks for confirmation.",
     appearanceGroup: "Language and appearance",
     languageHint: "For menus and assistant replies",
     themeHint: "System follows your device",

@@ -4,13 +4,13 @@ I6 有条件收官。通用文字动画与显式 Skill 的 OxValue 宣传片均�
 
 **2026-11-22 成片存储策略更新**　正式导出与素材共用当前公开 TOS 桶。新成片写入 `exports/`，既有公开测试成片按原对象地址回放。成片预览使用公开直链，上传与带文件名的下载继续使用签名。项目、版本、导出费用和交付检查仍由原有接口负责。下方关于私有桶的记录属于此前的验收环境。
 
-> 更新至 2026-11-24。Agent Editor 的当前顺序见 §0，作品模型和验收标准以 [主合同](tasks/new-agent.md) 为准。下方历史官网项目的阶段和开放事项继续用于核对各自项目。
+> 更新至 2026-11-26。Agent Editor 的当前顺序见 §0，作品模型和验收标准以 [主合同](tasks/new-agent.md) 为准。下方历史官网项目的阶段和开放事项继续用于核对各自项目。
 
 ## 0. 当前里程碑与施工序列
 
-**最新封板里程碑：Batch 2 · 多幕商业 MG 宣传片与 Skill + Slot 同款复刻（DONE · 已合入 `main@857d475a`）。** 零新 SQL 表完成全部两道检查点并通过真人验收：**Checkpoint 2A**（`resources[0..N]` 统一 staging + 3 个新 Motion Blocks `statement_hook`/`metric_grid`/`closing_cta` + `product_showcase.callout`/`kinetic_title.pill_caption` + 不透明 `MotionBlockObject` `crossfade` + BGM `audio.gain` 淡入淡出/闪避 + `swoosh_cut` → 38.0s OxValue 英文投资人版 v40 交付并通过真人盲评）与 **Checkpoint 2B**（复用 `UserSkill`/`SkillVersion` 打通 `save_composition_as_skill` → `/` SkillPicker + `instantiate_skill_blueprint`，完成 OxValue 中文技术转移/治理跨视角复刻 v7 与单实例零漂移续改）。全仓核心回归（API 498 · Web 42/42 · 342 · Render 7/7 · sound-engine 2/2 · video-spec 11/11）及 Linux `apps/render/Dockerfile` 构建全绿；隔离 Gemini 2.5 Pro 适配器（`apps/api/app/providers/llm/gemini.py`）已就绪并按无 Key 约定静默预留，以 MiniMax 实证收口。下一批施工方向待用户拍板开启。[Batch 2 施工与验收合同](tasks/batch2-multiscene-skill.md)
+**当前主仓基线为 Sound Engine v3（`eedc401f`）。** 浏览器与 Renderer 共用确定性音效合成，输出 48 kHz 立体声 WAV。Studio Sound Lab 提供影视与交互两域、24 类共 80 个配方的试听和七维调音，可将所选声音及参数引用到对话。Agent 可调整时长、将实测峰值对齐切点，再把固定音源写入工程。旧版本沿原快照回放。声音合同与主观实听的验收边界见[声音架构](MUSIC_ARCHITECTURE.md)。
 
-**前置封板基线。** Batch 1（9s OxValue 单镜创作 + 双维度零漂移修订 + 授权交付与 Chrome 恢复 + Linux Docker 构建）已完成并合入 `main@0171cfda`；I8 基础剪辑已阶段封板；Renderer 音频时钟候选已补完 `verifyAudioWindow` 基线探测失败闭修复与注错单测并合入 `main@17b0e3dc`（生产 Linux x86_64 验收、旧缓存排空与切换仍按独立基础设施门禁推进）；独立渲染核心 C 继续冻结。
+多幕商业宣传片支持混合素材、转场、配乐包络与单幕续改。已交付作品可保存为 Skill，按槽位替换文案和素材进行复刻。真实成片与恢复验证范围见[多幕与同款合同](tasks/batch2-multiscene-skill.md)。Renderer 音频时钟的生产切换仍待 Linux x86_64 验收与旧缓存排空。独立渲染核心 C 继续冻结。真实模型验收使用 MiniMax；隔离 Gemini 适配器的实测仍需凭据，后续施工方向待定。
 
 ### 0.1 里程碑状态
 

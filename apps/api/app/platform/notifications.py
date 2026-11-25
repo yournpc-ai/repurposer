@@ -99,12 +99,12 @@ async def deliver_due_alert(db: AsyncSession) -> bool:
         zh = event.payload.get("email_locale") == "zh"
         subject = "视频发布需要处理" if zh else "Your video publication needs attention"
         message = (
-            "打开 RookieCut 的通知查看发布详情。"
+            "打开 Rookie 的通知查看发布详情。"
             if zh
-            else "Open your notifications in RookieCut to review this publication."
+            else "Open your notifications in Rookie to review this publication."
         )
         # Keep the body stable for every retry of this idempotency key.
-        subject = "RookieCut · " + subject
+        subject = "Rookie · " + subject
         event.email_attempts += 1
         try:
             async with httpx.AsyncClient(timeout=5) as client:

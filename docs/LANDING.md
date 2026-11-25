@@ -1,27 +1,28 @@
 # LANDING — 落地页叙事与当前结构
 
-> Status: 活跃工作文档（2026-11-23）——落地页叙事、媒体与公开入口的唯一事实源；排期只引用 `PROGRESS.md`。
+> Status: 活跃工作文档（2026-11-26）——落地页叙事、媒体与公开入口的唯一事实源；排期只引用 `PROGRESS.md`。
 
 ## 1. 当前结构
 
-首页为长页：`LandingHeader → LandingHero → CreationShowcase → CreationStory → LandingSkills → LandingFaq → EarlyAccess → Footer`。Hero 使用 `#f9f8f6` 暖纸色背景（只覆盖 Landing 的 `--landing-background`，不改全站背景）、定位小字/主标题/说明三层文字和主按钮，移除 ASCII 波场与光晕；缩短高度以在首屏露出演示。Header 吸附顶部，桌面为 64px 高、独立 1360px 容器，品牌图标 24px，中央导航使用等宽左右轨道保持真正居中，Header CTA 为 14px；主题与语言入口只留在 Header。当CreationStory 顶部到达 80px sticky 起点、故事舞台真正接管页面后，桌面 Header 在原 64px 占位内以 500ms 收缩为带 8px 顶部间距的 56px 居中全圆角玻璃浮条；浅色玻璃为 `#F2F1EE` 93% + 4px blur，深色为 `#171612` 93% + 4px blur，背景与模糊共用同一 pill 边界并隐藏主题/语言按钮，滚回上方恢复通栏实色，移动端保持原形态。App 沿用既有登录及 `/home` 链路。
+首页为长页：`LandingHeader → LandingHero → CreationShowcase → CreationStory → LandingSkills → LandingFaq → EarlyAccess → Footer`。Hero 使用 `#f9f8f6` 暖纸色背景（只覆盖 Landing 的 `--landing-background`，不改全站背景）、眉标、主标题与主按钮，移除 ASCII 波场与光晕；缩短高度以在首屏露出演示。Header 吸附顶部，桌面为 64px 高、独立 1360px 容器，品牌图标 24px，中央导航使用等宽左右轨道保持真正居中，Header CTA 为 14px；主题与语言入口只留在 Header。当CreationStory 顶部到达 80px sticky 起点、故事舞台真正接管页面后，桌面 Header 在原 64px 占位内以 500ms 收缩为带 8px 顶部间距的 56px 居中全圆角玻璃浮条；浅色玻璃为 `#F2F1EE` 93% + 4px blur，深色为 `#171612` 93% + 4px blur，背景与模糊共用同一 pill 边界并隐藏主题/语言按钮，滚回上方恢复通栏实色，移动端保持原形态。App 沿用既有登录及 `/home` 链路。
 
 旧的 VideoShowcase、Manifesto、AppShowcase、Channels、订阅 Pricing、FAQ、FinalCta、Testimonials、旧文本 Gallery 与社群 mock 已移除，不保留一套等待恢复的旧营销叙事。
 
 ## 2. 叙事立场
 
-- Rookie Cut 是通过对话操作同一部作品的 AI 视频剪辑师。用户提供素材和目标，看片后指出要改的画面，继续打磨到交付。Skill、制作方法与渲染是内部能力，不要求用户理解或安装。
+- Rookie 是通过对话操作同一部作品的 AI 视频剪辑师。用户提供素材和目标，看片后指出要改的画面，继续打磨到交付。Skill、制作方法与渲染是内部能力，不要求用户理解或安装。
+- 品牌统一写作 **Rookie**。中英文官网文案禁用带有菜鸟感、新手自嘲或贬低读者的措辞。
+- 官网文案直接描述创作动作和结果。禁用「你说我来剪」「你定方向我……」等仆从句式、「把某某剪成某某」的广告句式和用否定罗列卖点的防守型减法句式。营销层使用用户熟悉的语言，禁堆叠底层参数、引擎名或实现术语。
 - 单助手叙事：用户提出目标，通过对话完成创作与修订；内部工具与子 agent 不承担品牌主语。
 - 当前视频产品表达统一为**产品宣传、口播动效、文字动画、知识讲解**。多形态是能力，不是一次输入固定生成全套的承诺。
 - 不虚构发布、合规、渠道、社交链接、折扣或质量承诺。多语言文案只陈述当前真实规则。
 
 ## 3. Hero、导航与内测商业面
 
-- Landing 品牌、版权与 SEO/分享 meta 使用 **Rookie Cut**。Hero 小字为 `Your AI video agent / 你的 AI 视频 Agent`，主标题为 `Rookies can make great videos too. / 人人都能剪出好视频`，主按钮为 `Create now / 立即制作`。Header 与收尾按钮使用 `Start a chat / 开始对话`。
-- 桌面 Hero 上/下间距为 32/48px；主标题沿用现有响应式 clamp，上限 72px、常规字重，使用自托管的 Cormorant Garamond + Noto Serif SC 高对比衬线字族。说明限宽 32rem，中英文按语义显式分为两行，不在词语中间断行；与主按钮间隔 48px，主按钮文字为 14/16px。`CreationShowcase` 桌面顶部间距为 40px，面板最大宽度仍保持 1200px。
-- 配置真实 Discord 地址后，Hero 显示「加入社群」外链；未配置时不显示第二入口。
-- Header 使用「定价 / 常见问题」两个正文锚点，撤掉悬浮的重复功能介绍。移动 Sheet 保留内测入口及相同两个锚点，另保留主题、语言和主按钮。
-- `#pricing` 指向 FAQ 的计费问题，锚点访问自动展开对应答案。对话免费与重新制作消耗积分分别说明。
+- Landing 品牌、版权与 SEO/分享 meta 使用 **Rookie**。Hero 小字为 `Your next-generation AI video editor / 你的下一代 AI 视频剪辑师`，主标题为 `Explore the art of the cut. / 探索剪辑的艺术`，主按钮为 `Create now / 立即制作`。Header 与收尾按钮使用 `Start a chat / 开始对话`。
+- 桌面 Hero 上/下间距为 32/48px；主标题沿用现有响应式 clamp，上限 72px、常规字重，使用自托管的 Cormorant Garamond + Noto Serif SC 高对比衬线字族。首屏无副标题，主标题与主按钮间隔 48px，主按钮文字为 14/16px。`CreationShowcase` 桌面顶部间距为 40px，面板最大宽度仍保持 1200px。
+- 桌面 Header 中央为「Features / 功能」和 FAQ。功能按钮在悬停或键盘聚焦时展开黑白灰磨砂双列面板，展示对话式精剪、高质量影棚预设、模板一键同款、多素材与官网直采四项能力。移出、失焦或按 Escape 收起，停留在当前页。
+- 移动导航用可折叠列表展示同一组双语内容，保留内测入口、FAQ、主题、语言与主按钮。计费说明位于 FAQ。
 - 不恢复订阅套餐卡。Footer 只链接当前存在的锚点与已配置真实目的地。
 
 ### 首屏动态演示与滚动叙事
@@ -67,7 +68,7 @@
 
 ## 6. Footer 与真实公开入口
 
-Footer 按参考采用左品牌、右公司/社交媒体两列、底部左版权的布局。品牌下方使用 `You call the cut. / 你说，我来剪。`。Company 只保留 Pricing、Changelog、Terms of Service、Privacy Policy；Social media 只保留 X、Discord、TikTok；Resources 整栏与 Docs、News、YouTube、LinkedIn、Instagram 入口均不渲染。移除主题/语言控件、大字 wordmark、图标排和分隔线。当前未有真实目的地的栏目只渲染不可点击文字，不用空 href、平台首页或弹窗冒充链接；发布前须接入真实目的地或移除这些文字。桌面品牌与导航各占一半，手机品牌在上、导航两列。
+Footer 按参考采用左品牌、右公司/社交媒体两列、底部左版权的布局。品牌下方使用 `AI Video Editing Agent / AI 视频剪辑 Agent`。Company 只保留 Changelog、Terms of Service、Privacy Policy；Social media 只保留 X、Discord、TikTok；Resources 整栏与 Docs、News、YouTube、LinkedIn、Instagram 入口均不渲染。移除主题/语言控件、大字 wordmark、图标排和分隔线。当前未有真实目的地的栏目只渲染不可点击文字，不用空 href、平台首页或弹窗冒充链接；发布前须接入真实目的地或移除这些文字。桌面品牌与导航各占一半，手机品牌在上、导航两列。
 
 公开配置统一位于 `components/landing/content.ts`，经 Vite 环境变量注入；`apps/web/Dockerfile` 与根 `docker-compose.yml` 同步传递这些 build args，避免本地与线上曝光不一致：
 
