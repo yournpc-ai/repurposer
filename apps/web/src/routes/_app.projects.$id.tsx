@@ -1,11 +1,12 @@
-import { createFileRoute, useLocation, useNavigate } from "@tanstack/react-router"
+import { Link, createFileRoute, useLocation, useNavigate } from "@tanstack/react-router"
 import { Minimize2, PanelRight } from "lucide-react"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 
 import { AgentThread } from "@/components/chat/AgentThread"
 import { ProjectMenu } from "@/components/project/ProjectMenu"
+import { useStudioHeader } from "@/components/StudioHeaderContext"
 import { IconButton } from "@/components/ui/icon-button-clean"
 import { Tooltip } from "@/components/ui/tooltip-clean"
 import { WorkbenchProvider, useWorkbench } from "@/components/workbench/WorkbenchContext"
@@ -122,25 +123,39 @@ function ProjectThreadPage({
     }
   }, [activeConversationId, conversationId, compacting, projectId, t])
 
-  if (loading) {
-    return <div className="grid h-full place-items-center bg-background text-muted-foreground">{t("common.loading")}</div>
-  }
-  if (error || !results) {
-    return <div className="grid h-full place-items-center bg-background text-destructive">{error || "Project not found"}</div>
-  }
+  const project = results?.project ?? null
 
-  const { project, prompt } = results
-  return (
-    <div className="relative flex h-full flex-col overflow-hidden bg-background">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/60 px-2 py-1">
-        <ProjectMenu
-          projectId={project.id}
-          title={project.title}
-          onRenamed={(title) => setResults((current) => current ? { ...current, project: { ...current.project, title } } : current)}
-          onDeleted={() => navigate({ to: "/projects" })}
-        />
-
-        <div className="flex items-center gap-1">
+  const headerSlot = useMemo(() => {
+    if (!project) return null
+    return {
+      left: (
+        <div className="flex min-w-0 items-center gap-1.5">
+          <Link
+            to="/projects"
+            className="hidden shrink-0 rounded-md px-1.5 py-1 text-[13px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground sm:inline"
+          >
+            {t("nav.myProjects")}
+          </Link>
+          <span
+            aria-hidden="true"
+            className="hidden shrink-0 select-none text-[13px] text-muted-foreground/45 sm:inline"
+          >
+            /
+          </span>
+          <ProjectMenu
+            projectId={project.id}
+            title={project.title}
+            onRenamed={(title) =>
+              setResults((current) =>
+                current ? { ...current, project: { ...current.project, title } } : current,
+              )
+            }
+            onDeleted={() => navigate({ to: "/projects" })}
+          />
+        </div>
+      ),
+      actions: (
+        <>
           <Tooltip content={t("conversations.compactTooltip")} side="bottom">
             <IconButton
               size="md"
@@ -148,7 +163,9 @@ function ProjectThreadPage({
               icon={<Minimize2 className="size-4" />}
               label={t("conversations.compact")}
               disabled={compacting || !(activeConversationId ?? conversationId)}
-              onClick={() => { void handleCompact() }}
+              onClick={() => {
+                void handleCompact()
+              }}
             />
           </Tooltip>
           <Tooltip content={t(workbenchOpen ? "workbench.close" : "workbench.open")} side="bottom">
@@ -161,9 +178,33 @@ function ProjectThreadPage({
               onClick={toggleWorkbench}
             />
           </Tooltip>
-        </div>
-      </div>
+        </>
+      ),
+    }
+  }, [
+    project,
+    t,
+    navigate,
+    compacting,
+    activeConversationId,
+    conversationId,
+    handleCompact,
+    workbenchOpen,
+    toggleWorkbench,
+  ])
 
+  useStudioHeader(headerSlot)
+
+  if (loading) {
+    return <div className="grid h-full place-items-center bg-background text-muted-foreground">{t("common.loading")}</div>
+  }
+  if (error || !results) {
+    return <div className="grid h-full place-items-center bg-background text-destructive">{error || "Project not found"}</div>
+  }
+
+  const { prompt } = results
+  return (
+    <div className="relative flex h-full flex-col overflow-hidden bg-background">
       <div ref={splitRef} className="flex min-h-0 flex-1 overflow-hidden">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           <AgentThread

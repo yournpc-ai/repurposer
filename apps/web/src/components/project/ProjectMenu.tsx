@@ -26,13 +26,22 @@ export function ProjectMenu({ projectId, title, runActive, onRenamed, onDeleted 
 
   return (
     <>
-      <div className="flex h-9 items-center">
+      <div className="flex h-8 min-w-0 items-center gap-0.5">
+        <button
+          type="button"
+          onClick={() => setRenameOpen(true)}
+          aria-label={t("projects.rename")}
+          className="h-8 min-w-0 max-w-56 truncate rounded-md px-2 text-[13px] font-medium text-foreground transition-colors hover:bg-accent active:bg-accent"
+        >
+          {title}
+        </button>
         <DropdownMenu
           align="start"
           trigger={({ triggerProps }) => (
             <IconButton
               ref={menuTrigger}
               {...triggerProps}
+              size="sm"
               icon={<Ellipsis />}
               label={t("projectMenu.open")}
             />
@@ -61,14 +70,6 @@ export function ProjectMenu({ projectId, title, runActive, onRenamed, onDeleted 
                 ]),
           ]}
         />
-        <button
-          type="button"
-          onClick={() => setRenameOpen(true)}
-          aria-label={t("projects.rename")}
-          className="h-9 max-w-40 truncate rounded-md pl-1.5 pr-3 text-[13px] text-foreground transition-colors hover:bg-accent active:bg-accent"
-        >
-          {title}
-        </button>
       </div>
 
       <RenameProjectDialog

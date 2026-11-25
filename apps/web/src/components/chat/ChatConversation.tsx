@@ -33,6 +33,7 @@ import { MessageActionBar } from "./rows/MessageActionBar"
 import { FocusRow, TurnErrorRow } from "./rows/MetaRow"
 import { UserBubble } from "./rows/UserMessage"
 import type {
+  CandidateSurface,
   CompactSummary,
   ConversationBlock,
   ConversationUnit,
@@ -137,6 +138,7 @@ interface ChatConversationProps {
   openOutputViewer: (outputId: string) => void
   chatBusy: boolean
   onSuggestionClick: (suggestion: SuggestionPill) => void
+  onSelectCandidate?: (message: string, memberIndex: number, surface: CandidateSurface) => void
   onStructureVisible: RegisterStructureVisibility
   presentationRecovery: VideoPresentationRecoveryFact | null
   currentActivityRowKeysRef: RefObject<Set<string>>
@@ -199,6 +201,7 @@ export function ChatConversation({
   openOutputViewer,
   chatBusy,
   onSuggestionClick,
+  onSelectCandidate,
   onStructureVisible,
   presentationRecovery,
   currentActivityRowKeysRef,
@@ -369,6 +372,8 @@ export function ChatConversation({
                 serverMessageId={m.serverMessageId}
                 turnId={m.turnId}
                 onStructureVisible={onStructureVisible}
+                onSelectCandidate={onSelectCandidate}
+                selectionDisabled={chatBusy}
               />
             ) : null}
             {m.blocks?.map((block, index) => {

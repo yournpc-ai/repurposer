@@ -610,11 +610,60 @@ export function candidatesLog(intent: unknown): CandidatesLogEvent[] | undefined
           selected: [],
         },
       })
+    } else if (d.kind === "voice_set") {
+      const members: CandidateMemberPayload[] = []
+      for (const m of Array.isArray(d.members) ? d.members : []) {
+        const md = (m ?? {}) as Record<string, unknown>
+        if (typeof md.voice_id !== "string" || !md.voice_id) continue
+        const title = typeof md.title === "string" ? md.title : md.voice_id
+        members.push({
+          start: typeof md.start === "number" ? md.start : 0,
+          end: typeof md.end === "number" ? md.end : 0,
+          excerpt: typeof md.excerpt === "string" ? md.excerpt : title,
+          speaker: typeof md.speaker === "string" ? md.speaker : null,
+          voice_id: md.voice_id,
+          title,
+          description: typeof md.description === "string" ? md.description : null,
+          source_kind: typeof md.source_kind === "string" ? md.source_kind : null,
+          scope: typeof md.scope === "string" ? md.scope : null,
+          languages: receiptStrings(md.languages) ?? null,
+          gender: typeof md.gender === "string" ? md.gender : null,
+          age_band: typeof md.age_band === "string" ? md.age_band : null,
+          tone_tags: receiptStrings(md.tone_tags) ?? null,
+          compatible_styles: receiptStrings(md.compatible_styles) ?? null,
+          use_count: typeof md.use_count === "number" && Number.isFinite(md.use_count) ? md.use_count : null,
+          preview_url: typeof md.preview_url === "string" ? md.preview_url : null,
+        })
+      }
+      if (members.length === 0) continue
+      const selected = (Array.isArray(d.selected) ? d.selected : []).filter(
+        (i): i is number => typeof i === "number" && Number.isInteger(i) && i >= 0,
+      )
+      events.push({
+        kind: "set",
+        surface: {
+          kind: "voice_set",
+          candidateSetId: setId,
+          topic: typeof d.topic === "string" ? d.topic : "",
+          assetId: typeof d.asset_id === "string" ? d.asset_id : null,
+          members,
+          selected,
+        },
+      })
     } else if (d.kind === "music_set") {
       const members: CandidateMemberPayload[] = []
       for (const m of Array.isArray(d.members) ? d.members : []) {
         const md = (m ?? {}) as Record<string, unknown>
         if (typeof md.start !== "number" || typeof md.end !== "number") continue
+        const enriched: Partial<CandidateMemberPayload> = {}
+        if (typeof md.bpm === "number" && Number.isFinite(md.bpm)) enriched.bpm = md.bpm
+        if (typeof md.lufs === "number" && Number.isFinite(md.lufs)) enriched.lufs = md.lufs
+        const styles = receiptStrings(md.compatible_styles)
+        if (styles) enriched.compatible_styles = styles
+        if (typeof md.instrumental === "boolean") enriched.instrumental = md.instrumental
+        if (typeof md.use_count === "number" && Number.isFinite(md.use_count)) {
+          enriched.use_count = md.use_count
+        }
         members.push({
           start: md.start,
           end: md.end,
@@ -632,8 +681,12 @@ export function candidatesLog(intent: unknown): CandidatesLogEvent[] | undefined
           license: typeof md.license === "string" ? md.license : null,
           attribution: typeof md.attribution === "string" ? md.attribution : null,
           query: typeof md.query === "string" ? md.query : null,
+          ...enriched,
         })
       }
+      const selected = (Array.isArray(d.selected) ? d.selected : []).filter(
+        (i): i is number => typeof i === "number" && Number.isInteger(i) && i >= 0,
+      )
       events.push({
         kind: "set",
         surface: {
@@ -642,7 +695,7 @@ export function candidatesLog(intent: unknown): CandidatesLogEvent[] | undefined
           topic: typeof d.topic === "string" ? d.topic : "",
           assetId: typeof d.asset_id === "string" ? d.asset_id : null,
           members,
-          selected: [],
+          selected,
         },
       })
     } else if (d.kind === "set" || d.kind === "sfx_set") {

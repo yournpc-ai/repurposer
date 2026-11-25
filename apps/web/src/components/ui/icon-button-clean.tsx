@@ -135,6 +135,10 @@ const css = /* css */ `
   --size: 24px;
   --icon: 14px;
 }
+.ui-icbc.rounded-full {
+  --radius: 9999px;
+  border-radius: 9999px;
+}
 
 .ui-icbc__icon {
   display: grid;

@@ -88,10 +88,21 @@ export function MessageScrollerButton() {
   const { t } = useTranslation()
   const { away, scrollToEnd } = useMessageScroller()
   if (!away) return null
-  return <IconButton data-slot="message-scroller-button" label={t("chat.scrollToEnd")}
-    icon={<ArrowDownIcon />} variant="secondary" style={{ position: "absolute" }}
-    className="inset-s-1/2 bottom-4 -translate-x-1/2"
-    onClick={() => scrollToEnd()} />
+  return (
+    <IconButton
+      data-slot="message-scroller-button"
+      label={t("chat.scrollToEnd")}
+      icon={<ArrowDownIcon className="size-4" />}
+      variant="secondary"
+      style={{
+        position: "absolute",
+        ["--radius" as string]: "9999px",
+        ["--size" as string]: "32px",
+      }}
+      className="inset-s-1/2 bottom-3 z-20 size-8 -translate-x-1/2 rounded-full border border-border bg-background/95 shadow-sm backdrop-blur-sm"
+      onClick={() => scrollToEnd()}
+    />
+  )
 }
 
 export function useMessageScrollerViewportAnchor(

@@ -251,7 +251,16 @@ export function HomeComposer({
     <>
       <Card
         role="group"
-        className={dragging ? "relative w-full outline-2 outline-dashed outline-ring" : "relative w-full"}
+        data-slot="home-composer"
+        className={
+          dragging
+            ? "relative w-full rounded-[22px] border border-border bg-card shadow-sm outline-2 outline-dashed outline-ring"
+            : "relative w-full rounded-[22px] border border-border bg-card shadow-sm"
+        }
+        style={{
+          ["--ui-crdc-radius" as string]: "22px",
+          ["--ui-crdc-pad" as string]: "14px 16px",
+        }}
         {...dropProps}
       >
         {/* Drop affordance — the floating pill (screenshot parity): centered

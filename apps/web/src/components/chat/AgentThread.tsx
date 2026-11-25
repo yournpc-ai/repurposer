@@ -625,7 +625,13 @@ export function AgentThread({
   const candidateTurnSnapshotRef = useRef<Map<string, number[]>>(new Map())
   const handleCandidatesFrame = useCallback((event: CandidateEventPayload) => {
     const at = new Date().toISOString()
-    if (event.kind === "set" || event.kind === "sfx_set" || event.kind === "music_set" || event.kind === "video_preset_set") {
+    if (
+      event.kind === "set" ||
+      event.kind === "sfx_set" ||
+      event.kind === "music_set" ||
+      event.kind === "video_preset_set" ||
+      event.kind === "voice_set"
+    ) {
       liveCandidateRowsRef.current.add(`live-cand-${event.candidate_set_id}`)
     }
     if (event.kind === "selection" || event.turn_id) {
@@ -2951,6 +2957,12 @@ export function AgentThread({
   /** One conversation message with its anchors: superseded plan-version
    * chips sit right after the echo bubble whose turn produced them; an
    * in-flight live plan card anchors after its own echo bubble. */
+  const handleSelectCandidate = (message: string) => {
+    const text = message.trim()
+    if (!text || chatBusy) return
+    void sendChat(text)
+  }
+
   const canStop = (chatBusy && abortRef.current !== null) || recoveredJobTurn !== null
   const chatScroller = (
     <ChatConversation
@@ -2960,6 +2972,7 @@ export function AgentThread({
       openOutputViewer={openOutputViewer}
       chatBusy={chatBusy}
       onSuggestionClick={handleSuggestionClick}
+      onSelectCandidate={handleSelectCandidate}
       onStructureVisible={registerStructureVisibility}
       presentationRecovery={presentationRecovery}
       currentActivityRowKeysRef={currentActivityRowKeysRef}
@@ -3134,8 +3147,16 @@ export function AgentThread({
           {pillDock && <div className="mb-2 max-h-[55dvh] overflow-y-auto">{pillDock}</div>}
           <AsyncJobStrip />
           <Card
-            className={cn("relative w-full", fileDragging && "outline-2 outline-dashed outline-ring")}
-            style={pillDock ? { display: "none" } : undefined}
+            data-slot="chat-composer"
+            className={cn(
+              "relative w-full rounded-[22px] border border-border bg-card shadow-sm",
+              fileDragging && "outline-2 outline-dashed outline-ring",
+            )}
+            style={{
+              ["--ui-crdc-radius" as string]: "22px",
+              ["--ui-crdc-pad" as string]: "12px 14px",
+              ...(pillDock ? { display: "none" } : {}),
+            }}
             {...fileDropProps}
           >
             {/* Drop affordance — composer parity (2026-09-24): the floating

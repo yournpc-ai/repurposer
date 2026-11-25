@@ -42,11 +42,12 @@ export interface ThinkingPayload {
  * surface. */
 export type CandidateEventPayload =
   | {
-      kind: "set" | "sfx_set" | "music_set" | "video_preset_set"
+      kind: "set" | "sfx_set" | "music_set" | "video_preset_set" | "voice_set"
       candidate_set_id: string
       topic: string
       asset_id?: string | null
       members: CandidateMemberPayload[]
+      selected?: number[]
       turn_id?: string | null
     }
   | {
@@ -126,16 +127,21 @@ export function reduceCandidateFrame(
         : message,
     )
   }
+  const initialSelected = Array.isArray(event.selected)
+    ? event.selected.filter((i): i is number => typeof i === "number" && Number.isInteger(i) && i >= 0)
+    : []
   const surface: CandidateSurface = {
     kind:
-      event.kind === "video_preset_set" || event.kind === "music_set"
+      event.kind === "video_preset_set" ||
+      event.kind === "music_set" ||
+      event.kind === "voice_set"
         ? event.kind
         : undefined,
     candidateSetId: event.candidate_set_id,
     topic: event.topic,
     assetId: event.asset_id ?? null,
     members: event.members,
-    selected: [],
+    selected: initialSelected,
   }
   const exists = prev.some(
     (message) => message.candidates?.candidateSetId === event.candidate_set_id,
@@ -147,7 +153,9 @@ export function reduceCandidateFrame(
             ...message,
             candidates: {
               ...surface,
-              selected: message.candidates?.selected ?? [],
+              selected: Array.isArray(event.selected)
+                ? initialSelected
+                : (message.candidates?.selected ?? []),
             },
           }
         : message,

@@ -4,6 +4,7 @@ import { createServerFn } from "@tanstack/react-start"
 
 import { AppSidebar, SIDEBAR_COOKIE_NAME } from "@/components/app-sidebar"
 import { StudioHeader } from "@/components/StudioHeader"
+import { StudioHeaderProvider } from "@/components/StudioHeaderContext"
 
 
 // Server-module imports are denied in the client bundle (same pattern as the
@@ -31,14 +32,16 @@ export const Route = createFileRoute("/_app")({
 function AppLayout() {
   const { sidebarOpen } = Route.useLoaderData()
   return (
-    <div className="ui-as-app">
-      <AppSidebar defaultOpen={sidebarOpen} />
-      <main className="ui-as-main">
-        <StudioHeader />
-        <div className="min-h-0 flex-1 overflow-auto">
-          <Outlet />
-        </div>
-      </main>
-    </div>
+    <StudioHeaderProvider>
+      <div className="ui-as-app">
+        <AppSidebar defaultOpen={sidebarOpen} />
+        <main className="ui-as-main">
+          <StudioHeader />
+          <div className="min-h-0 flex-1 overflow-auto">
+            <Outlet />
+          </div>
+        </main>
+      </div>
+    </StudioHeaderProvider>
   )
 }

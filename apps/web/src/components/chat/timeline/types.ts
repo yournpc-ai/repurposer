@@ -243,6 +243,21 @@ export interface CandidateMemberPayload {
   aspect?: string | null
   width?: number | null
   height?: number | null
+  /** Permanent Voice library facts on voice_set members. */
+  voice_id?: string | null
+  description?: string | null
+  source_kind?: string | null
+  scope?: string | null
+  languages?: string[] | null
+  gender?: string | null
+  age_band?: string | null
+  tone_tags?: string[] | null
+  compatible_styles?: string[] | null
+  use_count?: number | null
+  /** Enriched permanent Music library facts on music_set members. */
+  bpm?: number | null
+  lufs?: number | null
+  instrumental?: boolean | null
 }
 
 export interface BriefQuestionItem {
@@ -497,7 +512,7 @@ export interface OverlayMessage {
  * payload carries every rendered fact, so a deleted source asset leaves
  * nothing dangling (读面容忍: an off-shape dump simply renders no card). */
 export interface CandidateSurface {
-  kind?: "video_preset_set" | "music_set"
+  kind?: "video_preset_set" | "music_set" | "voice_set"
   candidateSetId: string
   topic: string
   assetId: string | null

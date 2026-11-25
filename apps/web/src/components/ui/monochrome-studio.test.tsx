@@ -142,5 +142,10 @@ describe("Studio monochrome UI contract", () => {
     const avatarSource = readFileSync(resolve(__dirname, "avatar-clean.tsx"), "utf8")
     expect(avatarSource).toContain("--ui-avtc-bg-s: 0%;")
     expect(avatarSource).toContain("--ui-avtc-fg-s: 0%;")
+
+    const voiceOrbSource = readFileSync(resolve(__dirname, "voice-orb.tsx"), "utf8")
+    for (const pattern of [...FORBIDDEN_BLUE_GREEN_PATTERNS, /#2f6bff/i, /#6f9bff/i]) {
+      expect(voiceOrbSource).not.toMatch(pattern)
+    }
   })
 })

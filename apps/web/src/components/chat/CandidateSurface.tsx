@@ -29,6 +29,10 @@ import {
   isAudioCandidateSurface,
 } from "./video/AudioCandidateSurface"
 import {
+  VoiceCandidateSurface,
+  isVoiceCandidateSurface,
+} from "./video/VoiceCandidateSurface"
+import {
   VideoPresetCandidateSurface,
   isVideoPresetCandidateSurface,
 } from "./video/VideoPresetCandidateSurface"
@@ -57,7 +61,12 @@ export function CandidateSurfaceCard(props: {
   serverMessageId?: string
   turnId?: string
   onStructureVisible?: RegisterStructureVisibility
+  onSelectCandidate?: (message: string, memberIndex: number, surface: CandidateSurface) => void
+  selectionDisabled?: boolean
 }) {
+  if (isVoiceCandidateSurface(props.surface)) {
+    return <VoiceCandidateSurface {...props} />
+  }
   if (isVideoPresetCandidateSurface(props.surface)) {
     return <VideoPresetCandidateSurface {...props} />
   }

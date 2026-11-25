@@ -79,4 +79,57 @@ describe("AudioCandidateSurface display boundary", () => {
     expect(soundDisplayTitle("Already clean")).toBe("Already clean")
     expect(soundDisplayTitle("Version 2.0")).toBe("Version 2.0")
   })
+
+  it("displays enriched permanent music library chips (BPM, LUFS, instrumental, styles, use count) and Use track action", () => {
+    const musicSurface: CandidateSurface = {
+      kind: "music_set",
+      candidateSetId: "music-set-rich",
+      topic: "Minimalist studio pulse",
+      assetId: null,
+      selected: [],
+      members: [
+        {
+          start: 0,
+          end: 94,
+          excerpt: "Monolith Pulse",
+          speaker: null,
+          provider: "music_library",
+          provider_id: "music-1",
+          music_id: "music-1",
+          title: "Monolith Pulse",
+          author: "Rookie Studio",
+          duration_seconds: 94,
+          source_url: null,
+          preview_url: "/api/v1/music/music-1/stream",
+          license: "Library",
+          attribution: "Monolith Pulse",
+          query: "minimalist studio",
+          bpm: 108,
+          lufs: -14.8,
+          instrumental: true,
+          compatible_styles: ["Product Launch", "Minimal"],
+          use_count: 5,
+        },
+      ],
+    }
+
+    const onSelect = vi.fn()
+    render(
+      <AudioCandidateSurface
+        surface={musicSurface}
+        hydrated
+        onSelectCandidate={onSelect}
+      />,
+    )
+
+    expect(screen.getByText("Monolith Pulse")).toBeTruthy()
+    expect(screen.getByText("108 BPM")).toBeTruthy()
+    expect(screen.getByText("-14.8 LUFS")).toBeTruthy()
+    expect(screen.getByText("chat.candidates.instrumental")).toBeTruthy()
+    expect(screen.getByText("Product Launch")).toBeTruthy()
+    expect(screen.getByText("Minimal")).toBeTruthy()
+    expect(screen.getByText("chat.candidates.usedCount")).toBeTruthy()
+    const useBtn = screen.getByRole("button", { name: "chat.candidates.useTrack" })
+    expect(useBtn.className).toContain("rounded-full")
+  })
 })

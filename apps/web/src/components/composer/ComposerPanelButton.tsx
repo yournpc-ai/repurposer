@@ -40,6 +40,7 @@ export function ComposerPanelButton({
           label={label}
           icon={icon}
           title=""
+          className="rounded-full"
           tabIndex={tabIndex}
           data-tour={dataTour}
           aria-haspopup="dialog"

@@ -202,7 +202,9 @@ export function WaveformPlayer({
       <div className="flex min-w-0 items-center gap-2">
         <IconButton
           type="button"
-          variant="ghost"
+          variant="secondary"
+          className="rounded-full"
+          style={{ ["--radius" as string]: "9999px", ["--size" as string]: "30px" }}
           onClick={toggle}
           disabled={loading || (failed && !resolvePlaybackUrl)}
           aria-busy={loading}
@@ -219,7 +221,7 @@ export function WaveformPlayer({
                 transition={{ duration: reduceMotion ? 0 : 0.1 }}
                 className="flex items-center justify-center"
               >
-                {playing ? <Pause className="size-4" /> : <Play className="size-4" />}
+                {playing ? <Pause className="size-3.5 fill-current" /> : <Play className="size-3.5 translate-x-[0.5px] fill-current" />}
               </motion.span>
             </AnimatePresence>
           }
@@ -229,7 +231,7 @@ export function WaveformPlayer({
             {peaks.map((peak, index) => (
               <span
                 key={`base-${index}`}
-                className="min-w-px flex-1 rounded-md bg-muted-foreground"
+                className="min-w-px flex-1 rounded-full bg-muted-foreground/35"
                 style={{ height: `${Math.max(2, peak * 28)}px` }}
               />
             ))}
@@ -242,7 +244,7 @@ export function WaveformPlayer({
             {peaks.map((peak, index) => (
               <span
                 key={`played-${index}`}
-                className="min-w-px flex-1 rounded-md bg-primary"
+                className="min-w-px flex-1 rounded-full bg-primary"
                 style={{ height: `${Math.max(2, peak * 28)}px` }}
               />
             ))}
