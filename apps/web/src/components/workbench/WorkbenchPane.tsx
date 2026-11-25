@@ -114,7 +114,7 @@ function PlayerTabContent() {
     selectedVersionId,
     setSelectedVersionId,
     selectedOutputId,
-    setSelectedOutputId,
+    openWorkbench,
   } = useWorkbench()
 
   const allVersions = useMemo(() => {
@@ -239,7 +239,14 @@ function PlayerTabContent() {
             variant="tray"
             size="sm"
             value={mode}
-            onChange={setMode}
+            onChange={(next) => {
+              if (next === "output" && activeOutput) {
+                openWorkbench({ tab: "player", outputId: activeOutput.id })
+              } else if (activeVersion) {
+                setSelectedVersionId(activeVersion.version_id)
+              }
+              setMode(next)
+            }}
             options={[
               { value: "draft", label: t("workbench.player.draftMode") },
               { value: "output", label: t("workbench.player.outputMode") },
@@ -274,7 +281,7 @@ function PlayerTabContent() {
               size="sm"
               aria-label={t("workbench.player.outputMode")}
               value={activeOutput?.id ?? null}
-              onChange={(val) => setSelectedOutputId(val)}
+              onChange={(outputId) => openWorkbench({ tab: "player", outputId })}
               options={videoOutputs.map((o, idx) => ({
                 value: o.id,
                 label: `${t("workbench.chip.output")} #${videoOutputs.length - idx}`,

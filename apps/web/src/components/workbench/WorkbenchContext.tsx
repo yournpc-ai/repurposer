@@ -191,8 +191,12 @@ export function WorkbenchProvider({
     if (!target) return
     setActiveTab(target.tab)
     if (target.tab === "player") {
-      if (target.versionId) setSelectedVersionId(target.versionId)
-      if (target.outputId) setSelectedOutputId(target.outputId)
+      if (target.outputId) {
+        setSelectedVersionId(null)
+        setSelectedOutputId(target.outputId)
+      } else if (target.versionId) {
+        setSelectedVersionId(target.versionId)
+      }
     } else if (target.tab === "inspector") {
       if (target.assetId) setSelectedAssetId(target.assetId)
       if (target.outputId) setSelectedOutputId(target.outputId)

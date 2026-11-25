@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest"
 
 beforeAll(() => {
+  Element.prototype.scrollIntoView ??= () => {}
   if (typeof globalThis.ResizeObserver === "undefined") {
     globalThis.ResizeObserver = class {
       observe() {}
@@ -212,6 +213,23 @@ describe("Studio WorkbenchPane & Markdown artifact links", () => {
     fireEvent.click(assetChip)
     expect(screen.getByTestId("wb-probe").getAttribute("data-tab")).toBe("inspector")
     expect(screen.getByTestId("wb-probe").getAttribute("data-asset")).toBe("asset-img-1")
+  })
+
+  it("plays an older rendered output while a saved draft exists", async () => {
+    const outputs = ["newer", "older"].map((id) => ({
+      id, type: "video", status: "completed", files: { video: `/${id}.mp4` },
+      composition_id: "comp-1", composition_version_id: null, created_at: null,
+    }))
+    render(
+      <WorkbenchProvider projectId="proj-1" initialData={{ ...sampleWorkbench, outputs }} defaultOpen>
+        <WorkbenchPane />
+      </WorkbenchProvider>,
+    )
+    fireEvent.click(screen.getByRole("radio", { name: "workbench.player.outputMode" }))
+    fireEvent.click(screen.getByRole("combobox", { name: "workbench.player.outputMode" }))
+    fireEvent.click(screen.getByText("workbench.chip.output #1"))
+    expect(screen.getByRole("link", { name: "workbench.player.download" }).getAttribute("href"))
+      .toBe("/older.mp4")
   })
 
   it("switches across four tabs, cites an asset and opens each preset library", async () => {
