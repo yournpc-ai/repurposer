@@ -172,17 +172,13 @@ export function HomeComposer({
   // MentionEditor), consumed on send (onSent clears the draft, before
   // navigating), × purifies (removing the chip removes every trace — no
   // residual pin).
-  //
-  // Landing templates can leave an editable URL placeholder in the draft.
-  const urlPlaceholder = t("recipes.shelf.urlPlaceholder")
   const handleGenerate = () => {
-    if (urlPlaceholder && prompt.includes(urlPlaceholder)) {
-      toast.error(t("recipes.shelf.urlRequired"))
-      editorRef.current?.selectText(urlPlaceholder)
+    if (editorRef.current?.selectFirstRequired()) {
+      toast.message(t("recipes.shelf.requiredSlot"))
       return
     }
     launch({
-      prompt,
+      prompt: editorRef.current?.getSubmitText() ?? prompt,
       mentions,
       skill: selectedSkill?.reference,
       skillOption: selectedSkill ?? undefined,
@@ -309,7 +305,7 @@ export function HomeComposer({
             mentionContext={mentionContext}
             selectedSkill={selectedSkill}
             onSkillChange={onSkillChange}
-            className="max-h-36 p-0 text-sm"
+            className="max-h-36 p-0 text-sm [&_[data-skill-chip]]:bg-muted [&_[data-skill-chip]]:text-foreground"
             onChange={(text, ms) => {
               onPromptChange(text)
               onMentionsChange(ms)

@@ -473,79 +473,99 @@ const zh: Resources = {
     // 主 Tab 名称复用 skills.builtin；子 Tab 与 Home 注册表一致。无样片的
     // 视频应用保留可见空态；样片 prompt 落在 recipes.shelf.demos.<demoId>.prompt。
     shelf: {
+      tabs: {
+        "discover": "精选",
+        "templates": "模板",
+        "product-promo": "产品宣传",
+        "text-animation": "动态文字",
+        "knowledge-explainer": "知识讲解",
+        "talking-head": "口播动效",
+      },
       subs: {
-        "website-product": "网站/产品宣传",
-        "course-service": "课程/服务宣传",
+        "product-launch": "新品发布",
+        "website": "官网宣传",
+        "walkthrough": "操作演示",
+        "announcements": "宣言与公告",
+        "opinions": "观点与金句",
+        "concepts": "概念与原理",
+        "research-report": "研究与报告",
         "opinion-talking-head": "观点口播",
-        "course-lecture-teaser": "课程/讲座预告",
-        "opinion-text": "观点文字片",
-        "quote-announcement": "金句/公告短片",
-        "concept-explainer": "概念讲解",
-        "research-report": "研究/报告解读",
+        "interviews": "访谈与讲座",
       },
       nextPage: "下一页",
       previousPage: "上一页",
-      upgrading: "内容升级中",
-      usePrompt: "使用提示词",
+      template: "模板",
+      useTemplate: "用此模板",
+      makeSimilar: "做同款",
       playSound: "播放声音",
       mute: "静音",
-      emptyDemo: "该应用暂无样片。",
-      // MG 货架预填空位：可见占位符，插入后即选中，粘贴一次完成替换；
-      // 永不变成隐藏字段或第二个输入面。
-      urlPlaceholder: "［网站链接］",
-      urlRequired: "先填入你的网站链接",
-      // MG 货架 demo 预填文案（D3——与 recipeFamilies.ts 的 ShelfDemo id
-      // 一一对应）。prompt 即卡片的全部发射载荷（composer 预填，配方 =
-      // 提示词）；{{placeholder}} 是发送前由用户替换的网站空位。
+      emptyDemo: "这个分类暂无样片。",
+      emptyTemplates: "暂无可用模板。",
+      requiredSlot: "请先补充选中的必填内容。",
       demos: {
+        "product-promo": {
+          prompt:
+            "新品发布：[产品名与本次上新的亮点]\n开场画面（可选）：[optional:想先展示的产品细节]",
+        },
+        "talking-head": {
+          prompt:
+            "口播主题：[填写核心主题或观点]\n画面标题（可选）：[optional:想突出的一句话]",
+        },
+        "text-animation": {
+          prompt:
+            "宣言或公告：[粘贴你想动画化的句子]\n画幅与节奏（默认 15 秒 · 16:9）：[optional:可选修改]",
+        },
+        "knowledge-explainer": {
+          prompt:
+            "讲解主题：[希望这支短片解答的问题]\n画面举例（可选）：[optional:一个便于理解的例子]",
+        },
         "text-short-gentle-close": {
           prompt:
-            "用这个 Skill 帮我把下面这句话做成文字动画：\n\n慢一点，也能走得更远。",
+            "收尾金句：[粘贴结尾的句子]\n停顿（可选）：[optional:希望观众多看一会儿的词]",
         },
         "text-short-genesis": {
           prompt:
-            "用这个 Skill 帮我把下面这句英文做成文字动画：\n\nEvery great idea starts with a small step.",
+            "开场文字：[粘贴首屏文案]\n强调词（可选）：[optional:希望最后出现的词]",
         },
         "product-demo-zymix": {
           prompt:
-            "用这个 Skill 帮我做一支产品演示视频，让观众看懂这个产品怎么用：{{placeholder}}",
+            "产品官网：[你的网站链接]\n操作目标（可选）：[optional:想演示的任务]",
         },
-        // 网站来源的 demo 使用 capture 链；视频素材入口保留上传素材提示词。
         "product-demo-walkthrough": {
           prompt:
-            "用这个 Skill 帮我把录屏做成操作演示，让观众看懂关键步骤。",
+            "操作演示：[观众看完能完成的操作]\n关键步骤（可选）：[optional:录屏里需要放慢展示的一步]",
         },
         "product-demo-highlights": {
           prompt:
-            "用这个 Skill 帮我做一支短视频，突出这个产品最值得关注的功能：{{placeholder}}",
+            "产品官网：[你的网站链接]\n功能亮点（可选）：[optional:希望观众记住的功能]",
         },
         "product-demo-captioned": {
           prompt:
-            "用这个 Skill 帮我给视频加上文字说明，让内容更容易理解。",
+            "演示主题：[素材中展示的功能]\n画面注释（可选）：[optional:需要原样保留的文字]",
         },
         "product-promo-agentveil-the-next-move": {
           prompt:
-            "用这个 Skill 根据这个网站做一支宣传短片，让观众了解产品有什么价值：{{placeholder}}",
+            "官网宣传：[你的网站链接]\n目标受众（可选）：[optional:产品适合哪些人]",
         },
         "product-promo-oxvalue-product-evidence": {
           title: "产品实证",
           prompt:
-            "用这个 Skill 根据这个网站做一支宣传短片，让观众了解产品有什么价值：{{placeholder}}",
+            "宣传片官网链接：[你的网站链接]\n重点卖点（可选）：[optional:希望用画面展示的优势]",
         },
         "product-promo-oxvalue-energy-arc": {
           title: "动势节奏",
           prompt:
-            "用这个 Skill 根据这个网站做一支宣传短片，让观众了解产品有什么价值：{{placeholder}}",
+            "宣传片官网链接：[你的网站链接]\n开场重点（可选）：[optional:希望最先出现的产品细节]",
         },
         "text-short-clear-rhythm": {
           title: "清晰节奏",
           prompt:
-            "把下面这段文案做成文字动画：\n\n我们常常以为，讲得越多，别人就懂得越多。\n于是不断补充背景、堆叠细节，生怕漏掉任何一个重点。\n可信息越密，真正想说的话，反而越容易被淹没。\n\n好的表达，从一个清楚的问题开始。\n先说你想解决什么，再用一个具体的例子，让人看见它为什么重要。\n给每个想法一点空间，也给观众一点理解的时间。\n\n把复杂的想法讲清楚，不是把内容变少，\n而是找到那条让人愿意听下去、也能够跟得上的线索。\n让好的内容，从被看见，走向被理解。",
+            "动态文字：[粘贴金句或一段观点]\n节奏（可选）：[optional:想停顿或强调的位置]",
         },
         "knowledge-explainer-clear-expression": {
           title: "清晰表达",
           prompt:
-            "用这个 Skill 帮我做一支动画，讲清楚为什么一次只讲一个重点更容易让人理解，面向没有基础的观众。",
+            "讲解概念：[填写核心概念或原理]\n目标观众（可选）：[optional:观众对这个话题的熟悉程度]",
         },
       },
     },
