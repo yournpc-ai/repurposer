@@ -6,6 +6,7 @@ from app.pipeline.routes.music import router as music
 from app.pipeline.routes.outputs import router as outputs
 from app.pipeline.routes.projects import router as projects
 from app.pipeline.routes.staging import router as staging
+from app.pipeline.routes.voices import router as voices
 
 __all__ = [
     "assets",
@@ -14,4 +15,5 @@ __all__ = [
     "persona_assets",
     "projects",
     "staging",
+    "voices",
 ]

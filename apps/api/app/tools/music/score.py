@@ -182,10 +182,35 @@ def _fraction(value: str) -> Fraction:
 
 class GenerateMusicArgs(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    duration_seconds: float = Field(ge=0.25, le=MAX_SCORE_SECONDS, multiple_of=0.001)
-    style: Literal["light_electronic", "ambient", "driving_electronic"]
+    duration_seconds: float = Field(default=60.0, ge=0.25, le=MAX_SCORE_SECONDS, multiple_of=0.001)
+    style: Literal["light_electronic", "ambient", "driving_electronic"] = "light_electronic"
     bpm: int = Field(default=100, ge=40, le=200)
     name: str = Field(default="Electronic instrumental", min_length=1, max_length=120)
+    provider: Literal["auto", "minimax", "programmatic"] = Field(
+        default="auto",
+        description="Use 'minimax' (or 'auto' with prompt when MiniMax is configured) to generate a rich BGM track into the permanent music library; use 'programmatic' for deterministic local synth fallback.",
+    )
+    prompt: str | None = Field(
+        default=None,
+        min_length=3,
+        max_length=1000,
+        description="Optional musical style/instrumentation prompt for MiniMax /music_generation.",
+    )
+    mood: str | None = Field(
+        default=None,
+        max_length=50,
+        description="Optional mood label stored on the permanent music library row (e.g. 'editorial-warm', 'tech-pulse').",
+    )
+    tags: list[str] = Field(
+        default_factory=list,
+        max_length=12,
+        description="Optional reusable discovery tags for the permanent music library.",
+    )
+    compatible_styles: list[str] = Field(
+        default_factory=list,
+        max_length=8,
+        description="Optional compatible CompositionStyle presets (e.g. ['vox_editorial', 'swiss_paper']).",
+    )
 
 
 def instrumental_score(request: GenerateMusicArgs) -> ScoreSpec:
@@ -439,6 +464,297 @@ def synthesize_score(score: ScoreSpec) -> bytes:
     return output.getvalue()
 
 
+def _midi_hz(midi: int) -> float:
+    return 440.0 * (2.0 ** ((midi - 69) / 12.0))
+
+
+def _rhodes_voice(freq: float, length: int, sr: int) -> np.ndarray:
+    """Warm Rhodes-like electric piano tone with gentle tine attack and soft harmonics."""
+    t = np.arange(length, dtype=np.float64) / sr
+    env = np.minimum(1.0, t / 0.015) * np.exp(-t * 1.15)
+    tine_env = np.exp(-t * 18.0)
+    sig = (
+        0.65 * np.sin(2.0 * np.pi * freq * t)
+        + 0.22 * np.sin(2.0 * np.pi * (2.0 * freq) * t) * np.exp(-t * 2.4)
+        + 0.09 * np.sin(2.0 * np.pi * (3.0 * freq) * t) * np.exp(-t * 4.5)
+        + 0.14 * np.sin(2.0 * np.pi * (4.0 * freq) * t) * tine_env
+    )
+    fade_out = min(length, int(sr * 0.06))
+    if fade_out > 0:
+        env[-fade_out:] *= np.linspace(1.0, 0.0, fade_out)
+    return sig * env
+
+
+def _marimba_pluck(freq: float, length: int, sr: int, *, woody: bool = True) -> np.ndarray:
+    """Crisp marimba or plucked string harmonic tone."""
+    t = np.arange(length, dtype=np.float64) / sr
+    env = np.minimum(1.0, t / 0.005) * np.exp(-t * (5.2 if woody else 3.6))
+    if woody:
+        sig = (
+            0.78 * np.sin(2.0 * np.pi * freq * t)
+            + 0.18 * np.sin(2.0 * np.pi * (3.98 * freq) * t) * np.exp(-t * 24.0)
+            + 0.06 * np.sin(2.0 * np.pi * (2.0 * freq) * t) * np.exp(-t * 12.0)
+        )
+    else:
+        sig = (
+            0.60 * np.sin(2.0 * np.pi * freq * t)
+            + 0.26 * np.sin(2.0 * np.pi * (2.0 * freq) * t) * np.exp(-t * 6.0)
+            + 0.12 * np.sin(2.0 * np.pi * (3.0 * freq) * t) * np.exp(-t * 10.0)
+            + 0.05 * np.sin(2.0 * np.pi * (4.0 * freq) * t) * np.exp(-t * 14.0)
+        )
+    fade_out = min(length, int(sr * 0.02))
+    if fade_out > 0:
+        env[-fade_out:] *= np.linspace(1.0, 0.0, fade_out)
+    return sig * env
+
+
+def _warm_pad_chord(midis: list[int], length: int, sr: int) -> tuple[np.ndarray, np.ndarray]:
+    """Lush stereo detuned pad chord with slow swell."""
+    t = np.arange(length, dtype=np.float64) / sr
+    left = np.zeros(length, dtype=np.float64)
+    right = np.zeros(length, dtype=np.float64)
+    att = min(length, max(1, int(sr * 0.35)))
+    rel = min(length, max(1, int(sr * 0.45)))
+    env = np.ones(length, dtype=np.float64)
+    env[:att] = 0.5 - 0.5 * np.cos(np.linspace(0, np.pi, att))
+    env[-rel:] *= 0.5 + 0.5 * np.cos(np.linspace(0, np.pi, rel))
+    scale = 1.0 / math.sqrt(max(1, len(midis)))
+    for idx, m in enumerate(midis):
+        f = _midi_hz(m)
+        det = 1.0 + (0.0022 if idx % 2 == 0 else -0.0022)
+        lfo = 1.0 + 0.08 * np.sin(2.0 * np.pi * (0.25 + 0.07 * idx) * t)
+        l_sig = (0.72 * np.sin(2.0 * np.pi * f * t) + 0.22 * np.sin(2.0 * np.pi * (2.0 * f) * t)) * lfo
+        r_sig = (0.72 * np.sin(2.0 * np.pi * (f * det) * t) + 0.22 * np.sin(2.0 * np.pi * (2.0 * f * det) * t)) * lfo
+        left += l_sig * scale
+        right += r_sig * scale
+    return left * env, right * env
+
+
+def _encode_stereo_mp3(mix: np.ndarray, sample_rate: int = 48000) -> bytes:
+    """Encode float64 stereo array [-1, 1] into 48 kHz stereo MP3 bytes via PyAV."""
+    import av
+
+    pcm = np.rint(np.clip(mix, -1.0, 1.0) * 32767.0).astype(np.int16, copy=False)
+    buf = io.BytesIO()
+    with av.open(buf, mode="w", format="mp3") as container:
+        stream = container.add_stream("mp3", rate=sample_rate, layout="stereo")
+        stream.bit_rate = 192000
+        chunk_size = 1152 * 16
+        total = pcm.shape[0]
+        for start in range(0, total, chunk_size):
+            block = np.ascontiguousarray(pcm[start : start + chunk_size].T)
+            frame = av.AudioFrame.from_ndarray(block, format="s16p", layout="stereo")
+            frame.sample_rate = sample_rate
+            for pkt in stream.encode(frame):
+                container.mux(pkt)
+        for pkt in stream.encode(None):
+            container.mux(pkt)
+    return buf.getvalue()
+
+
+def synthesize_commercial_underscore_mp3(
+    prompt: str,
+    *,
+    compatible_styles: list[str] | None = None,
+    duration_seconds: int = 64,
+) -> tuple[bytes, int, dict[str, Any]]:
+    """Synthesize a clean, purely instrumental stereo 48 kHz MP3 commercial underscore.
+
+    Used as a resilient fallback when MiniMax ``/music_generation`` is unavailable
+    for the account (e.g. code 2153). Tailors harmony, BPM, and timbre to the
+    prompt / style preset (`institutional_dark`, `swiss_paper`, `vox_editorial`).
+    """
+    sr = 48000
+    styles_l = [str(s).strip().lower() for s in (compatible_styles or [])]
+    text = f"{prompt} {' '.join(styles_l)}".lower()
+
+    if "swiss_paper" in styles_l or any(k in text for k in ("marimba", "science", "documentary", "swiss", "curious", "uplifting", "strings")):
+        profile = "editorial_science"
+        bpm = 112
+        # Fmaj7 -> Dm9 -> Bbmaj7 -> C9sus4
+        chords = [
+            [53, 57, 60, 64],
+            [50, 53, 57, 60, 64],
+            [46, 50, 53, 57],
+            [48, 53, 55, 58, 62],
+        ]
+        bass_roots = [41, 38, 34, 36]
+        arp_pattern = [0, 1, 2, 3, 2, 1, 3, 2]
+        woody = True
+    elif "vox_editorial" in styles_l or any(k in text for k in ("vox", "upbeat", "groove", "tech_launch", "kinetic", "punchy")):
+        profile = "vox_tech_groove"
+        bpm = 118
+        # Am7 -> Fmaj7 -> Cmaj7 -> G6
+        chords = [
+            [57, 60, 64, 67],
+            [53, 57, 60, 64],
+            [48, 52, 55, 59],
+            [55, 59, 62, 64],
+        ]
+        bass_roots = [45, 41, 36, 43]
+        arp_pattern = [0, 2, 1, 3, 0, 2, 3, 1]
+        woody = False
+    else:
+        profile = "institutional_pulse"
+        bpm = 108
+        # Dm9 -> Bbmaj7 -> Gm9 -> A7sus4
+        chords = [
+            [50, 53, 57, 60, 64],
+            [46, 50, 53, 57],
+            [43, 46, 50, 53, 57],
+            [45, 50, 52, 55],
+        ]
+        bass_roots = [38, 34, 43, 45]
+        arp_pattern = [0, 2, 1, 3, 2, 0, 3, 1]
+        woody = False
+
+    dur_s = max(16, min(int(duration_seconds), 90))
+    total_samples = dur_s * sr
+    mix = np.zeros((total_samples, 2), dtype=np.float64)
+    sec_per_beat = 60.0 / bpm
+    bar_samples = int(round(4.0 * sec_per_beat * sr))
+    step_samples = int(round(0.5 * sec_per_beat * sr))  # eighth note
+    rng = np.random.default_rng(abs(hash((profile, prompt[:64]))) % (2**31))
+
+    n_bars = max(1, int(math.ceil(total_samples / bar_samples)))
+    for bar in range(n_bars):
+        bar_start = bar * bar_samples
+        if bar_start >= total_samples:
+            break
+        chord = chords[bar % len(chords)]
+        bass_midi = bass_roots[bar % len(bass_roots)]
+        bar_len = min(bar_samples, total_samples - bar_start)
+
+        # 1. Warm stereo pad bed
+        pl, pr = _warm_pad_chord(chord, bar_len, sr)
+        pad_gain = 0.20 if profile == "institutional_pulse" else 0.16
+        mix[bar_start : bar_start + bar_len, 0] += pl * pad_gain
+        mix[bar_start : bar_start + bar_len, 1] += pr * pad_gain
+
+        # 2. Rhodes chord hits on beat 1 (and beat 3.5 syncopation for vox)
+        chord_hits = [(0.0, 0.24)]
+        if profile == "vox_tech_groove":
+            chord_hits.append((2.5, 0.16))
+        elif profile == "institutional_pulse":
+            chord_hits.append((2.0, 0.14))
+        for beat_off, gain in chord_hits:
+            s0 = bar_start + int(round(beat_off * sec_per_beat * sr))
+            if s0 >= total_samples:
+                continue
+            hit_len = min(int(round(1.9 * sec_per_beat * sr)), total_samples - s0)
+            for idx, m in enumerate(chord):
+                tone = _rhodes_voice(_midi_hz(m), hit_len, sr) * (gain / math.sqrt(len(chord)))
+                pan = -0.25 + 0.5 * (idx / max(1, len(chord) - 1))
+                mix[s0 : s0 + hit_len, 0] += tone * math.sqrt((1.0 - pan) * 0.5)
+                mix[s0 : s0 + hit_len, 1] += tone * math.sqrt((1.0 + pan) * 0.5)
+
+        # 3. Deep rounded sub-bass
+        bass_hits = (
+            [(0.0, 1.8, 0.30), (2.0, 1.5, 0.24)]
+            if profile != "vox_tech_groove"
+            else [(0.0, 0.85, 0.32), (1.5, 0.85, 0.26), (2.0, 0.85, 0.30), (3.0, 0.85, 0.25)]
+        )
+        for beat_off, beat_dur, gain in bass_hits:
+            s0 = bar_start + int(round(beat_off * sec_per_beat * sr))
+            if s0 >= total_samples:
+                continue
+            blen = min(int(round(beat_dur * sec_per_beat * sr)), total_samples - s0)
+            t = np.arange(blen, dtype=np.float64) / sr
+            f = _midi_hz(bass_midi)
+            b_env = np.minimum(1.0, t / 0.012) * np.exp(-t * 1.8)
+            b_sig = (0.82 * np.sin(2.0 * np.pi * f * t) + 0.18 * np.sin(2.0 * np.pi * (2.0 * f) * t)) * b_env * gain
+            mix[s0 : s0 + blen, 0] += b_sig
+            mix[s0 : s0 + blen, 1] += b_sig
+
+        # 4. Arpeggiated marimba / pluck motif (evolves gently every 4 bars)
+        if bar >= 1 or profile != "institutional_pulse":
+            for step in range(8):
+                if profile == "institutional_pulse" and step in (3, 7):
+                    continue
+                s0 = bar_start + step * step_samples
+                if s0 >= total_samples:
+                    continue
+                note_midi = chord[arp_pattern[step] % len(chord)] + 12
+                plen = min(int(round(0.75 * sec_per_beat * sr)), total_samples - s0)
+                vel = 0.20 if (step % 2 == 0) else 0.13
+                if profile == "editorial_science":
+                    vel *= 1.25
+                pluck = _marimba_pluck(_midi_hz(note_midi), plen, sr, woody=woody) * vel
+                pan = -0.35 if (step % 2 == 0) else 0.35
+                mix[s0 : s0 + plen, 0] += pluck * math.sqrt((1.0 - pan) * 0.5)
+                mix[s0 : s0 + plen, 1] += pluck * math.sqrt((1.0 + pan) * 0.5)
+
+        # 5. Restrained studio percussion (soft kick + gentle filtered shaker)
+        kick_beats = [0.0, 2.0] if profile != "vox_tech_groove" else [0.0, 1.0, 2.0, 3.0]
+        for kb in kick_beats:
+            s0 = bar_start + int(round(kb * sec_per_beat * sr))
+            if s0 >= total_samples:
+                continue
+            klen = min(int(sr * 0.16), total_samples - s0)
+            t = np.arange(klen, dtype=np.float64) / sr
+            phase = 2.0 * np.pi * (46.0 * t + 54.0 * (1.0 - np.exp(-t * 36.0)) / 36.0)
+            kgain = 0.18 if profile == "institutional_pulse" else (0.16 if profile == "editorial_science" else 0.25)
+            kick = np.sin(phase) * np.exp(-t * 16.0) * kgain
+            mix[s0 : s0 + klen, 0] += kick
+            mix[s0 : s0 + klen, 1] += kick
+
+        for step in range(8):
+            if step % 2 == 0 and profile == "institutional_pulse":
+                continue
+            s0 = bar_start + step * step_samples
+            if s0 >= total_samples:
+                continue
+            hlen = min(int(sr * 0.045), total_samples - s0)
+            t = np.arange(hlen, dtype=np.float64) / sr
+            noise = rng.standard_normal(hlen)
+            hp = np.concatenate((np.zeros(1), np.diff(noise)))
+            shaker = hp * np.exp(-t * 58.0) * (0.032 if step % 2 == 1 else 0.018)
+            pan = 0.22 if (step % 2 == 1) else -0.22
+            mix[s0 : s0 + hlen, 0] += shaker * math.sqrt((1.0 - pan) * 0.5)
+            mix[s0 : s0 + hlen, 1] += shaker * math.sqrt((1.0 + pan) * 0.5)
+
+    # Subtle stereo tape delay warmth (1/4 dotted-eighth slap)
+    delay_l = int(round(0.375 * sec_per_beat * sr))
+    delay_r = int(round(0.500 * sec_per_beat * sr))
+    wet = np.zeros_like(mix)
+    if delay_l < total_samples:
+        wet[delay_l:, 0] = mix[:-delay_l, 1] * 0.18
+    if delay_r < total_samples:
+        wet[delay_r:, 1] = mix[:-delay_r, 0] * 0.16
+    mix = mix + wet
+
+    # Smooth intro/outro fades
+    fi = min(total_samples, int(sr * 0.6))
+    fo = min(total_samples, int(sr * 2.2))
+    mix[:fi] *= np.linspace(0.0, 1.0, fi)[:, None]
+    mix[-fo:] *= np.linspace(1.0, 0.0, fo)[:, None]
+
+    # Gentle soft-clip mastering + normalize to comfortable ~ -15 LUFS, peak <= -2 dBFS
+    rms = float(np.sqrt(np.mean(mix**2))) if mix.size else 1e-6
+    target_rms = 10 ** (-15.5 / 20.0)
+    if rms > 1e-8:
+        mix *= target_rms / rms
+    peak = float(np.max(np.abs(mix))) if mix.size else 0.0
+    max_peak = 10 ** (-2.0 / 20.0)
+    if peak > max_peak:
+        mix *= max_peak / peak
+
+    mp3_bytes = _encode_stereo_mp3(mix, sample_rate=sr)
+    beats_sec = [round(i * sec_per_beat, 4) for i in range(int(dur_s / sec_per_beat))]
+    meta = {
+        "profile": profile,
+        "bpm": bpm,
+        "beats": beats_sec,
+        "beat_grid": {
+            "origin": "authored",
+            "bpm": {"num": bpm, "den": 1},
+            "sample_rate": sr,
+            "beats_seconds": beats_sec,
+        },
+    }
+    return mp3_bytes, dur_s, meta
+
+
 __all__ = [
     "MAX_SCORE_EVENTS",
     "SCORE_SCHEMA_VERSION",
@@ -456,5 +772,6 @@ __all__ = [
     "ScoreSpecDraft",
     "ScoreTransition",
     "authored_beat_grid",
+    "synthesize_commercial_underscore_mp3",
     "synthesize_score",
 ]

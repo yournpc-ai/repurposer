@@ -164,11 +164,11 @@ class CompositionSceneAuthoring(BaseModel):
     )
     narration_snapshot_id: UUID | None = Field(
         default=None,
-        description="用于逐句字幕的固定旁白 SourceSnapshot。只在字幕对齐 READY 时与 narration_alignment_id 一起填写。如果只需要声音，保存画面后用 insert_audio 添加固定音频。",
+        description="用于逐句字幕的固定旁白 SourceSnapshot。只在字幕对齐为 ALIGNED 或 READY 时与 narration_alignment_id 一起填写。如果只需要声音，保存画面后用 insert_audio 添加固定音频。",
     )
     narration_alignment_id: UUID | None = Field(
         default=None,
-        description="与 narration_snapshot_id 匹配且状态为 READY 的 NarrationAlignment，提供实际逐句时间及来源。",
+        description="与 narration_snapshot_id 匹配且状态为 ALIGNED 或 READY 的 NarrationAlignment，提供实际逐句时间及来源。",
     )
     narration: str | None = Field(
         default=None, min_length=1, max_length=9000,

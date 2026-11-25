@@ -249,32 +249,13 @@ from uuid import UUID, uuid4
 import pytest
 
 
-from pydantic import TypeAdapter
-
-
-from app.editing.alignment import NarrationPayload
-
-
-from app.editing.director import (
-    AlignedNarrationDirection,
-    validate_aligned_narration_direction,
-)
-
-
-from app.editing.edits import Op, apply_ops
-
-
 from app.editing.schemas import (
     REMOTION_RESOURCE_LIMIT,
     CompositionContent,
     GeneratorObject,
-    NarrationAlignmentRef,
     RemotionProjectSource,
     RemotionResource,
 )
-
-
-from app.editing.aligned_narration import instantiate_aligned_narration
 
 
 from app.editing.validators import validate_content
@@ -284,9 +265,6 @@ from app.editing.video_spec import compile_video_spec
 
 
 from app.tools.video import programs
-
-
-SCRIPT = "清晰的表达，让专业知识被更多人理解。"
 
 
 VALID_CODE = """function render(ctx) {
@@ -314,71 +292,21 @@ INVALID_CODE = """function render(ctx) {
 }"""
 
 
-def _aligned_content(code: str):
-    words = []
-    tick = 0
-    for index, char in enumerate(SCRIPT):
-        if char in "，。":
-            continue
-        words.append({
-            "word_id": f"w{len(words) + 1:06d}", "text": char,
-            "text_start": index, "text_end": index + 1,
-            "start_tick": tick, "end_tick": tick + 10000, "timing": "anchored",
-        })
-        tick += 10000
-    payload = NarrationPayload.model_validate({
-        "source_timebase": 90000,
-        "duration_ticks": tick,
-        "sentences": [{
-            "sentence_id": "s0001", "text": SCRIPT, "text_start": 0,
-            "text_end": len(SCRIPT), "start_tick": 0, "end_tick": tick,
-            "match": 1.0, "status": "aligned", "words": words,
-            "semantics": {
-                "role": "summary", "weight": "main", "entities": ["清晰的表达"],
-                "needs": ["native_text", "generator"],
-                "emphasis_word_ids": ["w000001", "w000002"],
-            },
-        }],
-    })
-    direction = AlignedNarrationDirection.model_validate({
-        "name": "清晰表达", "language": "zh", "background": "#0B1020",
-        "scenes": [{
-            "sentence_ids": ["s0001"], "intent": "把复杂知识整理成清晰结构",
-            "visual_description": "分散图形汇聚成有序关系，文字与字幕保持原生",
-            "lines": [SCRIPT], "size": "large", "align": "center",
-            "generator": {"code": code, "parameters": {"density": 4}},
-        }],
-    })
-    validate_aligned_narration_direction(
-        direction, sentences=[("s0001", SCRIPT)], require_generator=True,
+def _generator_content(code: str):
+    generator = GeneratorObject(
+        kind="generator", object_id="obj_draw", code=code, parameters={"density": 4},
+        output=ProgramOutput(width=640, height=360, fps=15, duration_frames=15, background="#0B1020"),
+        layout=LayoutBox(x=0, y=0, width=640, height=360),
     )
-    snapshot = SimpleNamespace(id=uuid4(), digest="a" * 64)
-    alignment = NarrationAlignmentRef(
-        alignment_id=uuid4(), content_digest="b" * 64,
-        audio_snapshot_id=snapshot.id, audio_digest=snapshot.digest,
-    )
-    ops = TypeAdapter(list[Op]).validate_python(instantiate_aligned_narration(
-        direction, payload=payload, alignment=alignment, snapshot=snapshot,
-    ))
-    content = apply_ops(
-        CompositionContent(settings={"width": 1920, "height": 1080}),
-        ops,
-        {snapshot.id: snapshot.digest},
-    )
-    facts = {snapshot.id: {
-        "digest": snapshot.digest, "kind": "audio", "duration_ticks": tick,
-        "owner_id": uuid4(), "storage_key": "snapshots/narration.mp3",
-    }}
-    validate_content(content, facts)
-    generator = next(
-        clip for track in content.timeline.tracks for clip in track.clips
-        if isinstance(clip.object, GeneratorObject)
-    )
-    return content, generator, facts
+    clip = Clip(clip_id="clp_draw", range=TimeRange(start=0, end=90000), object=generator)
+    content = CompositionContent(settings={"width": 640, "height": 360})
+    content.timeline.tracks.append(Track(track_id="trk_draw", kind="visual", role="main", order=0, clips=[clip]))
+    validate_content(content, {})
+    return content, clip, {}
 
 
 @pytest.mark.asyncio
-async def test_valid_aligned_fixture_executes_and_compiles_to_fixed_media(monkeypatch):
+async def test_valid_draw_2d_fixture_executes_and_compiles_to_fixed_media(monkeypatch):
     objects: dict[str, bytes] = {}
 
     async def exists(key: str) -> bool:
@@ -401,7 +329,7 @@ async def test_valid_aligned_fixture_executes_and_compiles_to_fixed_media(monkey
     monkeypatch.setattr(programs.storage, "save", save)
     monkeypatch.setattr(programs, "store_source_bytes", store)
 
-    content, clip, facts = _aligned_content(VALID_CODE)
+    content, clip, facts = _generator_content(VALID_CODE)
     assert isinstance(clip.object, GeneratorObject)
     manifest = await programs.ensure_generator_clip(clip)
     assert manifest["program_digest"] == clip.object.program_digest()
@@ -435,7 +363,7 @@ async def test_rect_stroke_and_corner_fixture_is_rejected_before_media_or_versio
 
     monkeypatch.setattr(programs.storage, "exists", exists)
     monkeypatch.setattr(programs.storage, "save", save)
-    _, clip, _ = _aligned_content(INVALID_CODE)
+    _, clip, _ = _generator_content(INVALID_CODE)
     with pytest.raises(programs.ProgramError) as caught:
         await programs.ensure_generator_clip(clip)
     diagnostic = str(caught.value)

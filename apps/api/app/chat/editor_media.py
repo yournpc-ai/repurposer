@@ -42,7 +42,7 @@ def _requests_paid_media(words, tool):
 
 
 async def _record_audio(db, project, receipt, result, request):
-    music = "score_spec" in result
+    music = "score_spec" in result or "music" in result
     effect = "sound_recipe" in result
     role = "music" if music else ("effect" if effect else "narration")
     item = await playback_item(db, project, role, result, request)
@@ -53,8 +53,17 @@ async def _record_audio(db, project, receipt, result, request):
         "cache_hit": result["cache_hit"], "added_to_composition": False,
     }
     if music:
-        facts.update(music_id=result["music"]["music_id"],
-                     score={"bpm": result["score_spec"]["bpm"], "style": request.get("style")})
+        music_info = result.get("music") or {}
+        score_spec = result.get("score_spec")
+        bpm = (
+            score_spec["bpm"]
+            if isinstance(score_spec, dict) and "bpm" in score_spec
+            else ((result.get("beat_grid") or {}).get("bpm"))
+        )
+        facts.update(
+            music_id=music_info["music_id"],
+            score={"bpm": bpm, "style": request.get("style"), "lufs": music_info.get("lufs")},
+        )
     elif effect:
         sr = result["sound_recipe"]
         facts.update(

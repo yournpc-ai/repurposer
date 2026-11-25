@@ -8,7 +8,6 @@ import json
 
 from app.editing.source_selection import SourceSelectionAnswer, SourceSentence
 from app.editing.director import (
-    AlignedNarrationDirection,
     ComponentVideoDirection,
     GeneratedImageDirection,
     MgDirection,
@@ -91,44 +90,6 @@ mg_director: Agent[MgDirection] = Agent(
     stream=True,
     timeout_s=300,
     read_tools=SKILL_READ_TOOLS,
-)
-def _assemble_aligned_narration(
-    *,
-    alignment_json: str,
-    focus: str | None,
-    instruction: str | None,
-    language: str | None,
-    scene_count: int | None,
-    background: str | None,
-    component_bake_enabled: bool = False,
-    repair_feedback: str | None = None,
-) -> AssembleResult:
-    return (
-        {
-            "alignment_json": alignment_json,
-            "focus": focus,
-            "instruction": instruction,
-            "language": language,
-            "scene_count": scene_count,
-            "background": background,
-            "component_bake_enabled": component_bake_enabled,
-            "repair_feedback": repair_feedback,
-        },
-        [],
-    )
-
-
-aligned_narration_director: Agent[AlignedNarrationDirection] = Agent(
-    name="aligned_narration_director",
-    prompt="video/aligned_narration_director.j2",
-    schema=AlignedNarrationDirection,
-    system=(
-        "你是动态图形导演，根据 READY 状态的旁白对齐结果创作。选择真实存在的句子和逐字原文片段。音频及各词的时间由系统负责。只输出有效 JSON。"
-    ),
-    temperature=0.5,
-    assemble=_assemble_aligned_narration,
-    stream=True,
-    timeout_s=300,
 )
 
 
@@ -306,7 +267,6 @@ video_reviewer: Agent[ContentReviewAnswer] = Agent(
 
 
 __all__ = [
-    "aligned_narration_director",
     "component_director",
     "image_director",
     "mg_director",

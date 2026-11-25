@@ -1,24 +1,20 @@
-"""Ordinary dialogue audio and native captions from a READY NarrationAlignment."""
+"""Ordinary dialogue audio and native captions from a fixed narration word axis."""
 from __future__ import annotations
 
 from typing import Any
 from uuid import UUID
 
-from app.editing.alignment import NarrationPayload
+from app.editing.alignment import NarrationPayload, narration_words
+from app.editing.caption_timing import chunk_timed_words
+from app.editing.source_captions import source_caption_clips
 from app.editing.edits import AddClip, AddTrack, BindSource, Op
 from app.editing.schemas import (
     AudioObject,
     Clip,
     CompositionContent,
-    LayoutBox,
-    SourceCaptionDerivation,
-    TextObject,
-    TextStyle,
     TimeRange,
     Track,
-    speech_text_digest,
 )
-from app.editing.text_presets import default_caption_text_style
 from app.editing.timing import source_ticks_to_output_ticks
 
 
@@ -35,17 +31,13 @@ def narration_audio_ops(
         raise ValueError(f"dialogue scene {scene_id!r} does not exist")
     if alignment.audio_snapshot_id != snapshot_id or alignment.audio_digest != snapshot_digest:
         raise ValueError("narration alignment and frozen audio identities differ")
-    if alignment.status != "READY" or not alignment.content_digest:
-        raise ValueError("narration alignment is not READY")
+    if alignment.status not in {"READY", "ALIGNED"} or not alignment.content_digest:
+        raise ValueError("narration has no fixed word axis")
     payload = NarrationPayload.model_validate(alignment.payload)
     output_duration = source_ticks_to_output_ticks(payload.duration_ticks, content.settings.timebase)
     if output_duration > scene.range.duration:
-        raise ValueError("READY narration exceeds its Scene; retime the Scene instead of trimming audio")
+        raise ValueError("Aligned narration exceeds its Scene; retime the Scene instead of trimming audio")
     duration = payload.duration_ticks
-    caption_sentences = [
-        (sentence, sentence.start_tick, sentence.end_tick)
-        for sentence in payload.sentences
-    ]
     ops: list[Op] = []
     if snapshot_id not in {binding.snapshot_id for binding in content.sources}:
         ops.append(BindSource(op="bind_source", snapshot_id=snapshot_id))
@@ -84,64 +76,20 @@ def narration_audio_ops(
     caption_track_id = f"trk_narration_caption_{scene_id}"
     if any(track.track_id == caption_track_id for track in content.timeline.tracks):
         raise ValueError(f"caption track {caption_track_id!r} already exists")
-    if caption_sentences:
-        ops.append(AddTrack(
-            op="add_track",
-            track=Track(
-                track_id=caption_track_id,
-                kind="visual",
-                role="caption",
-                order=max((track.order for track in content.timeline.tracks if track.kind == "visual"), default=-1) + 1,
-                clips=[],
-            ),
-        ))
-    default_style = default_caption_text_style(
-        content.settings,
-        font_size=max(28, round(content.settings.width * 38 / 1920)),
-        align="center",
-        line_height=1.3,
-    )
-    for sentence, source_start, source_end in caption_sentences:
-        output_start = scene.range.start + source_ticks_to_output_ticks(
-            source_start, content.settings.timebase
+    ops.append(AddTrack(
+        op="add_track",
+        track=Track(
+            track_id=caption_track_id, kind="visual", role="caption",
+            order=max((track.order for track in content.timeline.tracks if track.kind == "visual"), default=-1) + 1,
+            clips=[],
+        ),
+    ))
+    for sentence in payload.sentences:
+        clips = source_caption_clips(
+            content, scene=scene, source_range=TimeRange(start=0, end=duration), sentence_id=sentence.sentence_id,
+            phrases=chunk_timed_words(narration_words(sentence), verbatim=True), prefix="narration_caption",
+            snapshot_id=snapshot_id, snapshot_digest=snapshot_digest, alignment=alignment.algorithm,
+            narration_alignment_id=alignment.id, narration_content_digest=alignment.content_digest,
         )
-        output_end = scene.range.start + source_ticks_to_output_ticks(
-            source_end, content.settings.timebase
-        )
-        if output_end <= output_start or output_end > scene.range.end:
-            raise ValueError(f"narration caption {sentence.sentence_id!r} escapes its audio window")
-        text = sentence.text.strip()
-        ops.append(AddClip(
-            op="add_clip",
-            track_id=caption_track_id,
-            clip=Clip(
-                clip_id=f"clp_narration_caption_{scene_id}_{sentence.sentence_id}",
-                range=TimeRange(start=output_start, end=output_end),
-                scene_id=scene_id,
-                source=None,
-                object=TextObject(
-                    kind="text",
-                    object_id=f"obj_narration_caption_{scene_id}_{sentence.sentence_id}",
-                    text=text,
-                    layout=LayoutBox(
-                        x=content.settings.width * 0.08,
-                        y=content.settings.height - 340,
-                        width=content.settings.width * 0.84,
-                        height=130,
-                    ),
-                    style=default_style.model_copy(deep=True),
-                    caption=SourceCaptionDerivation(
-                        snapshot_id=snapshot_id,
-                        snapshot_digest=snapshot_digest,
-                        sentence_id=sentence.sentence_id,
-                        source_range=TimeRange(start=source_start, end=source_end),
-                        source_text_digest=speech_text_digest(text),
-                        alignment=alignment.algorithm,
-                        narration_alignment_id=alignment.id,
-                        narration_content_digest=alignment.content_digest,
-                    ),
-                ),
-                animations=[],
-            ),
-        ))
+        ops.extend(AddClip(op="add_clip", track_id=caption_track_id, clip=clip) for clip in clips)
     return ops

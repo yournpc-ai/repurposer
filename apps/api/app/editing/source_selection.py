@@ -7,8 +7,9 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.editing.caption_timing import TimedWord
 from app.editing.timing import SOURCE_TIMEBASE, seconds_to_ticks
-from app.editing.transcript import group_cues
+from app.editing.transcript import word_groups
 
 
 class SourceSentence(BaseModel):
@@ -18,6 +19,7 @@ class SourceSentence(BaseModel):
     start: float
     end: float
     text: str
+    words: list[TimedWord] = Field(default_factory=list, exclude=True)
 
 
 class SourceSelectionAnswer(BaseModel):
@@ -55,18 +57,18 @@ def source_sentences(words: Any, *, duration_ticks: int) -> tuple[SourceSentence
         if seconds_to_ticks(end, SOURCE_TIMEBASE) > duration_ticks:
             raise ValueError("the ASR word axis exceeds the frozen video duration")
         previous_start = start
-    cues, truncated = group_cues(words, raw_words=True)
-    if truncated:
+    if len(words) > 12000:
         raise ValueError("the ASR word axis exceeds the supported source-analysis budget")
     sentences = tuple(
         SourceSentence(
             sentence_id=f"asr_{index:04d}",
-            start=cue["start"],
-            end=cue["end"],
-            text=cue["text"],
+            start=float(group[0]["start"]),
+            end=max(float(w["end"]) for w in group),
+            text="".join(w["word"] for w in group).strip(),
+            words=[TimedWord(text=w["word"], start_s=float(w["start"]), end_s=float(w["end"])) for w in group],
         )
-        for index, cue in enumerate(cues, start=1)
-        if cue["text"] and cue["end"] > cue["start"]
+        for index, group in enumerate(word_groups(words), start=1)
+        if max(float(w["end"]) for w in group) > float(group[0]["start"])
     )
     if not sentences:
         raise ValueError("the frozen video has no usable ASR sentences")

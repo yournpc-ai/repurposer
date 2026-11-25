@@ -16,12 +16,12 @@ from app.chat.activity_receipts import (
     music_selection_receipt,
     sfx_import_receipt,
     sfx_search_receipt,
+    voice_search_receipt,
+    voice_selection_receipt,
 )
 from app.models.schemas import (
-    AnnotateNarrationArgs,
     BuiltInSkillReference,
     ExternalSkillReference,
-    GetNarrationAlignmentArgs,
     ImportSfxArgs,
     ProjectBrief,
     AlignRecordingArgs,
@@ -29,8 +29,10 @@ from app.models.schemas import (
     SearchSfxArgs,
     SelectMusicArgs,
     SelectVideoPresetArgs,
+    SelectVoiceArgs,
     ShowMusicCandidatesArgs,
     ShowVideoPresetsArgs,
+    ShowVoiceCandidatesArgs,
     SkillReference,
     VideoPresetChoice,
 )
@@ -67,9 +69,15 @@ def audio_candidate_context_lines(candidate_logs: list[dict[str, Any]]) -> list[
             if not isinstance(set_id, str) or not set_id:
                 continue
             kind = event.get("kind")
-            if kind in {"sfx_set", "set", "music_set"}:
+            if kind in {"sfx_set", "set", "music_set", "voice_set"}:
                 members = event.get("members")
-                expected_provider = "music_library" if kind == "music_set" else "freesound"
+                expected_provider = (
+                    "music_library"
+                    if kind == "music_set"
+                    else "voice_library"
+                    if kind == "voice_set"
+                    else "freesound"
+                )
                 if (
                     event.get("asset_id") is not None
                     or not isinstance(members, list)
@@ -83,7 +91,13 @@ def audio_candidate_context_lines(candidate_logs: list[dict[str, Any]]) -> list[
                     continue
                 sets[set_id] = {
                     "candidate_set_id": set_id,
-                    "candidate_kind": "music" if kind == "music_set" else "sfx",
+                    "candidate_kind": (
+                        "music"
+                        if kind == "music_set"
+                        else "voice"
+                        if kind == "voice_set"
+                        else "sfx"
+                    ),
                     "topic": event.get("topic"),
                     "members": [
                         {
@@ -91,10 +105,11 @@ def audio_candidate_context_lines(candidate_logs: list[dict[str, Any]]) -> list[
                             "ordinal": index + 1,
                             "title": (
                                 _sfx_display_title(title)
-                                if kind != "music_set" and isinstance((title := member.get("title")), str)
+                                if kind not in {"music_set", "voice_set"}
+                                and isinstance((title := member.get("title")), str)
                                 else member.get("title")
                             ),
-                            "duration_seconds": member.get("duration_seconds"),
+                            "duration_seconds": member.get("duration_seconds") or member.get("end"),
                         }
                         for index, member in enumerate(members)
                     ],
@@ -756,6 +771,9 @@ async def show_music_candidates_seat(
                 db,
                 owner_id=project.user_id,
                 query=args.query,
+                style_preset=args.style_preset,
+                mood=args.mood,
+                tags=args.tags,
             )
     except (MusicCandidateError, ValueError) as exc:
         return ToolObservation(f"show_music_candidates failed honestly: {exc}", ok=False)
@@ -818,6 +836,116 @@ async def select_music_seat(
         + json.dumps(selection_facts, ensure_ascii=False),
         receipt=music_selection_receipt(
             selection_facts,
+            candidate_set_id=args.candidate_set_id,
+            member_index=args.member_index,
+        ),
+    )
+
+
+async def show_voice_candidates_seat(
+    *,
+    project: Project,
+    args: ShowVoiceCandidatesArgs,
+    on_candidates,
+) -> ToolObservation:
+    """Emit playable permanent Voice library candidates; only a settled turn is selectable."""
+
+    from app.models.database import AsyncSessionLocal
+    from app.tools.video.voice_candidates import VoiceCandidateError, show_voice_candidate_set
+
+    try:
+        async with AsyncSessionLocal() as db:
+            payload = await show_voice_candidate_set(
+                db,
+                owner_id=project.user_id,
+                language=args.language,
+                style_preset=args.style_preset,
+                tone=args.tone,
+                query=args.query,
+            )
+    except (VoiceCandidateError, ValueError) as exc:
+        return ToolObservation(f"show_voice_candidates failed honestly: {exc}", ok=False)
+    await on_candidates(payload)
+    selection_facts = {
+        "candidate_set_id": payload["candidate_set_id"],
+        "topic": payload["topic"],
+        "members": [
+            {
+                "member_index": index,
+                "ordinal": index + 1,
+                "title": member["title"],
+                "duration_seconds": member.get("duration_seconds") or member.get("end") or 10,
+            }
+            for index, member in enumerate(payload["members"])
+        ],
+    }
+    return ToolObservation(
+        "事实：已展示永久音色库候选（voice_set），未写入素材、CompositionVersion 或 Run。用户可在卡片试听，再按序号选择。本次观察没有试听结果。\n"
+        + json.dumps(selection_facts, ensure_ascii=False),
+        receipt=voice_search_receipt(selection_facts),
+    )
+
+
+async def select_voice_seat(
+    *,
+    project: Project,
+    args: SelectVoiceArgs,
+    on_candidates,
+) -> ToolObservation | TerminalRefusal:
+    """Resolve a settled permanent Voice candidate and enforce owner/scope visibility."""
+
+    from app.models.database import AsyncSessionLocal
+    from app.tools.video.sfx import persisted_candidate_events
+    from app.tools.video.voice_candidates import VoiceCandidateError, select_voice_candidate
+
+    try:
+        async with AsyncSessionLocal() as db:
+            events = await persisted_candidate_events(
+                db,
+                project=project,
+                candidate_set_id=args.candidate_set_id,
+            )
+            facts = await select_voice_candidate(
+                db,
+                owner_id=project.user_id,
+                events=events,
+                candidate_set_id=args.candidate_set_id,
+                member_index=args.member_index,
+            )
+    except (VoiceCandidateError, ValueError, PermissionError) as exc:
+        return TerminalRefusal(
+            f"the selected Voice choice failed deterministically: {exc}; no revision was made",
+            facts={"kind": "voice_selection_failure"},
+        )
+    await on_candidates({
+        "kind": "selection",
+        "candidate_set_id": str(args.candidate_set_id),
+        "selected": [args.member_index],
+    })
+    selection_facts = {
+        key: facts[key]
+        for key in (
+            "voice_id",
+            "provider_voice_id",
+            "name",
+            "title",
+            "languages",
+            "gender",
+            "tone_tags",
+            "compatible_styles",
+            "duration_seconds",
+        )
+    }
+    return ToolObservation(
+        "事实：已解析保存的永久音色选择，未修改 CompositionVersion 或启动 Run。可将 voice_id 直接传给 create_video 或 generate_voice。\n"
+        + json.dumps(selection_facts, ensure_ascii=False),
+        receipt=voice_selection_receipt(
+            {
+                "voice_id": facts["voice_id"],
+                "provider_voice_id": facts["provider_voice_id"],
+                "title": facts["title"],
+                "duration_seconds": facts["duration_seconds"],
+            },
             candidate_set_id=args.candidate_set_id,
             member_index=args.member_index,
         ),
@@ -897,69 +1025,6 @@ async def align_recording_seat(
         "scope": "结果仅含原速音频及其实际对齐，未创建 CompositionVersion 或视频 Output。",
     })
     return ToolObservation(json.dumps(read, ensure_ascii=False), fold_after_delivery=True)
-
-
-async def get_narration_alignment_seat(
-    *, project: Project | None, args: GetNarrationAlignmentArgs
-) -> str | ToolObservation:
-    if project is None:
-        return "narration alignment reads need a project context"
-    from app.models.database import AsyncSessionLocal
-    from app.tools.video.alignment_store import alignment_read, get_alignment
-
-    try:
-        async with AsyncSessionLocal() as db:
-            row = await get_alignment(db, owner_id=project.user_id, alignment_id=args.alignment_id)
-            read = alignment_read(row)
-    except ValueError as exc:
-        return f"get_narration_alignment rejected: {exc}"
-    return ToolObservation(json.dumps(read, ensure_ascii=False))
-
-
-async def annotate_narration_seat(
-    *, project: Project | None, args: AnnotateNarrationArgs
-) -> str | ToolObservation:
-    if project is None:
-        return "narration annotation needs a project context"
-    from app.editing.alignment import NarrationPayload, NarrationSemantics
-    from app.models.database import AsyncSessionLocal
-    from app.tools.video.alignment_store import annotate_alignment, get_alignment
-
-    try:
-        async with AsyncSessionLocal() as db:
-            row = await get_alignment(db, owner_id=project.user_id, alignment_id=args.alignment_id)
-            if row.status != "ALIGNED":
-                return "annotate_narration accepts only an ALIGNED row; READY is immutable"
-            payload = NarrationPayload.model_validate(row.payload)
-        expected_ids = [sentence.sentence_id for sentence in payload.sentences]
-        supplied_ids = [sentence.sentence_id for sentence in args.sentences]
-        if supplied_ids != expected_ids:
-            return (
-                "annotate_narration needs every current sentence exactly once and in order: "
-                + ", ".join(expected_ids)
-            )
-        semantics_by_id = {
-            item.sentence_id: NarrationSemantics(
-                role=item.role,
-                weight=item.weight,
-                entities=item.entities,
-                needs=item.needs,
-                emphasis_word_ids=item.emphasis_word_ids,
-            )
-            for item in args.sentences
-        }
-        for sentence in payload.sentences:
-            sentence.semantics = semantics_by_id[sentence.sentence_id]
-        payload = NarrationPayload.model_validate(payload.model_dump(mode="json"))
-        read = await annotate_alignment(
-            owner_id=project.user_id,
-            alignment_id=args.alignment_id,
-            payload=payload,
-            expected_timing_digest=args.expected_timing_digest,
-        )
-    except ValueError as exc:
-        return f"annotate_narration rejected: {exc}"
-    return ToolObservation(json.dumps(read, ensure_ascii=False))
 
 
 def stamp_video_presentation(

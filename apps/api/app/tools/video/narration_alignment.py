@@ -18,6 +18,7 @@ from app.editing.alignment import (
     NarrationSentence,
     NarrationWord,
 )
+from app.editing.caption_timing import is_han_char
 from app.editing.timing import SOURCE_TIMEBASE, quantize_ticks
 
 _MIN_SENTENCE_MATCH = 0.6
@@ -46,18 +47,8 @@ class _AsrToken:
     normalized_end: int
 
 
-def _cjk(char: str) -> bool:
-    value = ord(char)
-    return (
-        0x3400 <= value <= 0x4DBF
-        or 0x4E00 <= value <= 0x9FFF
-        or 0xF900 <= value <= 0xFAFF
-        or 0x20000 <= value <= 0x2FA1F
-    )
-
-
 def _word_char(char: str) -> bool:
-    return not _cjk(char) and unicodedata.category(char)[0] in {"L", "N", "M"}
+    return not is_han_char(char) and unicodedata.category(char)[0] in {"L", "N", "M"}
 
 
 def _normalize(value: str) -> str:
@@ -107,7 +98,7 @@ def _tokens(text: str, start: int, end: int) -> list[tuple[str, int, int]]:
     index = start
     while index < end:
         char = text[index]
-        if _cjk(char):
+        if is_han_char(char):
             tokens.append((char, index, index + 1))
             index += 1
             continue
@@ -187,10 +178,13 @@ def _asr_tokens(asr: dict[str, Any], duration_ticks: int) -> tuple[list[_AsrToke
     return facts, "".join(normalized_parts)
 
 
-def _boundary_time(tokens: list[_AsrToken], starts: list[int], offset: int) -> int:
+def _boundary_time(tokens: list[_AsrToken], starts: list[int], offset: int, *, end: bool = False) -> int:
     index = bisect.bisect_right(starts, offset) - 1
     index = max(0, min(index, len(tokens) - 1))
     token = tokens[index]
+    if end and index > 0 and offset == token.normalized_start:
+        # A shared text boundary may span a silence between measured words.
+        return min(tokens[index - 1].end_tick, token.start_tick)
     if offset <= token.normalized_start:
         return token.start_tick
     if offset >= token.normalized_end:
@@ -268,7 +262,7 @@ def align_narration(
         start_offset = min(position for position in positions if position is not None)
         end_offset = max(position for position in positions if position is not None) + 1
         start = _boundary_time(asr_tokens, asr_starts, start_offset)
-        end = _boundary_time(asr_tokens, asr_starts, end_offset)
+        end = _boundary_time(asr_tokens, asr_starts, end_offset, end=True)
         anchors.append((start, end) if end > start else None)
     timings = _interpolate(anchors, duration_ticks)
 

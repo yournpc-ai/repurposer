@@ -105,53 +105,6 @@ class ComponentProjectAnswer(BaseModel):
     resources: list[RemotionResource] = Field(default=[], max_length=REMOTION_RESOURCE_LIMIT)
 
 
-class AlignedGeneratorAnswer(BaseModel):
-    """Agent-authored visual source; the server owns its output window."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    producer: Literal["draw-2d", "remotion-project"] = "draw-2d"
-    parameters: dict[str, str | float | bool] = Field(default={}, max_length=24)
-    code: str | None = Field(default=None, min_length=1, max_length=24000)
-    project: ComponentProjectAnswer | None = None
-
-    @model_validator(mode="after")
-    def _complete_source(self) -> AlignedGeneratorAnswer:
-        if self.producer == "draw-2d":
-            if self.code is None or self.project is not None:
-                raise ValueError("draw-2d needs code and no project")
-        elif self.project is None or self.code is not None or self.parameters:
-            raise ValueError("remotion-project needs a complete project and no draw-2d fields")
-        return self
-
-
-class AlignedNarrationSceneAnswer(BaseModel):
-    """Native visual direction for real sentence ids; timing stays server-owned."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    sentence_ids: list[str] = Field(min_length=1, max_length=100)
-    intent: str = Field(default="", max_length=120)
-    visual_description: str | None = Field(default=None, max_length=240)
-    lines: list[str] = Field(min_length=1, max_length=3)
-    size: Literal["medium", "large", "hero"] = "large"
-    color: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$")
-    enter: Literal["fade", "rise", "lines", "words", "graphemes"] = "rise"
-    drift: Literal["none", "push_in", "pull_out"] = "none"
-    align: Literal["left", "center", "right"] = "center"
-    shapes: list[MgShapeAnswer] = Field(default=[], max_length=4)
-    generator: AlignedGeneratorAnswer | None = None
-
-
-class AlignedNarrationDirection(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    name: str | None = Field(default=None, max_length=24)
-    language: str | None = None
-    background: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$")
-    scenes: list[AlignedNarrationSceneAnswer] = Field(min_length=1)
-
-
 class ProgramDirection(BaseModel):
     """The controlled visual-program consumer (draw-2d)."""
 
@@ -314,43 +267,6 @@ def validate_mg_direction(direction: MgDirection, *, source_text: str | None = N
             if len(line.strip()) > 40:
                 raise DirectionRejected(
                     [f"scene {i} line is {len(line)} chars (cap 40 — split it into another scene)"]
-                )
-
-
-def validate_aligned_narration_direction(
-    direction: AlignedNarrationDirection,
-    *,
-    sentences: list[tuple[str, str]],
-    scene_count: int | None = None,
-    require_generator: bool = False,
-    component_enabled: bool = False,
-) -> None:
-    expected_ids = [sentence_id for sentence_id, _ in sentences]
-    actual_ids = [sentence_id for scene in direction.scenes for sentence_id in scene.sentence_ids]
-    if actual_ids != expected_ids:
-        raise DirectionRejected(
-            ["sentence_ids must cover every real sentence exactly once, in script order"]
-        )
-    generators = [scene.generator for scene in direction.scenes if scene.generator is not None]
-    if require_generator and len(generators) != 1:
-        raise DirectionRejected(["knowledge-explainer needs exactly one explanatory Generator main visual"])
-    if len(generators) > 1:
-        raise DirectionRejected(["source-aligned narration supports one Generator main visual"])
-    if not component_enabled and any(item.producer == "remotion-project" for item in generators):
-        raise DirectionRejected(["remotion-project is unavailable in this deployment; use draw-2d"])
-    if any(item.producer == "remotion-project" and item.project and item.project.resources for item in generators):
-        raise DirectionRejected(["source-aligned component visuals use declared graphics, not external resources"])
-    if scene_count is not None and len(direction.scenes) != scene_count:
-        raise DirectionRejected([f"the user requested exactly {scene_count} scenes"])
-    text_by_id = dict(sentences)
-    for index, scene in enumerate(direction.scenes, start=1):
-        selected_text = "\n".join(text_by_id[sentence_id] for sentence_id in scene.sentence_ids)
-        for line in scene.lines:
-            if not line.strip() or len(line.strip()) > 40:
-                raise DirectionRejected([f"scene {index} lines must contain 1–40 characters"])
-            if line.strip() not in selected_text:
-                raise DirectionRejected(
-                    [f"scene {index} on-screen lines must be exact fragments of its selected sentences"]
                 )
 
 

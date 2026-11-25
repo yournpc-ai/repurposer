@@ -102,9 +102,7 @@ async def _tick() -> bool:
             did_work = True
             _asset_task = asyncio.create_task(process_asset(*asset))
 
-    # Deterministic final-audio/script alignment is the fifth claim source.
-    # ALIGNED waits for Agent semantics and READY is immutable; neither is
-    # claimed again. Expired PROCESSING leases recover to PENDING only.
+    # Only PENDING alignments are claimed. Expired PROCESSING leases return to PENDING.
     async with AsyncSessionLocal() as db:
         await reap_stale_alignments(db)
         alignment_claim = await claim_pending_alignment(db)

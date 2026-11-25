@@ -98,7 +98,7 @@ def _compile_animations(clip: Clip, content: CompositionContent) -> list[dict[st
             caption = clip.object.caption if isinstance(clip.object, TextObject) else None
             anchor = anim.narration_anchor
             if (
-                caption is None
+                not isinstance(caption, CaptionDerivation)
                 or caption.state != "derived"
                 or caption.narration_alignment_id != anchor.alignment_id
                 or caption.narration_content_digest != anchor.content_digest
@@ -360,7 +360,7 @@ def _compile_derived_caption(
     clip: Clip, content: CompositionContent, speech_media: dict[str, dict]
 ) -> list[dict[str, Any]]:
     obj = clip.object
-    assert isinstance(obj, TextObject) and obj.caption is not None
+    assert isinstance(obj, TextObject) and isinstance(obj.caption, CaptionDerivation)
     if clip.animations:
         raise CompileError(f"clip {clip.clip_id}: derived cue timing cannot carry old text animations")
     prepared = speech_media.get(obj.caption.speech_object_id)
@@ -371,15 +371,26 @@ def _compile_derived_caption(
         "text_digest"
     ) != obj.caption.source_text_digest:
         raise CompileError(f"clip {clip.clip_id}: caption and prepared speech versions differ")
-    cues = _reviewed_cues(prepared["normalized_text"], prepared["cues"], obj.text)
+    from app.editing.caption_timing import align_translations_to_phrases, split_cue_into_timed_phrases
+
+    primary = obj.text
+    translation = ""
+    if " ".join(primary.split()) != prepared["normalized_text"]:
+        primary, _, translation = obj.text.partition("\n")
+    cues = _reviewed_cues(prepared["normalized_text"], prepared["cues"], primary)
+    phrases = [
+        phrase for cue in cues
+        for phrase in split_cue_into_timed_phrases(cue["text"], cue["time_begin"], cue["time_end"])
+    ]
+    translations = align_translations_to_phrases([translation], phrases)
     settings = content.settings
     clip_start = _quantize_frames(clip.range.start, content)
     clip_end = _quantize_frames(clip.range.end, content)
     compiled = []
     previous_end = clip_start
-    for index, cue in enumerate(cues):
-        start_time = Fraction(str(cue["time_begin"])) * settings.fps.num / (1000 * settings.fps.den)
-        end_time = Fraction(str(cue["time_end"])) * settings.fps.num / (1000 * settings.fps.den)
+    for index, (phrase, secondary) in enumerate(zip(phrases, translations, strict=True)):
+        start_time = Fraction(str(phrase.time_begin_ms)) * settings.fps.num / (1000 * settings.fps.den)
+        end_time = Fraction(str(phrase.time_end_ms)) * settings.fps.num / (1000 * settings.fps.den)
         start = clip_start + math.floor(start_time)
         end = clip_start + math.ceil(end_time)
         start = max(start, previous_end)
@@ -390,7 +401,7 @@ def _compile_derived_caption(
         cue_object = obj.model_copy(
             update={
                 "object_id": f"{obj.object_id}:cue:{index}",
-                "text": cue["text"],
+                "text": f"{phrase.text}\n{secondary}" if secondary else phrase.text,
                 "caption": None,
             }
         )

@@ -50,6 +50,14 @@ def _to_response(music: Music) -> MusicResponse:
         source_url=music.source_url,
         attribution=music.attribution,
         is_public=music.is_public,
+        scope=music.scope or "platform",
+        status=music.status or "curated",
+        tags=list(music.tags or []),
+        compatible_styles=list(music.compatible_styles or []),
+        instrumental=bool(music.instrumental),
+        lufs=music.lufs,
+        use_count=int(music.use_count or 0),
+        is_favorite=bool(music.is_favorite),
         created_at=music.created_at,
     )
 
@@ -95,6 +103,7 @@ async def generate_music_endpoint(
             data.prompt,
             model=USER_MODEL,
             is_instrumental=data.is_instrumental,
+            compatible_styles=data.compatible_styles,
         )
     except LLMError as e:
         raise HTTPException(
@@ -109,6 +118,11 @@ async def generate_music_endpoint(
         title=data.title,
         user_id=current_user.id,
         is_public=True,
+        tags=data.tags,
+        compatible_styles=data.compatible_styles,
+        scope="user",
+        status="ready",
+        instrumental=data.is_instrumental,
     )
     return _to_response(music)
 

@@ -262,8 +262,98 @@ async def prepare_programmatic_music(
     }
 
 
+async def prepare_minimax_music(
+    *,
+    project,
+    args,
+    execution_id: str,
+) -> dict[str, Any]:
+    """Generate instrumental BGM via MiniMax ``/music_generation`` and save into the permanent library."""
+    from app.pipeline.music import (
+        USER_MODEL,
+        create_music_from_generation,
+        generate_music as generate_minimax_music,
+    )
+    from app.tools.video.media_analysis import analyze_audio_bytes, store_media_analysis
+    from app.tools.video.preparation import snapshot_music_track
+
+    prompt = (args.prompt or f"Instrumental {args.style.replace('_', ' ')} background music, {args.bpm} BPM, clean modern production, no vocals").strip()
+    generated = await generate_minimax_music(
+        prompt,
+        model=USER_MODEL,
+        is_instrumental=True,
+        compatible_styles=list(args.compatible_styles or []),
+        duration_seconds=max(16, min(int(round(args.duration_seconds)), 90)),
+    )
+    async with AsyncSessionLocal() as db:
+        music = await create_music_from_generation(
+            db,
+            prompt=prompt,
+            generated=generated,
+            mood=args.mood or args.style.replace("_", "-"),
+            title=args.name,
+            user_id=project.user_id,
+            is_public=False,
+            tags=list(args.tags or []) or [args.style.replace("_", "-")],
+            compatible_styles=list(args.compatible_styles or []),
+            scope="user",
+            status="ready",
+            instrumental=True,
+        )
+        snapshot = await snapshot_music_track(db, music, owner_id=project.user_id)
+        if snapshot.origin_project_id is None:
+            snapshot.origin_project_id = project.id
+        report = await asyncio.to_thread(
+            analyze_audio_bytes,
+            generated.audio_bytes,
+            snapshot_id=str(snapshot.id),
+            source_digest=snapshot.digest,
+        )
+        analysis_ref = await store_media_analysis(report)
+        snapshot.meta = {**(snapshot.meta or {}), "analysis_ref": analysis_ref}
+        music.meta = {**(music.meta or {}), "analysis_ref": analysis_ref}
+        await db.commit()
+        await db.refresh(music)
+        await db.refresh(snapshot)
+
+    actual_seconds = report.media_facts["decode"]["duration_seconds"]
+    beat_grid = (music.meta or {}).get("beat_grid") or (
+        {"bpm": music.meta.get("bpm"), "beats": music.meta.get("beats"), "origin": "estimated"}
+        if isinstance(music.meta, dict) and music.meta.get("bpm") is not None
+        else None
+    )
+    return {
+        "schema_version": 1,
+        "state": "fixed",
+        "execution": {"media_job_id": execution_id, "provider": "minimax"},
+        "music": {
+            "music_id": str(music.id),
+            "title": music.title,
+            "mood": music.mood,
+            "tags": list(music.tags or []),
+            "compatible_styles": list(music.compatible_styles or []),
+            "lufs": music.lufs,
+            "is_public": bool(music.is_public),
+        },
+        "snapshot": {"snapshot_id": str(snapshot.id), "digest": snapshot.digest},
+        "media": {
+            "storage_key": snapshot.storage_key,
+            "digest": snapshot.digest,
+            "mime_type": "audio/mpeg",
+            "size_bytes": len(generated.audio_bytes),
+        },
+        "duration_ticks": snapshot.duration_ticks,
+        "duration_seconds": actual_seconds,
+        "beat_grid": beat_grid,
+        "analysis_ref": analysis_ref,
+        "analysis": report.model_dump(mode="json"),
+        "cache_hit": False,
+    }
+
+
 __all__ = [
     "MusicPreparationError",
     "cached_music_preparation",
+    "prepare_minimax_music",
     "prepare_programmatic_music",
 ]

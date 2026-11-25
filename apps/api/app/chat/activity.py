@@ -96,6 +96,8 @@ from app.chat.activity_receipts import (
     SkillSavedReceipt,
     VideoReviewReceipt,
     VideoRevisionReceipt,
+    VoiceSearchReceipt,
+    VoiceSelectionReceipt,
 )
 
 # The user-semantic kind vocabulary (冻结: user-semantic, never tool names).
@@ -382,6 +384,8 @@ _RECEIPT_TYPES = {
     "sfx_import": SfxImportReceipt,
     "music_search": MusicSearchReceipt,
     "music_selection": MusicSelectionReceipt,
+    "voice_search": VoiceSearchReceipt,
+    "voice_selection": VoiceSelectionReceipt,
     "skill_read": SkillReadReceipt,
     "skill_saved": SkillSavedReceipt,
 }

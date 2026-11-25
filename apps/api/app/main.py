@@ -26,6 +26,7 @@ from app.pipeline.routes import (
     persona_assets,
     projects,
     staging,
+    voices,
 )
 from app.platform.configs import reconcile_configs
 from app.platform.payment_routes import router as payment_router
@@ -261,6 +262,7 @@ app.include_router(outputs, prefix="/api/v1/outputs", tags=["outputs"])
 app.include_router(outputs_regenerate_router, prefix="/api/v1/outputs", tags=["outputs"])
 app.include_router(files_router, prefix="/api/v1", tags=["files"])
 app.include_router(music, prefix="/api/v1/music", tags=["music"])
+app.include_router(voices, prefix="/api/v1/voices", tags=["voices"])
 # Distribution: /api/v1/channels/* + /api/v1/publications/* (URL names the
 # resource, not the module — DISTRIBUTION.md §1.1)
 app.include_router(distribution_router, prefix="/api/v1", tags=["distribution"])

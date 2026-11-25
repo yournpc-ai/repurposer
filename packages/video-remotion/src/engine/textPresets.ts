@@ -204,17 +204,17 @@ export const TEXT_STYLE_PRESETS: Record<TextStylePresetId, TextStylePresetToken>
   bilingual_cinema: {
     color: "#FFFFFF",
     weight: 700,
-    background: null,
-    background_mode: "box",
-    background_opacity: 1.0,
-    background_padding: [0.0, 0.0],
-    background_radius: 0.0,
+    background: "#111318",
+    background_mode: "pill",
+    background_opacity: 0.76,
+    background_padding: [20.0, 10.0],
+    background_radius: 10.0,
     border: null,
-    stroke: { color: "#0A0F16", width: 3.5 },
-    shadow: { color: "#0A0F16", offset: [0.0, 2.0], blur: 10.0 },
+    stroke: null,
+    shadow: { color: "#0A0F16", offset: [0.0, 1.0], blur: 4.0 },
     text_transform: "none",
-    secondary_line_scale: 0.72,
-    secondary_line_opacity: 0.86,
+    secondary_line_scale: 0.74,
+    secondary_line_opacity: 0.88,
   },
 };
 
@@ -258,8 +258,13 @@ export function resolveTextPresetToken(
   if (presetId === "lower_third_tag" && token.border !== null) {
     token.border.color = styleTokens.accent;
   } else if (presetId === "bilingual_cinema" && styleTokens.theme === "light") {
-    token.color = styleTokens.ink;
-    token.stroke = { color: styleTokens.canvas_bg, width: 3.5 };
+    token.color = "#F8FAFC";
+    token.background = "#111318";
+    token.background_mode = "pill";
+    token.background_opacity = 0.82;
+    token.background_padding = [20.0, 10.0];
+    token.background_radius = 10.0;
+    token.stroke = null;
     token.shadow = null;
   }
   return token;

@@ -662,33 +662,57 @@ class MessageFeedback(Base):
     updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc, nullable=False)
 
 
+class Voice(Base):
+    """Permanent voiceprint asset (platform curated or owner-scoped designed/cloned voice).
+
+    Reference audio bytes live in object storage under ``reference_audio_key`` so
+    designed/cloned MiniMax voice IDs can be transparently re-cloned if expired.
+    Cloned voices (``source_kind="minimax_clone"``) remain strictly ``scope="user"``.
+    """
+
+    __tablename__ = "voices"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    owner_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
+    scope = Column(String(24), nullable=False, default="user", server_default="user")
+    status = Column(String(24), nullable=False, default="ready", server_default="ready")
+    source_kind = Column(String(32), nullable=False)
+    name = Column(String(160), nullable=False)
+    description = Column(Text, nullable=True)
+    design_prompt = Column(Text, nullable=True)
+    languages = Column(JSONB, nullable=False, default=list, server_default="[]")
+    gender = Column(String(24), nullable=True)
+    age_band = Column(String(32), nullable=True)
+    tone_tags = Column(JSONB, nullable=False, default=list, server_default="[]")
+    compatible_styles = Column(JSONB, nullable=False, default=list, server_default="[]")
+    provider = Column(String(32), nullable=False, default="minimax", server_default="minimax")
+    provider_voice_id = Column(String(255), nullable=False)
+    reference_audio_key = Column(String(512), nullable=True)
+    preview_audio_key = Column(String(512), nullable=True)
+    use_count = Column(Integer, nullable=False, default=0, server_default="0")
+    is_favorite = Column(Boolean, nullable=False, default=False, server_default="false")
+    meta = Column(JSONB, nullable=False, default=dict, server_default="{}")
+    created_at = Column(DateTime(timezone=True), default=now_utc, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc, nullable=False)
+
+    __table_args__ = (
+        Index("ix_voices_scope_status", "scope", "status"),
+        Index("ix_voices_owner_status", "owner_id", "status"),
+    )
+
+
 class Music(Base):
     """Background music piece (DB-backed; audio bytes stay in object storage).
 
-    A dedicated table — not the ``Asset`` table — because music library items are
-    global/shared resources: they don't belong to a single project or persona
-    (``Asset`` enforces ``project_id IS NOT NULL OR persona_id IS NOT NULL``).
-
-    Binding:
-    - Platform/default pieces: ``generated_by_user_id = NULL``, ``is_public = True``.
-    - Legacy user-generated pieces (MiniMax): ``generated_by_user_id = <user_id>``,
-      ``is_public = True`` (enter the shared library).
-    - Programmatic scores prepared for a user's work: ``generated_by_user_id = <user_id>``,
-      ``is_public = False``.
-    - Future user uploads (Phase 3): ``generated_by_user_id = <user_id>``,
-      ``is_public = False`` until reviewed.
-
     ``file_path`` is an object storage key (e.g. ``"music/{music_id}.mp3"``).
-    Audio bytes never live in the DB.
-
-    ``mood`` is a unique natural key (``calm`` / ``uplifting`` / ``corporate``)
-    kept for legacy compatibility — new code references pieces by ``id``.
+    Audio bytes never live in the DB. Multiple tracks may share the same ``mood``;
+    code references pieces by ``id``.
     """
 
     __tablename__ = "music"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    mood = Column(String(50), nullable=False, unique=True)
+    mood = Column(String(50), nullable=False, index=True)
     title = Column(String(255), nullable=False)
     ext = Column(String(8), nullable=False)
     file_path = Column(String(512), nullable=False)
@@ -702,9 +726,14 @@ class Music(Base):
     attribution = Column(Text, nullable=True)
     is_public = Column(Boolean, default=True, nullable=False)
     generated_by_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
-    # ADR-121 B3: beat grid for film-cut snapping — {"bpm": …, "beats": [s…]},
-    # computed once at seed/reconcile (tools/music/beats.py); NULL = never
-    # analyzed → the spec builder skips the beat snap honestly.
+    scope = Column(String(24), nullable=False, default="platform", server_default="platform")
+    status = Column(String(24), nullable=False, default="curated", server_default="curated")
+    tags = Column(JSONB, nullable=False, default=list, server_default="[]")
+    compatible_styles = Column(JSONB, nullable=False, default=list, server_default="[]")
+    instrumental = Column(Boolean, nullable=False, default=True, server_default="true")
+    lufs = Column(Float, nullable=True)
+    use_count = Column(Integer, nullable=False, default=0, server_default="0")
+    is_favorite = Column(Boolean, nullable=False, default=False, server_default="false")
     meta = Column(JSONB, nullable=True)
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
@@ -755,9 +784,8 @@ class VideoNarration(Base):
 class NarrationAlignment(Base):
     """One deterministic alignment of an immutable audio snapshot and exact script.
 
-    READY rows are immutable facts referenced by CompositionVersions. Only the
-    PENDING preparation state enters the worker; semantic annotation is a
-    separate ALIGNED → READY write through the Chat tool.
+    The worker freezes the word axis as READY when all sentences align.
+    ALIGNED payloads retain sentence-level review flags.
     """
 
     __tablename__ = "narration_alignments"

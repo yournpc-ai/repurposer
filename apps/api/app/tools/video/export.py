@@ -145,7 +145,6 @@ async def fixed_export_spec(db, project, composition, version):
                         "kind": "speech",
                         "tool": "bind_clip_source" if snapshot else "generate_voice",
                         "binding_tool": "bind_clip_source",
-                        "alignment_tool": "annotate_narration",
                         "cache_available": bool(original),
                         "source_id": str(snapshot) if snapshot else None,
                         "text": obj.text,

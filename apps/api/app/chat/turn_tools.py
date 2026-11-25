@@ -10,8 +10,6 @@ from app.chat.editor import EDITOR_TOOLS
 from app.chat.perception import perception_chat_tools
 from app.models.schemas import (
     AnalyzeBrandArgs,
-    AnnotateNarrationArgs,
-    GetNarrationAlignmentArgs,
     ImportSfxArgs,
     PlanAnswerArgs,
     PlanAskArgs,
@@ -20,8 +18,10 @@ from app.models.schemas import (
     SearchSfxArgs,
     SelectMusicArgs,
     SelectVideoPresetArgs,
+    SelectVoiceArgs,
     ShowMusicCandidatesArgs,
     ShowVideoPresetsArgs,
+    ShowVoiceCandidatesArgs,
 )
 
 def video_rejection_stop(current: ToolRejected, previous: tuple[ToolRejected, ...]) -> bool:
@@ -127,7 +127,7 @@ _SELECT_MUSIC_TOOL = ChatTool(
     terminal=False,
     description=(
         "选择用户从先前已结算的 Music 候选卡按序号点名的曲目。只传 candidate_set_id 和从零起的 member_index。服务端解析本地曲库条目，返回 music_id，不下载、不修改版本。"
-        "将该 ID 传给 prepare_video_materials 的 material_music_ids，再把返回的固定音频快照用 insert_audio 放入当前作品。修改已保存版本使用当前编辑工具。"
+        "将该 ID 传给 create_video 的 music_id 或 prepare_video_materials 的 material_music_ids，再把返回的固定音频快照用 insert_audio 放入当前作品。修改已保存版本使用当前编辑工具。"
     ),
     params_model=SelectMusicArgs,
     presentation=ToolPresentation(
@@ -135,37 +135,37 @@ _SELECT_MUSIC_TOOL = ChatTool(
         done_key="chat.activity.musicSelectionDone", receipt_kind="music_selection",
     ),
 )
+_SHOW_VOICE_CANDIDATES_TOOL = ChatTool(
+    name="show_voice_candidates",
+    terminal=False,
+    description=(
+        "按语言、风格、语气或关键词从永久音色库展示最多五个可试听的真实音色候选（voice_set）。候选在本轮结束时保存，不写素材、版本或 Run。"
+        "展示后用户可在卡片中直接试听并按序号选择；音色元数据不能作为主观试听依据。"
+    ),
+    params_model=ShowVoiceCandidatesArgs,
+    presentation=ToolPresentation(
+        kind="read", active_key="chat.activity.voiceSearch",
+        done_key="chat.activity.voiceSearchDone", receipt_kind="voice_search",
+    ),
+)
+_SELECT_VOICE_TOOL = ChatTool(
+    name="select_voice",
+    terminal=False,
+    description=(
+        "选择用户从先前已结算的音色候选卡（voice_set）按序号点名的永久音色。只传 candidate_set_id 和从零起的 member_index。"
+        "服务端校验当前所有者可见性并返回权威 voice_id 与音色元数据，可直接传给 create_video(voice_id=...) 或 generate_voice。"
+    ),
+    params_model=SelectVoiceArgs,
+    presentation=ToolPresentation(
+        kind="read", active_key="chat.activity.voiceSelection",
+        done_key="chat.activity.voiceSelectionDone", receipt_kind="voice_selection",
+    ),
+)
 _ALIGN_RECORDING_TOOL = ChatTool(
     name="align_recording", description="Align the exact transcript with an explicitly referenced recording.",
     params_model=AlignRecordingArgs,
     terminal=False,
     presentation=ToolPresentation("read", "chat.activity.narrationRead", "chat.activity.narrationReadDone"),
-)
-
-
-_GET_NARRATION_ALIGNMENT_TOOL = ChatTool(
-    name="get_narration_alignment",
-    terminal=False,
-    description=(
-        "读取归属当前用户的 NarrationAlignment 的实际状态及完整数据，包括句词范围、整数刻度、插值、审阅状态和语义。不要估算缺失时间。"
-    ),
-    params_model=GetNarrationAlignmentArgs,
-    presentation=ToolPresentation(
-        kind="read", active_key="chat.activity.narrationRead",
-        done_key="chat.activity.narrationReadDone",
-    ),
-)
-_ANNOTATE_NARRATION_TOOL = ChatTool(
-    name="annotate_narration",
-    terminal=False,
-    description=(
-        "为 ALIGNED 旁白逐句标注 role、weight、entities、needs 和 emphasis_word_ids，词 ID 取自本句实际单词。原样带回本次读取的 expected_timing_digest。文本和刻度不可变。全部句子对齐并标注后才能达到 READY。"
-    ),
-    params_model=AnnotateNarrationArgs,
-    presentation=ToolPresentation(
-        kind="read", active_key="chat.activity.narrationAnnotate",
-        done_key="chat.activity.narrationAnnotateDone",
-    ),
 )
 
 
@@ -321,9 +321,9 @@ def _video_project_tools() -> list[ChatTool]:
         _IMPORT_SFX_TOOL,
         _SHOW_MUSIC_CANDIDATES_TOOL,
         _SELECT_MUSIC_TOOL,
+        _SHOW_VOICE_CANDIDATES_TOOL,
+        _SELECT_VOICE_TOOL,
         _ALIGN_RECORDING_TOOL,
-        _GET_NARRATION_ALIGNMENT_TOOL,
-        _ANNOTATE_NARRATION_TOOL,
         *perception_chat_tools("get_video_version"),
     ]
 
@@ -410,7 +410,7 @@ PLAN_READ_TOOLS = [
     UPDATE_FOCUS_TOOL,
     UPDATE_STEPS_TOOL,
     *perception_chat_tools(
-        "get_understanding", "get_asset", "search_music", "search_transcript",
+        "get_understanding", "get_asset", "search_music", "search_voices", "search_transcript",
         "get_segment", "get_web_page", "search_web", "list_project_media",
     ),
     *_video_project_tools(),

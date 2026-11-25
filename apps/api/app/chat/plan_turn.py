@@ -42,7 +42,6 @@ from app.chat.service import (
     resolve_suggestion_note,
 )
 from app.models.schemas import (
-    AnnotateNarrationArgs,
     AnswerPayload,
     AssetStatus,
     AssetType,
@@ -51,7 +50,6 @@ from app.models.schemas import (
     BriefSlotSource,
     ChatRequest,
     CreativeState,
-    GetNarrationAlignmentArgs,
     ImportSfxArgs,
     MaterialUnderstanding,
     ProjectBrief,
@@ -64,8 +62,10 @@ from app.models.schemas import (
     SearchSfxArgs,
     SelectMusicArgs,
     SelectVideoPresetArgs,
+    SelectVoiceArgs,
     ShowMusicCandidatesArgs,
     ShowVideoPresetsArgs,
+    ShowVoiceCandidatesArgs,
     SkillReference,
     missing_brief_question_items,
     question_group_digest,
@@ -678,20 +678,24 @@ class PlanTurn:
             return await select_music_seat(
                 project=self.project, args=params, on_candidates=self._emit_candidates
             )
+        if name == "show_voice_candidates":
+            assert isinstance(params, ShowVoiceCandidatesArgs)
+            from app.chat.video_turn_seats import show_voice_candidates_seat
+            return await show_voice_candidates_seat(
+                project=self.project, args=params, on_candidates=self._emit_candidates
+            )
+        if name == "select_voice":
+            assert isinstance(params, SelectVoiceArgs)
+            from app.chat.video_turn_seats import select_voice_seat
+            return await select_voice_seat(
+                project=self.project, args=params, on_candidates=self._emit_candidates
+            )
         if name == "align_recording":
             assert isinstance(params, AlignRecordingArgs)
             from app.chat.video_turn_seats import align_recording_seat
             return await align_recording_seat(
                 project=self.project, args=params, mentions=self.request.mentions
             )
-        if name == "get_narration_alignment":
-            assert isinstance(params, GetNarrationAlignmentArgs)
-            from app.chat.video_turn_seats import get_narration_alignment_seat
-            return await get_narration_alignment_seat(project=self.project, args=params)
-        if name == "annotate_narration":
-            assert isinstance(params, AnnotateNarrationArgs)
-            from app.chat.video_turn_seats import annotate_narration_seat
-            return await annotate_narration_seat(project=self.project, args=params)
         if name == "ask_user":
             assert isinstance(params, PlanAskArgs)
             return await self._ask_user(params, prose)
@@ -800,7 +804,7 @@ class PlanTurn:
 
         ref = (
             f"direct:{self.turn_id or self.conversation_id}:"
-            f"{payload.get('candidate_set_id')}:{payload.get('event')}:{payload.get('member_index')}"
+            f"{payload.get('candidate_set_id')}:{payload.get('kind') or payload.get('event')}:{payload.get('member_index')}"
         )
         async with AsyncSessionLocal() as db:
             await record_candidates_log(

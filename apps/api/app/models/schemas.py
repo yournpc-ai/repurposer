@@ -1286,16 +1286,51 @@ class ShowMusicCandidatesArgs(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     query: str | None = Field(default=None, max_length=200)
+    style_preset: str | None = Field(default=None, max_length=64)
+    mood: str | None = Field(default=None, max_length=64)
+    tags: list[str] | None = Field(default=None, max_length=12)
     pending_disposition: Literal["answer", "skip", "none"] = "none"
 
     @model_validator(mode="before")
     @classmethod
     def _read_tolerance(cls, data: Any) -> Any:
-        return tolerate_null_keys(data, "query", "pending_disposition")
+        return tolerate_null_keys(data, "query", "style_preset", "mood", "tags", "pending_disposition")
 
 
 class SelectMusicArgs(BaseModel):
     """用服务端标识选择之前已保存的一个 Music 候选。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    candidate_set_id: UUID
+    member_index: int = Field(ge=0)
+    pending_disposition: Literal["answer", "skip", "none"] = "none"
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_tolerance(cls, data: Any) -> Any:
+        return tolerate_null_keys(data, "pending_disposition")
+
+
+class ShowVoiceCandidatesArgs(BaseModel):
+    """展示永久音色库的可试听候选，不创建 Asset 或版本。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    language: str | None = Field(default=None, max_length=16)
+    style_preset: str | None = Field(default=None, max_length=64)
+    tone: str | None = Field(default=None, max_length=64)
+    query: str | None = Field(default=None, max_length=200)
+    pending_disposition: Literal["answer", "skip", "none"] = "none"
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_tolerance(cls, data: Any) -> Any:
+        return tolerate_null_keys(data, "language", "style_preset", "tone", "query", "pending_disposition")
+
+
+class SelectVoiceArgs(BaseModel):
+    """用服务端标识选择之前已保存的一个永久音色候选。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -1314,56 +1349,6 @@ class AlignRecordingArgs(BaseModel):
 
     text: str = Field(min_length=1, max_length=9000)
     audio_asset_id: UUID
-
-
-class GetNarrationAlignmentArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    alignment_id: UUID
-    pending_disposition: Literal["answer", "skip", "none"] = "none"
-
-    @model_validator(mode="before")
-    @classmethod
-    def _read_tolerance(cls, data: Any) -> Any:
-        return tolerate_null_keys(data, "pending_disposition")
-
-
-class NarrationSentenceSemanticsArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    sentence_id: str = Field(min_length=1, max_length=64)
-    role: Literal["definition", "process", "comparison", "evidence", "example", "summary", "transition"]
-    weight: Literal["main", "sub"]
-    entities: list[str] = Field(default=[], max_length=12)
-    needs: list[Literal["native_text", "diagram", "real_media", "data", "generator"]] = Field(
-        default=[], max_length=5,
-        description="媒体或能力字符串构成的 JSON 数组，如 [\"native_text\"]。",
-    )
-
-    @field_validator("needs", mode="before")
-    @classmethod
-    def _needs_list(cls, value):
-        from app.editing.schemas import _list_wire
-
-        return _list_wire(value)
-
-    emphasis_word_ids: list[str] = Field(default=[], max_length=24)
-
-
-class AnnotateNarrationArgs(BaseModel):
-    """只补全逐句语义。不提供用于修改文本或时间刻度的工具字段。"""
-
-    model_config = ConfigDict(extra="forbid")
-
-    alignment_id: UUID
-    expected_timing_digest: str = Field(min_length=64, max_length=64)
-    sentences: list[NarrationSentenceSemanticsArgs] = Field(min_length=1)
-    pending_disposition: Literal["answer", "skip", "none"] = "none"
-
-    @model_validator(mode="before")
-    @classmethod
-    def _read_tolerance(cls, data: Any) -> Any:
-        return tolerate_null_keys(data, "pending_disposition")
 
 
 class GetVideoVersionParams(BaseModel):
@@ -2684,6 +2669,14 @@ class MusicResponse(BaseModel):
     source_url: str | None = None
     attribution: str | None = None
     is_public: bool
+    scope: str = "platform"
+    status: str = "curated"
+    tags: list[str] = Field(default_factory=list)
+    compatible_styles: list[str] = Field(default_factory=list)
+    instrumental: bool = True
+    lufs: float | None = None
+    use_count: int = 0
+    is_favorite: bool = False
     created_at: datetime
 
 
@@ -2696,6 +2689,8 @@ class MusicGenerateRequest(BaseModel):
     mood: str | None = None
     title: str | None = None
     is_instrumental: bool = True
+    tags: list[str] = Field(default_factory=list)
+    compatible_styles: list[str] = Field(default_factory=list)
 
 
 class MusicMetadataUpdate(BaseModel):
@@ -2708,6 +2703,49 @@ class MusicMetadataUpdate(BaseModel):
     source_url: str | None = None
     attribution: str | None = None
     is_public: bool | None = None
+
+
+class VoiceResponse(BaseModel):
+    """A permanent voiceprint library entry (metadata + preview audio URL)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    owner_id: UUID | None = None
+    scope: str
+    status: str
+    source_kind: str
+    name: str
+    description: str | None = None
+    design_prompt: str | None = None
+    languages: list[str] = Field(default_factory=list)
+    gender: str | None = None
+    age_band: str | None = None
+    tone_tags: list[str] = Field(default_factory=list)
+    compatible_styles: list[str] = Field(default_factory=list)
+    provider: str
+    provider_voice_id: str
+    preview_url: str | None = None
+    use_count: int = 0
+    is_favorite: bool = False
+    created_at: datetime
+    updated_at: datetime
+
+
+class VoiceDesignRequest(BaseModel):
+    """Request body for designing and persisting a new custom voiceprint."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    name: str = Field(min_length=1, max_length=160)
+    prompt: str = Field(min_length=4, max_length=2000)
+    preview_text: str = Field(min_length=4, max_length=500)
+    languages: list[str] = Field(default_factory=lambda: ["en"], min_length=1, max_length=8)
+    tone_tags: list[str] = Field(default_factory=list, max_length=12)
+    compatible_styles: list[str] = Field(default_factory=list, max_length=8)
+    gender: str | None = Field(default=None, max_length=24)
+    age_band: str | None = Field(default=None, max_length=32)
+    description: str | None = Field(default=None, max_length=500)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

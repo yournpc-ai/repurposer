@@ -21,7 +21,8 @@ from app.editing.schemas import (
     NarrationAnchor,
     TextPartTarget,
 )
-from app.editing.timing import source_ticks_to_output_ticks
+from app.editing.caption_timing import TimedWord
+from app.editing.timing import SOURCE_TIMEBASE, source_ticks_to_output_ticks
 
 NARRATION_ALGORITHM = "faster-whisper-script-v1"
 NARRATION_NORMALIZATION = "nfkc-casefold-script-tokens-v1"
@@ -99,6 +100,19 @@ class NarrationSentence(BaseModel):
         ):
             raise ValueError(f"sentence {self.sentence_id} emphasis references an unknown word")
         return self
+
+
+def narration_words(sentence: NarrationSentence) -> list[TimedWord]:
+    """Attach the script's inter-word punctuation and spacing to its measured tokens."""
+    words = []
+    for i, word in enumerate(sentence.words):
+        start = word.text_start if i else sentence.text_start
+        end = sentence.words[i + 1].text_start if i + 1 < len(sentence.words) else sentence.text_end
+        words.append(TimedWord(
+            text=sentence.text[start - sentence.text_start:end - sentence.text_start],
+            start_s=word.start_tick / SOURCE_TIMEBASE, end_s=word.end_tick / SOURCE_TIMEBASE,
+        ))
+    return words
 
 
 class NarrationPayload(BaseModel):
