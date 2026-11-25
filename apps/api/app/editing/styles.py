@@ -37,6 +37,9 @@ BackdropStyle = Literal[
     "architectural_grid",
     "editorial_paper",
     "kinetic_diagonal",
+    "studio_spotlight",
+    "warm_obsidian",
+    "editorial_studio",
     "clean",
 ]
 
@@ -72,6 +75,8 @@ INHERITABLE_BLOCK_STYLE_KEYS: dict[str, tuple[str, ...]] = {
     "chat_demo": ("theme", "accent_color", "backdrop_style"),
     "kinetic_beat": ("theme", "backdrop_style", "accent_color", "show_backdrop"),
     "ui_montage": ("theme", "backdrop_style", "accent_color", "show_backdrop"),
+    "code_terminal": ("theme", "accent_color", "backdrop_style"),
+    "logo_wall": ("theme", "accent_color", "backdrop_style"),
     "device_mockup": ("theme", "accent_color", "backdrop_style"),
     "flow_diagram": ("theme", "accent_color", "backdrop_style"),
     "split_compare": ("theme", "accent_color", "backdrop_style"),

@@ -785,7 +785,7 @@ def test_kinetic_launch_method_and_short_beat_capacity():
 
     pack = _parse_skill_md(REPO_ROOT / "apps/api/app/skills/kinetic-launch/SKILL.md")
     assert pack.name == "kinetic-launch" and pack.metadata["version"] == "1.0.0"
-    assert len(MOTION_PREVIEW_CATALOG) == 8
+    assert len(MOTION_PREVIEW_CATALOG) == 11
     acts = []
     for key in MOTION_PREVIEW_CATALOG:
         spec = build_motion_preview_spec(key)
@@ -796,6 +796,8 @@ def test_kinetic_launch_method_and_short_beat_capacity():
         obj = spec["tracks"][0]["clips"][0]["object"]
         assert obj["block_id"] == block
         assert all(r["url"].startswith("data:image/png;base64,") for r in obj["resources"])
+        if block not in {"kinetic_beat", "ui_montage"}:
+            continue
         acts.append(BlueprintAct(act_id=mode, block_id=block, role="beat",
                                  target_duration_s=0.25, min_duration_s=0.2,
                                  style_defaults={("mode" if block == "kinetic_beat" else "layout_mode"): mode},

@@ -21,7 +21,7 @@ from PIL import Image
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.editing.fonts import FONT_FILES, font_storage_key
+from app.editing.fonts import DISPLAY_FONTS, FONT_FILES, font_storage_key
 from app.editing.schemas import captured_element_box
 from app.editing.sources import register_snapshot
 from app.editing.timing import SOURCE_TIMEBASE
@@ -859,7 +859,8 @@ async def ensure_font_resources() -> dict[str, int]:
     left untouched; the renderer still re-hashes them at execution time.
     """
     reused_count = 0
-    for item in FONT_FILES:
+    files = (*FONT_FILES, *DISPLAY_FONTS.values())
+    for item in files:
         data = (_FONT_ROOT / str(item["filename"])).read_bytes()
         digest = hashlib.sha256(data).hexdigest()
         if digest != item["digest"]:
@@ -868,5 +869,5 @@ async def ensure_font_resources() -> dict[str, int]:
         if await storage.exists(key):
             reused_count += 1
         else:
-            await storage.save(key, data, content_type="font/otf")
-    return {"item_count": len(FONT_FILES), "reused_count": reused_count}
+            await storage.save(key, data, content_type="font/ttf" if item["format"] == "truetype" else "font/otf")
+    return {"item_count": len(files), "reused_count": reused_count}

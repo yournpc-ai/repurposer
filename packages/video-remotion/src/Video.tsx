@@ -313,6 +313,18 @@ const TextLine: React.FC<{
     ...layoutOverrides,
     ...secondaryOverrides,
   };
+  const finish = object.style.finish;
+  if (finish === "chrome" || finish === "split_ink") {
+    mergedLineStyle.backgroundImage = finish === "chrome"
+      ? "linear-gradient(#fff 8%,#dce6ed 44%,#80909d 50%,#e9f3fb 80%)"
+      : "linear-gradient(100deg,#fff2dc 53%,#ff9e87 53%)";
+    mergedLineStyle.backgroundClip = "text";
+    mergedLineStyle.WebkitTextFillColor = "transparent";
+  } else if (finish === "outline") {
+    mergedLineStyle.WebkitTextFillColor = "transparent";
+  } else if (finish === "neon") {
+    mergedLineStyle.textShadow = `0 0 ${8 + 4*Math.cos(frame*.13)}px #13c9c0`;
+  }
   if (!granular) {
     return <div style={mergedLineStyle}>{line.text || "\u200b"}</div>;
   }
@@ -381,7 +393,7 @@ const TextObjectView: React.FC<{
   const borderCss =
     border && border.width > 0 ? `${border.width}px solid ${border.color}` : undefined;
   const surfaceStyle: React.CSSProperties = {
-    background: bgColor ?? "transparent",
+    background: object.style.finish === "gradient_pill" ? "linear-gradient(110deg,#e2e9fd,#ebdaf5 60%,#f8e7ef)" : bgColor ?? "transparent",
     padding: paddingCss,
     borderRadius: radiusCss,
     border: borderCss,

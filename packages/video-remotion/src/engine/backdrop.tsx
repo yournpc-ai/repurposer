@@ -58,10 +58,18 @@ export function StudioBackdrop({
     : dark
       ? "rgba(226,238,246,.06)"
       : "rgba(29,42,54,.07)";
+  const grainId = React.useId();
+  const studioLights = {
+    studio_spotlight: "radial-gradient(ellipse at 65% 14%, #535960 0%, #282e34 29%, transparent 67%), linear-gradient(155deg,#1c2025,#080b0f 80%)",
+    warm_obsidian: "radial-gradient(ellipse at 84% 32%, #8c68534d, transparent 37%), radial-gradient(ellipse at 69% 101%, #684d3c 0%, #302928 33%, #121214 77%)",
+    editorial_studio: "radial-gradient(ellipse at 54% 72%, #fffefa 10%, #ebe8e1 62%, #d5d1c9)",
+  };
+  const lights = style in studioLights ? studioLights[style as keyof typeof studioLights] : undefined;
   const cell = 54 * scaleUnit;
 
   return (
-    <div aria-hidden style={{ position: "absolute", inset: 0, overflow: "hidden", background: base }}>
+    <div aria-hidden style={{ position: "absolute", inset: 0, overflow: "hidden", background: lights ?? base }}>
+      {lights && <svg width="100%" height="100%" style={{position:"absolute",inset:0,opacity:.048}}><filter id={grainId}><feTurbulence type="fractalNoise" baseFrequency=".81" numOctaves="3" seed="37" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter={`url(#${grainId})`}/></svg>}
       {style === "ambient_mesh" && (
         <div
           style={{
@@ -213,7 +221,7 @@ export function StudioBackdrop({
           style={{
             position: "absolute",
             inset: 0,
-            background: "radial-gradient(ellipse at center, transparent 44%, rgba(12,17,20,.055) 100%)",
+            background: lights ? "radial-gradient(ellipse at 54% 45%, transparent 35%, #15141929 95%)" : "radial-gradient(ellipse at center, transparent 44%, rgba(12,17,20,.055) 100%)",
           }}
         />
       )}

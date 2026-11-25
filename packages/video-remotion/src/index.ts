@@ -1,3 +1,5 @@
+export { DeviceFrame } from "./engine/DeviceFrame";
+export { clickCameraScale } from "./engine/cursor";
 export { Video } from "./Video";
 export {
   VIDEO_CAPABILITIES,

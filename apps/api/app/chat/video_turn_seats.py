@@ -625,6 +625,21 @@ async def capture_web_seat(*, project: Project, args: Any) -> ToolObservation:
 
 
 
+async def catalog_seat(project, name, args):
+    from app.catalog.search import TOOLS, DetailArgs, catalog_details, search_catalog
+    from app.catalog.sync import ensure_builtin_catalog
+    from app.models.database import AsyncSessionLocal
+
+    kind, _ = TOOLS[name]
+    async with AsyncSessionLocal() as db:
+        await ensure_builtin_catalog(db)
+        if isinstance(args, DetailArgs):
+            result = await catalog_details(db, project.user_id, kind, args.ids)
+        else:
+            result = await search_catalog(db, project.user_id, kind, args)
+    return ToolObservation(json.dumps(result, ensure_ascii=False, separators=(",", ":")))
+
+
 async def show_video_presets_seat(
     *,
     project: Project,

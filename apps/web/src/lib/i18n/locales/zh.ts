@@ -673,6 +673,9 @@ const zh: Resources = {
     },
   },
   videoPresets: {
+    "code_terminal:typing_cli": { name: "终端键入" },
+    "logo_wall:marquee_strip": { name: "合作方滚动展示" },
+    "device_mockup:split_focus": { name: "分区对焦" },
     "kinetic_beat:impact_cut": { name: "主张重击" },
     "kinetic_beat:typewriter_swap": { name: "打字换词" },
     "kinetic_beat:slot_flip": { name: "词位翻滚" },
@@ -1549,6 +1552,8 @@ const zh: Resources = {
         statement_hook: "主张开场幕",
         kinetic_title: "动态标题幕",
         product_showcase: "产品演示幕",
+        code_terminal: "代码终端",
+        logo_wall: "标志墙",
         device_mockup: "设备展示幕",
         chat_demo: "对话演示幕",
         flow_diagram: "流程图幕",

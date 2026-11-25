@@ -17,6 +17,8 @@ import { ImageAdapter, type Frame } from "./blocks/Stage";
 import { KineticBeatBlock } from "./blocks/KineticBeatBlock";
 import { UiMontageBlock } from "./blocks/UiMontageBlock";
 import { ChatDemoBlock } from "./blocks/ChatDemoBlock";
+import { CodeTerminalBlock } from "./blocks/CodeTerminalBlock";
+import { LogoWallBlock } from "./blocks/LogoWallBlock";
 import { DeviceMockupBlock } from "./blocks/DeviceMockupBlock";
 import { FlowDiagramBlock } from "./blocks/FlowDiagramBlock";
 import { SplitCompareBlock } from "./blocks/SplitCompareBlock";
@@ -1876,6 +1878,8 @@ const narratives = {
   kinetic_beat: narrative(KineticBeatBlock),
   ui_montage: narrative(UiMontageBlock),
   chat_demo: narrative(ChatDemoBlock),
+  code_terminal: narrative(CodeTerminalBlock),
+  logo_wall: narrative(LogoWallBlock),
   device_mockup: narrative(DeviceMockupBlock),
   flow_diagram: narrative(FlowDiagramBlock),
   split_compare: narrative(SplitCompareBlock),

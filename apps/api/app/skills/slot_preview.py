@@ -622,12 +622,40 @@ def _plan_act_slots(
                 "click_at_s": float(act.cursor_click_at_s),
             }
 
+    elif bid in {"code_terminal", "logo_wall"}:
+        terminal = bid == "code_terminal"
+        key = "lines" if terminal else "items"
+        count = sum(s.startswith(f"{key}[") and "." not in s for s in act.required_slots)
+        count = count or max(3, int(defaults.get("highlight_line") or 1))
+        for i in range(act.resource_count or 0):
+            add_image_slot(f"logo_resource[{i}]", "合作方标志", "Partner logo",width=480,height=240,
+                           aspect_ratio="2:1",res_index=i)
+        entries = []
+        for i in range(count):
+            slot = allocator.next(
+                act_index=act_index, act_id=act.act_id, block_id=bid, slot_key=f"{key}[{i}]",
+                kind="text", label_zh="命令行" if terminal else "合作方",
+                label_en="Command line" if terminal else "Partner",
+                example_zh="{code} 示例命令" if terminal else "{code} 合作方",
+                example_en="{code} Example command" if terminal else "{code} Partner",
+            )
+            if terminal:
+                entries.append(slot.example_value)
+            else:
+                item = {"text": slot.example_value}
+                prefix = f"items[{i}].image["
+                link = next((s for s in act.required_slots if s.startswith(prefix)), None)
+                if link:
+                    item["resource_index"] = int(link[len(prefix):-1])
+                entries.append(item)
+        replacement[key] = entries
+
     elif bid == "device_mockup":
         layout = str(defaults.get("layout") or "dual")
-        if layout not in {"dual", "desktop", "mobile"}:
+        if layout not in {"dual", "desktop", "mobile", "split_focus", "hero_bleed"}:
             layout = "dual"
         defaults["layout"] = layout
-        if layout in {"dual", "desktop"}:
+        if layout in {"dual", "desktop", "split_focus", "hero_bleed"}:
             add_image_slot(
                 "image_resource",
                 "桌面端界面图 (16:9)",

@@ -1,9 +1,9 @@
 """Save an editable first version from ordered shots or motion blocks through the Composition store."""
 import re
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 from uuid import UUID, uuid5
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import WithJsonSchema, BaseModel, ConfigDict, Field, model_validator
 from pydantic.json_schema import SkipJsonSchema
 from sqlalchemy import select
 
@@ -142,8 +142,8 @@ class FirstShot(CompositionSceneAuthoring):
 
 class FirstMotionBlock(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    block_id: MotionBlockId = Field(
-        description="Native motion block ID from creative_catalog.motion_blocks (15 blocks).",
+    block_id: Annotated[MotionBlockId, WithJsonSchema({"type": "string"})] = Field(
+        description="Block ID selected with search_blocks.",
     )
     duration_seconds: float = Field(
         gt=0,
@@ -216,10 +216,7 @@ class CreateVideoArgs(BaseModel):
         default_factory=list,
         max_length=48,
         description=(
-            "Ordered native declarative motion-graphics acts (statement_hook, product_showcase, "
-            "device_mockup, chat_demo, flow_diagram, step_timeline, split_compare, bento_features, "
-            "metric_grid, data_chart, quote_proof, kinetic_title, kinetic_beat, ui_montage, closing_cta) built sequentially "
-            "with optional narration, caption_translations, resources, and act transitions."
+            "Ordered motion blocks with props from get_blocks, optional narration, caption translations, pinned resources and transitions."
         ),
     )
     aspect: Literal["16:9", "9:16", "1:1"] = "16:9"
@@ -262,7 +259,7 @@ class CreateVideoArgs(BaseModel):
         allow_inf_nan=False,
         description="Optional BGM gain in dB when music_id is provided (defaults to -22 dB under narration, -14 dB without narration).",
     )
-    caption_preset: TextStylePresetId | None = Field(
+    caption_preset: Annotated[TextStylePresetId, WithJsonSchema({"type": "string"})] | None = Field(
         default=None,
         exclude_if=lambda v: v is None,
         description="Optional caption text style preset override (e.g. 'bilingual_cinema', 'cinema_glass', 'vox_label').",

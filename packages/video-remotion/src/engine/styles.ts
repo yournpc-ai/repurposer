@@ -19,6 +19,9 @@ export type BackdropStyle =
   | "architectural_grid"
   | "editorial_paper"
   | "kinetic_diagonal"
+  | "studio_spotlight"
+  | "warm_obsidian"
+  | "editorial_studio"
   | "clean";
 
 export type CardTreatment =

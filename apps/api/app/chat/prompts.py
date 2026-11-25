@@ -267,11 +267,13 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
             "show_voice_candidates", "select_voice",
         }
         from app.chat.editor_create import media_generation_forbidden, voice_generation_forbidden
-        from app.editing.catalog import catalog_prompt_index
+        from app.editing.catalog import editor_catalog_guidance
 
         context["available_skills"] = facts.get("available_skills", [])
         names.update({"list_skill_shots", "read_skill_reference", "read_skill_demo", "get_skill_preview"})
-        context["creative_catalog"] = catalog_prompt_index()
+        from app.catalog.search import TOOLS as catalog_tools
+        names.update(catalog_tools)
+        context["creative_catalog"] = editor_catalog_guidance()
         if media_generation_forbidden(user_text):
             names.difference_update({"generate_voice", "design_voice", "generate_music", "generate_image", "generate_sfx"})
         elif voice_generation_forbidden(user_text):

@@ -81,6 +81,7 @@ async def search_voices(
     db: AsyncSession,
     *,
     owner_id: UUID | None,
+    pacing: str | None = None,
     language: str | None = None,
     style_preset: str | None = None,
     tone: str | None = None,
@@ -88,72 +89,9 @@ async def search_voices(
     limit: int = 20,
 ) -> list[Voice]:
     """Search permanent voices visible to ``owner_id``, ranked reuse-first."""
-    stmt = select(Voice).where(_visibility_clause(owner_id))
-    rows = list((await db.scalars(stmt)).all())
-
-    lang_norm = (language or "").strip().lower()
-    style_norm = (style_preset or "").strip().lower()
-    tone_norm = (tone or "").strip().lower()
-    query_norm = (query or "").strip().lower()
-    query_terms = [t for t in query_norm.split() if t]
-
-    scored: list[tuple[tuple[int, int, int, int, float], Voice]] = []
-    for row in rows:
-        langs = [str(item).lower() for item in (row.languages or [])]
-        tones = [str(item).lower() for item in (row.tone_tags or [])]
-        styles = [str(item).lower() for item in (row.compatible_styles or [])]
-        haystack = " ".join(
-            [
-                row.name or "",
-                row.description or "",
-                row.design_prompt or "",
-                row.gender or "",
-                row.age_band or "",
-                row.provider_voice_id or "",
-                " ".join(langs),
-                " ".join(tones),
-                " ".join(styles),
-            ]
-        ).lower()
-
-        score = 0
-        if lang_norm:
-            if lang_norm in langs or any(l.startswith(lang_norm) for l in langs):
-                score += 6
-            else:
-                continue
-        if style_norm:
-            if style_norm in styles:
-                score += 5
-            elif style_norm in haystack:
-                score += 2
-            else:
-                continue
-        if tone_norm:
-            if tone_norm in tones or any(tone_norm in t for t in tones):
-                score += 4
-            elif tone_norm in haystack:
-                score += 2
-            else:
-                continue
-        if query_terms:
-            matched_terms = sum(1 for term in query_terms if term in haystack)
-            if matched_terms == 0:
-                continue
-            score += matched_terms * 3
-
-        created_ts = row.created_at.timestamp() if row.created_at else 0.0
-        rank_key = (
-            score,
-            1 if row.is_favorite else 0,
-            1 if row.status == "curated" else 0,
-            int(row.use_count or 0),
-            created_ts,
-        )
-        scored.append((rank_key, row))
-
-    scored.sort(key=lambda item: item[0], reverse=True)
-    return [row for _, row in scored[: max(1, min(limit, 100))]]
+    from app.catalog.audio_search import search_audio
+    return await search_audio(db,Voice,owner_id,query=query,style=style_preset,limit=limit,
+                              language=language,tone=tone,pacing=pacing)
 
 
 def _select_curated_stock_voice(

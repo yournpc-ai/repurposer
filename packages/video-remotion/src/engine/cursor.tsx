@@ -7,19 +7,24 @@ export interface CursorCue {
   start_x?: number | null; start_y?: number | null;
 }
 
+export function clickCameraScale(elapsed: number): number {
+  return elapsed < 0 ? 1 : 1 + .025 * Math.sin(Math.min(1,elapsed/.38)*Math.PI) * Math.exp(-4*elapsed);
+}
+
 export function VirtualCursor({ cue, tSec, scaleUnit, accent }: {
   cue: CursorCue; tSec: number; scaleUnit: number; accent: string;
 }): React.JSX.Element | null {
   const travelSec = Math.min(0.85, cue.click_at_s);
   const start = cue.click_at_s - travelSec;
   if (tSec < start) return null;
-  const t = easeInOutCubic(cueProgress(tSec, start, travelSec));
+  const approach = easeInOutCubic(cueProgress(tSec, start, travelSec));
+  const t = approach + (1 - approach) * cueProgress(approach, .68, .32);
   // A quadratic Bezier with a horizontal departure and vertical arrival.
   const x = lerp(lerp(cue.start_x ?? 0.08, cue.x, t), cue.x, t);
   const y0 = cue.start_y ?? 0.88;
   const y = lerp(y0, lerp(y0, cue.y, t), t);
   const elapsed = tSec - cue.click_at_s;
-  const press = elapsed < 0 ? cueProgress(tSec, cue.click_at_s - 0.1, 0.1) : 1 - easeOutCubic(elapsed / 0.18);
+  const press = elapsed < 0 ? cueProgress(tSec, cue.click_at_s - 0.1, 0.1) : Math.exp(-16 * elapsed) * Math.cos(33 * elapsed);
   return (
     <div style={{ position: "absolute", left: `${100*x}%`, top: `${100*y}%`, width: 0, height: 0, zIndex: 4, pointerEvents: "none" }}>
       {[0, 0.09].map(delay => {

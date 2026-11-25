@@ -75,6 +75,7 @@ export const textTransforms = ["none", "uppercase"] as const;
 
 const textStyleSchema = z
   .object({
+    finish: z.enum(["chrome","outline","gradient_pill","split_ink","neon"]).optional(),
     font_size: z.number().int().positive().max(400),
     color: hexColor,
     background: hexColor.nullable(),
@@ -203,6 +204,34 @@ const motionBlockResourceSchema = z
   })
   .strict();
 
+export const backdropStyles = [
+  "ambient_mesh",
+  "architectural_grid",
+  "editorial_paper",
+  "kinetic_diagonal",
+  "studio_spotlight",
+  "warm_obsidian",
+  "editorial_studio",
+  "clean",
+] as const;
+
+const studioProps = {
+  theme: z.enum(["light","dark"]).nullish(), backdrop_style: z.enum(backdropStyles).nullish(),
+  accent_color: hexColor.nullish(), show_backdrop: z.boolean().optional(),
+};
+const shortLabel = z.string().trim().min(1).max(32);
+const heading = z.string().trim().min(1).max(80).nullish();
+const terminalProps = z.object({
+  ...studioProps, mode:z.enum(["typing_cli","diff_highlight","command_palette"]).optional(),
+  title:heading, lines:z.array(z.string().trim().min(1).max(120)).min(1).max(8),
+  prompt_prefix:shortLabel.optional(), highlight_line:z.number().int().positive().nullish(),
+}).strict().refine(p=>p.highlight_line==null || p.highlight_line <= p.lines.length, "highlight_line exceeds line count");
+const logoProps = z.object({
+  ...studioProps, mode:z.enum(["marquee_strip","grid_stagger","spotlight_lockup"]).optional(),
+  eyebrow:shortLabel.nullish(), headline:heading,
+  items:z.array(z.object({text:shortLabel, resource_index:z.number().int().min(0).max(15).nullish()}).strict()).min(1).max(12),
+}).strict();
+
 const motionBlockObjectSchema = z
   .object({
     kind: z.literal("motion_block"),
@@ -214,6 +243,7 @@ const motionBlockObjectSchema = z
       "metric_grid",
       "closing_cta",
       "chat_demo",
+      "code_terminal", "logo_wall",
       "device_mockup",
       "flow_diagram",
       "split_compare",
@@ -393,8 +423,20 @@ const clipSchema = z
     if (clip.end_frame <= clip.start_frame) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: "end_frame must exceed start_frame" });
     }
+    if (clip.object.kind === "motion_block") {
+      const block = clip.object;
+      if (block.block_id === "code_terminal" && !terminalProps.safeParse(block.props).success) {
+        ctx.addIssue({code:z.ZodIssueCode.custom, message:"Invalid code_terminal props"});
+      }
+      if (block.block_id === "logo_wall") {
+        const result = logoProps.safeParse(block.props);
+        if (!result.success || result.data.items.some(i=>i.resource_index!=null && i.resource_index>=block.resources.length)) {
+          ctx.addIssue({code:z.ZodIssueCode.custom, message:"Invalid logo_wall items or pinned image references"});
+        }
+      }
+    }
     if (clip.object.kind === "motion_block" && clip.object.block_id === "device_mockup" &&
-        (clip.object.resources.length < 1 || clip.object.resources.length > 2)) {
+        ((!clip.object.resources.length && clip.object.props.layout !== "split_focus") || clip.object.resources.length > 2)) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: "device_mockup requires one or two pinned images" });
     }
     if (clip.object.kind === "motion_block" && clip.object.block_id === "ui_montage" && !clip.object.resources.length) {
@@ -448,13 +490,7 @@ export const stylePresetIds = [
   "kinetic_anime",
 ] as const;
 
-export const backdropStyles = [
-  "ambient_mesh",
-  "architectural_grid",
-  "editorial_paper",
-  "kinetic_diagonal",
-  "clean",
-] as const;
+
 
 export const cardTreatments = [
   "glass_soft",

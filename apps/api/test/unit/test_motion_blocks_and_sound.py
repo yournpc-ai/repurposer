@@ -1072,7 +1072,7 @@ def _skill_draft_for_blueprint(name: str, bp: SkillBlueprintV1) -> SkillDraft:
 
 
 @pytest.mark.parity
-def test_compile_all_15_motion_blocks_and_zod_video_spec_parity():
+def test_compile_all_17_motion_blocks_and_zod_video_spec_parity():
     bp = _make_all_13_blocks_blueprint()
     from typing import get_args
     from app.editing.catalog import MotionBlockId
@@ -1080,9 +1080,11 @@ def test_compile_all_15_motion_blocks_and_zod_video_spec_parity():
 
     bp.acts.extend([
         BlueprintAct(act_id="act_14", block_id="kinetic_beat", role="beat", target_duration_s=0.25, min_duration_s=0.2),
+        BlueprintAct(act_id="act_16", block_id="code_terminal", role="console", target_duration_s=2, min_duration_s=1),
+        BlueprintAct(act_id="act_17", block_id="logo_wall", role="partners", target_duration_s=2, min_duration_s=1),
         BlueprintAct(act_id="act_15", block_id="ui_montage", role="screens", target_duration_s=0.35, min_duration_s=0.2),
     ])
-    assert len(set(get_args(MotionBlockId))) == 15
+    assert len(set(get_args(MotionBlockId))) == 17
     assert {a.block_id for a in bp.acts} == set(MOTION_BLOCK_CATALOG) == set(get_args(MotionBlockId)) == set(INHERITABLE_BLOCK_STYLE_KEYS)
 
     # Provide synthetic SFX snapshots for all 4 blueprint SFX cues
@@ -1128,7 +1130,7 @@ def test_compile_all_15_motion_blocks_and_zod_video_spec_parity():
 
             # Verify HUD track has 1 corner TextObject badge per act
             hud_track = next(t for t in spec["tracks"] if t["track_id"] == "trk_slot_hud")
-            assert len(hud_track["clips"]) == 15
+            assert len(hud_track["clips"]) == 17
             for clip in hud_track["clips"]:
                 assert clip["object"]["kind"] == "text"
                 assert clip["object"]["style"]["background_mode"] == "pill"

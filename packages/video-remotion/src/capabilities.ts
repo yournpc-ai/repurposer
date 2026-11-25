@@ -15,6 +15,7 @@ export const VIDEO_CAPABILITIES = {
     "metric_grid",
     "closing_cta",
     "chat_demo",
+    "code_terminal", "logo_wall",
     "device_mockup",
     "flow_diagram",
     "split_compare",

@@ -1,0 +1,104 @@
+[
+  {
+    "file": "switch.wav",
+    "slug": "foley_switch",
+    "name": "Heater switch",
+    "name_zh": "机械开关",
+    "category": "tactile_ui",
+    "subcategory": "mechanical_switch",
+    "moods": [
+      "crisp",
+      "tactile"
+    ],
+    "energy": "subtle",
+    "summary": "A short, dry mechanical toggle with a distinct contact.",
+    "use_for": [
+      "UI toggle or mode change"
+    ],
+    "avoid": [
+      "Repeated typing"
+    ],
+    "sync_cue": "energy_peak",
+    "mix_hint": "Align contact to the pressed state.",
+    "tags": [
+      "mechanical_switch",
+      "recorded"
+    ],
+    "compatible_styles": [
+      "institutional_dark",
+      "swiss_paper"
+    ],
+    "license": "CC0-1.0",
+    "source_provider": "code4fukui",
+    "source_url": "https://github.com/code4fukui/sound-cc0/blob/main/switch1.wav",
+    "attribution": "code4fukui / sound-cc0"
+  },
+  {
+    "file": "metal.wav",
+    "slug": "foley_metal",
+    "name": "Metal rack",
+    "name_zh": "金属架敲击",
+    "category": "foley_organic",
+    "subcategory": "metal_contact",
+    "moods": [
+      "metallic",
+      "industrial"
+    ],
+    "energy": "medium",
+    "summary": "Contact against a metal rack with a resonant tail.",
+    "use_for": [
+      "Hardware reveal"
+    ],
+    "avoid": [
+      "Soft fabric movement"
+    ],
+    "sync_cue": "energy_peak",
+    "mix_hint": "Align the transient and leave room for the ring.",
+    "tags": [
+      "metal_contact",
+      "recorded"
+    ],
+    "compatible_styles": [
+      "institutional_dark",
+      "swiss_paper"
+    ],
+    "license": "CC0-1.0",
+    "source_provider": "code4fukui",
+    "source_url": "https://github.com/code4fukui/sound-cc0/blob/main/metal1.wav",
+    "attribution": "code4fukui / sound-cc0"
+  },
+  {
+    "file": "steel.wav",
+    "slug": "foley_steel",
+    "name": "Steel pan",
+    "name_zh": "钢盘敲击",
+    "category": "foley_organic",
+    "subcategory": "metal_resonance",
+    "moods": [
+      "resonant",
+      "organic"
+    ],
+    "energy": "medium",
+    "summary": "Recorded steel-pan resonance with a defined attack.",
+    "use_for": [
+      "Physical beat accent"
+    ],
+    "avoid": [
+      "Speech punctuation on every word"
+    ],
+    "sync_cue": "energy_peak",
+    "mix_hint": "Align the contact and duck under speech.",
+    "tags": [
+      "metal_resonance",
+      "recorded"
+    ],
+    "compatible_styles": [
+      "institutional_dark",
+      "swiss_paper"
+    ],
+    "license": "CC0-1.0",
+    "source_provider": "code4fukui",
+    "source_url": "https://github.com/code4fukui/sound-cc0/blob/main/steel1.wav",
+    "attribution": "code4fukui / sound-cc0"
+  }
+]

@@ -380,75 +380,16 @@ async def search_music_library(
     mood: str | None = None,
     tags: list[str] | None = None,
     query: str | None = None,
+    genre: str | None = None,
+    energy: str | None = None,
+    bpm: int | None = None,
     instrumental_only: bool = True,
     limit: int = 20,
 ) -> list[Music]:
     """Multi-facet reuse-first search over the permanent music library."""
-    catalog = await list_music(db, user_id=owner_id)
-    style_norm = (style_preset or "").strip().lower()
-    mood_norm = (mood or "").strip().lower()
-    tag_norms = [str(t).strip().lower() for t in (tags or []) if str(t).strip()]
-    query_norm = (query or "").strip().lower()
-    query_terms = [t for t in query_norm.split() if t]
-
-    scored: list[tuple[tuple[int, int, int, int, float], Music]] = []
-    for row in catalog:
-        if instrumental_only and not bool(row.instrumental):
-            continue
-        meta = row.meta if isinstance(row.meta, dict) else {}
-        row_tags = [str(t).lower() for t in (row.tags or [])]
-        row_styles = [str(s).lower() for s in (row.compatible_styles or [])]
-        haystack = " ".join(
-            [
-                row.title or "",
-                row.mood or "",
-                row.prompt or "",
-                str(meta.get("style") or ""),
-                " ".join(row_tags),
-                " ".join(row_styles),
-            ]
-        ).lower()
-
-        score = 0
-        if style_norm:
-            if style_norm in row_styles:
-                score += 6
-            elif style_norm in haystack:
-                score += 2
-            else:
-                continue
-        if mood_norm:
-            if mood_norm == (row.mood or "").lower() or mood_norm in (row.mood or "").lower():
-                score += 5
-            elif mood_norm in haystack:
-                score += 3
-            else:
-                continue
-        if tag_norms:
-            matched_tags = sum(
-                1 for t in tag_norms if t in row_tags or any(t in rt for rt in row_tags) or t in haystack
-            )
-            if matched_tags == 0:
-                continue
-            score += matched_tags * 4
-        if query_terms:
-            matched_terms = sum(1 for term in query_terms if term in haystack)
-            if matched_terms == 0:
-                continue
-            score += matched_terms * 3
-
-        created_ts = row.created_at.timestamp() if row.created_at else 0.0
-        rank_key = (
-            score,
-            1 if row.is_favorite else 0,
-            1 if row.status == "curated" else 0,
-            int(row.use_count or 0),
-            created_ts,
-        )
-        scored.append((rank_key, row))
-
-    scored.sort(key=lambda item: item[0], reverse=True)
-    return [row for _, row in scored[: max(1, min(limit, 100))]]
+    from app.catalog.audio_search import search_audio
+    return await search_audio(db,Music,owner_id,query=query,style=style_preset,limit=limit,
+                              mood=mood,tags=tags,genre=genre,energy=energy,bpm=bpm,instrumental_only=instrumental_only)
 
 
 async def increment_music_use_count(db: AsyncSession, music_id: UUID) -> None:

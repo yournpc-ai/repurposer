@@ -24,7 +24,7 @@ import re
 from typing import TYPE_CHECKING, Annotated, Any, Literal, get_args
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator, model_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, JsonValue, field_validator, model_validator
 
 from app.editing.catalog import MotionBlockId
 from app.editing.fonts import FONT_ID, FONT_SET_DIGEST, LAYOUT_VERSION, SEGMENTATION_VERSION
@@ -185,6 +185,7 @@ class TextStyle(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    finish: Literal["chrome", "outline", "gradient_pill", "split_ink", "neon"] | None = Field(default=None, exclude_if=lambda v: v is None)
     font_size: int = Field(gt=0, le=400, description="字号，单位为画布像素。")
     color: str = _HEX_COLOR
     background: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$")
@@ -920,11 +921,37 @@ class ChatDemoProps(NarrativeStyle):
         return messages
 
 
+class CodeTerminalProps(NarrativeStyle):
+    mode: Literal["typing_cli", "diff_highlight", "command_palette"] = Field(default="typing_cli", validation_alias=AliasChoices("mode", "layout_mode"))
+    title: BlockHeading | None = None
+    lines: list[BlockDetail] = Field(min_length=1, max_length=8)
+    prompt_prefix: ShortLabel = "$"
+    highlight_line: int | None = Field(default=None, ge=1)
+
+    @model_validator(mode="after")
+    def valid_highlight(self):
+        if self.highlight_line and self.highlight_line > len(self.lines):
+            raise ValueError("highlight_line must identify a line")
+        return self
+
+
+class LogoItem(NarrativeFields):
+    text: ShortLabel
+    resource_index: int | None = Field(default=None, ge=0, le=15)
+
+
+class LogoWallProps(NarrativeStyle):
+    mode: Literal["marquee_strip", "grid_stagger", "spotlight_lockup"] = Field(default="marquee_strip", validation_alias=AliasChoices("mode", "layout_mode"))
+    eyebrow: ShortLabel | None = None
+    headline: BlockHeading | None = None
+    items: list[LogoItem] = Field(min_length=1, max_length=12)
+
+
 class DeviceMockupProps(NarrativeStyle):
     eyebrow: ShortLabel | None = None
     headline: BlockHeading | None = None
     caption: BlockDetail | None = None
-    layout: Literal["dual", "desktop", "mobile"] = "dual"
+    layout: Literal["dual", "desktop", "mobile", "split_focus", "hero_bleed"] = Field(default="dual", validation_alias=AliasChoices("layout", "layout_mode"))
     reveal_at_s: CueSecond | None = None
 
 
@@ -1089,6 +1116,8 @@ MOTION_BLOCK_PROP_MODELS: dict[str, type[BaseModel]] = {
     "metric_grid": MetricGridProps,
     "closing_cta": ClosingCtaProps,
     "chat_demo": ChatDemoProps,
+    "code_terminal": CodeTerminalProps,
+    "logo_wall": LogoWallProps,
     "device_mockup": DeviceMockupProps,
     "flow_diagram": FlowDiagramProps,
     "split_compare": SplitCompareProps,
@@ -1133,7 +1162,12 @@ class MotionBlockObject(BaseModel):
         paths = [r.path for r in self.resources]
         if len(paths) != len(set(paths)):
             raise ValueError("motion_block resource paths must be unique")
-        if self.block_id == "device_mockup" and not 1 <= len(self.resources) <= 2:
+        if isinstance(validated, LogoWallProps) and any(
+            item.resource_index is not None and item.resource_index >= len(self.resources)
+            for item in validated.items
+        ):
+            raise ValueError("logo item must reference a pinned image")
+        if self.block_id == "device_mockup" and not int(validated.layout != "split_focus") <= len(self.resources) <= 2:
             raise ValueError("device_mockup requires one or two pinned image resources")
         if self.block_id == "chat_demo" and len(self.resources) > 1:
             raise ValueError("chat_demo accepts one result preview image")

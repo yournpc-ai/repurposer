@@ -6,7 +6,7 @@ from fractions import Fraction
 from typing import Annotated, Any, Literal
 from uuid import UUID, uuid5
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import WithJsonSchema, BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import func, select
 
 from app.agents.tool_loop import ChatTool, ToolObservation, ToolPresentation
@@ -55,7 +55,15 @@ class ExportVideoArgs(BaseModel):
 
 class InsertAudioArgs(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    source_id: UUID = Field(description="Owned fixed audio snapshot from the project or a generation result.")
+    source_id: UUID | None = Field(default=None, description="Owned fixed audio snapshot.")
+    sfx_slug: str | None = Field(default=None, min_length=1, max_length=120, description="Permanent sample slug from get_sfx.")
+
+    @model_validator(mode="after")
+    def one_audio_source(self):
+        if (self.source_id is None) == (self.sfx_slug is None):
+            raise ValueError("Specify exactly one source_id or sfx_slug")
+        return self
+
     start_seconds: float = Field(ge=0, allow_inf_nan=False, description="Start on the composition timeline.")
     duration_seconds: float | None = Field(default=None, gt=0, allow_inf_nan=False,
                                            description="Use the full recording when omitted. Music loops to cover a longer requested duration.")
@@ -132,11 +140,11 @@ class GenerateSfxArgs(BaseModel):
     model_config = ConfigDict(extra="forbid")
     recipe_id: SoundRecipeId | None = Field(
         default=None,
-        description="Choose one of the 22 recipe IDs in creative_catalog.sound_recipes. Omit when revising base_clip_id with the same recipe.",
+        description="Recipe ID from get_sfx. Omit to inherit the recipe from base_clip_id.",
     )
     params: dict[str, float | int] | None = Field(
         default=None,
-        description="Pass only parameters declared for the target recipe in creative_catalog.sound_recipes. The 16 new recipes support length, pitch, and space. The original six also support tone and punch. Overrides are merged over defaults or base_clip_id params.",
+        description="Overrides declared by get_sfx, merged over recipe defaults or base_clip_id.",
     )
     base_clip_id: str | None = Field(
         default=None, min_length=1, max_length=64,
@@ -220,8 +228,8 @@ class SetTransitionArgs(BaseModel):
 
 class InsertMotionBlockArgs(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    block_id: MotionBlockId = Field(
-        description="Native motion block ID from creative_catalog.motion_blocks (15 blocks: statement_hook, product_showcase, device_mockup, chat_demo, flow_diagram, step_timeline, split_compare, bento_features, metric_grid, data_chart, quote_proof, kinetic_title, kinetic_beat, ui_montage, closing_cta).",
+    block_id: Annotated[MotionBlockId, WithJsonSchema({"type": "string"})] = Field(
+        description="Block ID selected with search_blocks and get_blocks.",
     )
     start_seconds: float = Field(ge=0, allow_inf_nan=False, description="Inclusive start time on timeline.")
     end_seconds: float = Field(gt=0, allow_inf_nan=False, description="Exclusive end time on timeline.")
@@ -318,9 +326,9 @@ class InsertTextArgs(BaseModel):
         default=None,
         description="Safe-area placement ('bottom', 'top', 'center', 'bottom_left', 'top_left', 'bottom_right', 'top_right'). Defaults to 'bottom' for captions, 'bottom_left' for lower_third_tag, 'center' for titles.",
     )
-    preset_id: TextStylePresetId | None = Field(
+    preset_id: Annotated[TextStylePresetId, WithJsonSchema({"type": "string"})] | None = Field(
         default=None,
-        description="Optional industry text/caption preset from creative_catalog.text_style_presets (clean_broadcast, cinema_glass, minimal_light, vox_label, vox_highlighter, creator_pop, kinetic_impact, editorial_callout, lower_third_tag, karaoke_focus, bilingual_cinema).",
+        description="Text style ID selected with search_text_presets.",
     )
     font_size: int | None = Field(default=None, gt=0, le=400, description="Optional font size in canvas pixels.")
     color: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$", description="Optional text fill hex color override.")
@@ -375,9 +383,9 @@ class EditTextArgs(BaseModel):
         default=False,
         description="When editing text on a derived caption, set false (default) to promote it to independent (protecting manual edits), or true to keep it derived (e.g. appending a bilingual translation line that still follows style switches).",
     )
-    preset_id: TextStylePresetId | None = Field(
+    preset_id: Annotated[TextStylePresetId, WithJsonSchema({"type": "string"})] | None = Field(
         default=None,
-        description="Optional industry text/caption preset from creative_catalog.text_style_presets (clean_broadcast, cinema_glass, minimal_light, vox_label, vox_highlighter, creator_pop, kinetic_impact, editorial_callout, lower_third_tag, karaoke_focus, bilingual_cinema).",
+        description="Text style ID selected with search_text_presets.",
     )
     color: str | None = Field(
         default=None, pattern=r"^#[0-9a-fA-F]{6}$",
@@ -558,7 +566,7 @@ def _editor_tool(name, description, args, key, *, receipt_kind=None):
 EDITOR_TOOLS = (
     _editor_tool(
         "create_video",
-        "Create the first editable version from ordered shots (title cards, images, video, webpage captures, and optional narration) and/or native declarative motion_blocks (all 15 blocks with optional resources and act transitions). Save an editable draft without exporting.",
+        "Create the first editable version from ordered shots (title cards, images, video, webpage captures, and optional narration) and/or native declarative motion_blocks (with optional resources and act transitions). Save an editable draft without exporting.",
         CreateVideoArgs, "createVideo",
     ),
     _editor_tool(
@@ -602,14 +610,14 @@ EDITOR_TOOLS = (
     ),
     _editor_tool(
         "generate_sfx",
-        "Synthesize a deterministic 48 kHz stereo sound effect with zero credit cost from 22 v2 recipes in creative_catalog.sound_recipes (UI ticks: click, soft_pop, toggle_on, select_tick, confirm_chime; motion/transitions: whoosh, swoosh_cut, velvet_pass, page_turn; impacts: impact, deep_hit, sub_drop, kinetic_thud; risers/swells: riser, sub_swell, shimmer_lift; stingers/accents: stinger, title_bloom, metric_chime, callout_ping; beds: studio_air, pulse_bed). "
+        "Synthesize a deterministic stereo sound effect using the recipe and parameters returned by get_sfx. "
         "When a composition already exists, pass place_at_seconds (and optional gain_db) to synthesize and place onto the effect track in one atomic step. "
         "Pass base_clip_id to revise an existing SFX clip while inheriting its recipe and seed. Returns acoustic metrics (duration_ms, peak_offset_ms, spectral_centroid_hz, peak_dbfs); align peak_offset_ms with visual sync cues (typical peak ~-2 dBFS; place at -14 to -10 dB under narration).",
         GenerateSfxArgs, "generateSfx",
     ),
     _editor_tool(
         "insert_motion_block",
-        "Insert one of the 15 native declarative motion blocks from creative_catalog.motion_blocks onto the timeline below captions (statement_hook, product_showcase, device_mockup, chat_demo, flow_diagram, step_timeline, split_compare, bento_features, metric_grid, data_chart, quote_proof, kinetic_title, kinetic_beat, ui_montage, closing_cta). "
+        "Insert the selected native motion block below captions using the validated props from get_blocks. "
         "Pass captured webpage or image snapshot IDs in resources for product_showcase, device_mockup (primary then mobile), optional chat result, or CTA logo.",
         InsertMotionBlockArgs, "insertMotionBlock",
     ),
@@ -625,12 +633,12 @@ EDITOR_TOOLS = (
     ),
     _editor_tool(
         "insert_text",
-        "Insert a native TextObject title/overlay/caption clip (direct text with start_seconds/end_seconds, supporting '\\n' bilingual lines) OR generate a full aligned derived caption track from an existing aligned audio/speech/video clip (from_audio_clip_id). Supports safe-area position presets and all 11 industry presets in creative_catalog.text_style_presets (including karaoke_focus with word-level timings).",
+        "Insert a native TextObject title/overlay/caption clip (direct text with start_seconds/end_seconds, supporting '\\n' bilingual lines) OR generate a full aligned derived caption track from an existing aligned audio/speech/video clip (from_audio_clip_id). Supports safe-area position presets and all registered presets in get_text_presets (including karaoke_focus with word-level timings).",
         InsertTextArgs, "insertText",
     ),
     _editor_tool(
         "edit_text",
-        "Atomically edit native TextObject content (scope='clip'), safe-area position, and/or style/preset across scope='clip', 'track', or 'all_derived_captions' using the 11 industry presets in creative_catalog.text_style_presets. With scope='all_derived_captions', strictly preserves independent user-edited captions, non-caption text, and all audio tracks.",
+        "Atomically edit native TextObject content (scope='clip'), safe-area position, and/or style/preset across scope='clip', 'track', or 'all_derived_captions' using the registered presets in get_text_presets. With scope='all_derived_captions', strictly preserves independent user-edited captions, non-caption text, and all audio tracks.",
         EditTextArgs, "editText",
     ),
     _editor_tool(
@@ -1096,7 +1104,7 @@ async def edit_clip(
     wire_args = args.model_dump(mode="json")
     if isinstance(args, InsertAudioArgs):
         # Preserve fingerprints of inserts committed before music fades were accepted.
-        for field in ("fade_in_seconds", "fade_out_seconds"):
+        for field in ("fade_in_seconds", "fade_out_seconds", "sfx_slug"):
             if wire_args[field] is None:
                 del wire_args[field]
     fingerprint = canonical_json_hash({"tool": name, "args": wire_args})
@@ -1141,7 +1149,9 @@ async def edit_clip(
         from app.editing.timing import output_ticks_to_source_ticks, source_ticks_to_output_ticks
         from app.models.tables import SourceSnapshot
 
-        snapshot = await db.get(SourceSnapshot, args.source_id)
+        from app.tools.video.library_sfx import freeze_library_sfx
+        snapshot = (await freeze_library_sfx(db, project, args.sfx_slug) if args.sfx_slug
+                    else await db.get(SourceSnapshot, args.source_id))
         if (snapshot is None or snapshot.owner_id != project.user_id or snapshot.origin_project_id != project.id
                 or snapshot.kind != "audio" or not snapshot.duration_ticks):
             raise ValueError("Select a fixed audio source from the current project.")

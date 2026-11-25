@@ -6,6 +6,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.agents.tool_loop import ChatTool, NATIVE_PRESENTATION, ToolPresentation, ToolPresentationVariant, ToolRejected, prune_wire_parameters
+from app.catalog.search import TOOLS as CATALOG_TOOLS
 from app.chat.editor import EDITOR_TOOLS
 from app.chat.perception import perception_chat_tools
 from app.models.schemas import (
@@ -321,6 +322,11 @@ def _explicit_constraint_wire(
 
 def _video_project_tools() -> list[ChatTool]:
     return [
+        *(ChatTool(name=name, params_model=model, terminal=False, batchable=True,
+                   description=(f"Find {kind} outlines in the permanent catalog." if name.startswith("search")
+                                else f"Read complete parameters for up to eight selected {kind} IDs."),
+                   presentation=NATIVE_PRESENTATION)
+          for name,(kind,model) in CATALOG_TOOLS.items()),
         _LOAD_SKILL_TOOL,
         *_skill_authoring_read_tools(),
         *_video_material_tools(),

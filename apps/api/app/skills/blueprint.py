@@ -97,6 +97,8 @@ BLUEPRINT_CAPABILITY = "slot_blueprint_v1"
 _CONTENT_PROP_KEYS: dict[str, set[str]] = {
     "kinetic_beat": {"headline", "highlight_phrase", "prefix", "words", "left_text", "right_text", "badge_text", "items"},
     "ui_montage": {"headline", "badge"},
+    "code_terminal": {"title", "lines", "prompt_prefix"},
+    "logo_wall": {"eyebrow", "headline", "items"},
     "chat_demo": {"messages", "title", "work_steps", "result_card"},
     "device_mockup": {"eyebrow", "headline", "caption"},
     "flow_diagram": {"nodes", "eyebrow", "title"},
@@ -117,6 +119,8 @@ _NARRATIVE_STYLE = {"theme", "backdrop_style", "accent_color", "show_backdrop"}
 _STYLE_PROP_KEYS: dict[str, set[str]] = {
     "kinetic_beat": _NARRATIVE_STYLE | {"mode", "rows", "badge_icon", "scale_emphasis", "entrance_duration_s"},
     "ui_montage": _NARRATIVE_STYLE | {"layout_mode", "cut_interval_s", "entrance_duration_s"},
+    "code_terminal": _NARRATIVE_STYLE | {"mode", "highlight_line"},
+    "logo_wall": _NARRATIVE_STYLE | {"mode"},
     "chat_demo": _NARRATIVE_STYLE,
     "device_mockup": _NARRATIVE_STYLE | {"layout", "reveal_at_s"},
     "flow_diagram": _NARRATIVE_STYLE,
@@ -491,6 +495,13 @@ def extract_skill_draft_from_composition(
         req_slots = [k for k in cat["required_slots"] if k not in style_defaults]
         opt_slots = [k for k in cat["optional_slots"] if k in content_keys or k.endswith("_resource")]
 
+        if obj.block_id in {"code_terminal","logo_wall"}:
+            group = "lines" if obj.block_id == "code_terminal" else "items"
+            req_slots = [f"{group}[{i}]" for i in range(len(obj.props[group]))]
+            if obj.block_id == "logo_wall":
+                for i,item in enumerate(obj.props["items"]):
+                    if item.get("resource_index") is not None:
+                        req_slots.append(f"items[{i}].image[{item['resource_index']}]")
         if obj.block_id == "kinetic_beat":
             mode = obj.props["mode"]
             if mode in {"typewriter_swap", "slot_flip", "marquee_wall"}:
@@ -535,7 +546,7 @@ def extract_skill_draft_from_composition(
             block_version=obj.block_version,
             role=role_by_block.get(obj.block_id, "scene"),
             target_duration_s=dur_s,
-            resource_count=len(obj.resources) if obj.block_id == "ui_montage" else None,
+            resource_count=len(obj.resources) if obj.resources and obj.block_id in {"ui_montage","logo_wall"} else None,
             min_duration_s=min(dur_s, 3.5),
             style_defaults=style_defaults,
             required_slots=req_slots,

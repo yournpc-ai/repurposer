@@ -698,6 +698,9 @@ const en = {
     },
   },
   videoPresets: {
+    "code_terminal:typing_cli": { name: "Typing console" },
+    "logo_wall:marquee_strip": { name: "Partner marquee" },
+    "device_mockup:split_focus": { name: "Split focus" },
     "kinetic_beat:impact_cut": { name: "Impact cut" },
     "kinetic_beat:typewriter_swap": { name: "Typewriter swap" },
     "kinetic_beat:slot_flip": { name: "Slot flip" },
@@ -1621,6 +1624,8 @@ const en = {
         statement_hook: "Statement Hook",
         kinetic_title: "Kinetic Title",
         product_showcase: "Product Showcase",
+        code_terminal: "Code terminal",
+        logo_wall: "Logo wall",
         device_mockup: "Device Mockup",
         chat_demo: "Chat Demo",
         flow_diagram: "Flow Diagram",

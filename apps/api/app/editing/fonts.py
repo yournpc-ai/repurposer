@@ -67,9 +67,17 @@ _LEGACY_FONT_FILES = (_REGULAR, _BOLD, _EMOJI)
 FONT_FILES = (_REGULAR, _BOLD, _BLACK, _EMOJI)
 
 
-def _font_set_digest(files: tuple[dict[str, Any], ...]) -> str:
+DISPLAY_FONTS = {
+    "editorial-serif": {"filename": "DejaVuSerif.ttf", "family": "DejaVu Serif", "weight": 400, "format": "truetype",
+                        "digest": "107244956e9962b9e96faccdc551825e0ae0898ae13737133e1b921a2fd35ffa"},
+    "terminal-mono": {"filename": "DejaVuSansMono.ttf", "family": "DejaVu Sans Mono", "weight": 400, "format": "truetype",
+                      "digest": "602ec86b8948cfcd956482fe64f94c36c867770149ef2f791d4613f443bcecb3"},
+}
+
+
+def _font_set_digest(files: tuple[dict[str, Any], ...], font_id: str = FONT_ID) -> str:
     identity = json.dumps(
-        {"font_id": FONT_ID, "files": files},
+        {"font_id": font_id, "files": files},
         ensure_ascii=False,
         sort_keys=True,
         separators=(",", ":"),
@@ -78,6 +86,7 @@ def _font_set_digest(files: tuple[dict[str, Any], ...]) -> str:
 
 
 FONT_SET_DIGEST = _font_set_digest(FONT_FILES)
+DISPLAY_DIGESTS = {key: _font_set_digest((face, *FONT_FILES), key) for key, face in DISPLAY_FONTS.items()}
 _FONT_SETS = {
     LEGACY_FONT_SET_DIGEST: _LEGACY_FONT_FILES,
     FONT_SET_DIGEST: FONT_FILES,
@@ -97,9 +106,12 @@ def font_resources(font_id: str, set_digest: str, weights: set[int]) -> list[dic
     font-set digests retain their original files and cannot silently acquire
     a face that did not exist when their versions were saved.
     """
-    if font_id != FONT_ID or set_digest not in _FONT_SETS:
+    if font_id in DISPLAY_FONTS and set_digest == DISPLAY_DIGESTS[font_id]:
+        files = (DISPLAY_FONTS[font_id], *FONT_FILES)
+    elif font_id == FONT_ID and set_digest in _FONT_SETS:
+        files = _FONT_SETS[set_digest]
+    else:
         raise ValueError(f"unsupported font resource {font_id}:{set_digest}")
-    files = _FONT_SETS[set_digest]
     if not weights <= {400, 500, 600, 700, 800, 900}:
         raise ValueError(f"unsupported font weights: {sorted(weights)}")
     wanted = {
@@ -119,7 +131,7 @@ def font_resources(font_id: str, set_digest: str, weights: set[int]) -> list[dic
         filename = str(item["filename"])
         digest = str(item["digest"])
         resource: dict[str, Any] = {
-            "font_id": FONT_ID,
+            "font_id": font_id,
             "font_set_digest": set_digest,
             "family": item["family"],
             "weight": weight,

@@ -33,6 +33,7 @@ MotionBlockId = Literal[
     "metric_grid",
     "closing_cta",
     "chat_demo",
+    "code_terminal", "logo_wall",
     "device_mockup",
     "flow_diagram",
     "split_compare",
@@ -562,10 +563,24 @@ MOTION_BLOCK_CATALOG: dict[str, dict[str, Any]] = {
         "required_slots": ["image_resource"],
         "optional_slots": ["headline", "badge", "layout_mode", "cut_interval_s", "theme", "backdrop_style", "accent_color", "show_backdrop", "entrance_duration_s"],
     },
+    "code_terminal": {
+        "id": "code_terminal", "version": 1, "domain": "product", "category": "code_terminal",
+        "name": "Code Terminal", "desc": "Type CLI commands, review a diff or focus a command palette.",
+        "use_for": ["Developer workflows", "Highlight a precise change"], "avoid": ["Paragraphs of code"],
+        "supports_alpha": True, "suggested_duration_s": [2, 6], "required_slots": ["lines"],
+        "optional_slots": ["title", "prompt_prefix", "highlight_line", "mode", "theme", "accent_color", "backdrop_style", "show_backdrop"],
+    },
+    "logo_wall": {
+        "id": "logo_wall", "version": 1, "domain": "visuals", "category": "logos_partners",
+        "name": "Logo Wall", "desc": "A rolling strip, staggered grid or spotlight of partner wordmarks.",
+        "use_for": ["Integration roster", "Partner credits"], "avoid": ["Unverified endorsements"],
+        "supports_alpha": True, "suggested_duration_s": [2, 5], "required_slots": ["items"],
+        "optional_slots": ["eyebrow", "headline", "logo_resource", "mode", "theme", "accent_color", "backdrop_style", "show_backdrop"],
+    },
     "device_mockup": {
         "id": "device_mockup", "version": 1, "domain": "product", "category": "interfaces",
         "name": "Device Mockup",
-        "desc": "Ordered image resources: primary then optional mobile. Choose dual, desktop or mobile layout; reveal_at_s times the second device or solo entrance.",
+        "desc": "Order pinned images as primary then mobile. Choose dual, desktop, mobile, split_focus or hero_bleed. Split focus can show an unbranded material screen without a capture. Time the entrance with reveal_at_s.",
         "use_for": ["Show the same product across form factors."],
         "avoid": ["Uncaptured interfaces or moving footage."],
         "supports_alpha": True, "suggested_duration_s": [4.0, 8.0],
@@ -932,10 +947,9 @@ def sound_spec_digest(spec: dict[str, Any]) -> str:
     return hashlib.sha256(canonical).hexdigest()
 
 
-def catalog_prompt_index() -> dict[str, Any]:
-    """Compact two-level index projected into editor context for fast LLM selection."""
+def editor_catalog_guidance() -> dict[str, Any]:
+    """Bounded composition style and mixing guidance for the editor."""
     from app.editing.styles import STYLE_PRESET_CATALOG
-    from app.editing.text_presets import TEXT_STYLE_PRESET_CATALOG
 
     return {
         "style_presets": [
@@ -950,6 +964,26 @@ def catalog_prompt_index() -> dict[str, Any]:
             }
             for s in STYLE_PRESET_CATALOG.values()
         ],
+        "mixing_guidelines": {
+            "bgm_under_dialogue_db": [-26, -22],
+            "sfx_normalized_peak_dbfs": -2.0,
+            "sfx_typical_gain_db": [-14, -10],
+            "sfx_restraint": "Place SFX only on genuine visual kinetic beats (title entrances, scene cuts, card pops); omit SFX on static stretches.",
+        },
+        "directing_guidelines": {
+            "audio_reuse_first": "Call search_voices and search_music before design_voice or generate_music so saved voiceprints and BGM tracks compound across projects.",
+            "commercial_pacing_60s": "Aim for 8-10 tight voice-driven acts (4.5-7.5s each) rather than slow 10s static slides; declare 12-22 EN words or 22-38 ZH chars of spoken narration per act directly on create_video.motion_blocks with voice_id and music_id.",
+            "anti_ppt_motion": "Never stack 3+ static text-card blocks consecutively without dynamic visual motion (product_showcase with zoom_scale 1.15-1.28, chat_demo, metric_grid count-up, data_chart) and alternate energetic transitions (whip_pan, zoom_through, wipe_reveal).",
+        },
+    }
+
+
+def catalog_prompt_index() -> dict[str, Any]:
+    """Full registry projection for explicit catalog consumers."""
+    from app.editing.text_presets import TEXT_STYLE_PRESET_CATALOG
+
+    return {
+        **editor_catalog_guidance(),
         "text_style_presets": [
             {
                 "id": t["id"],
@@ -1003,15 +1037,4 @@ def catalog_prompt_index() -> dict[str, Any]:
             {"voice_id": v["voice_id"], "languages": list(v["languages"]), "style": v["style"]}
             for v in VOICE_CATALOG
         ],
-        "mixing_guidelines": {
-            "bgm_under_dialogue_db": [-26, -22],
-            "sfx_normalized_peak_dbfs": -2.0,
-            "sfx_typical_gain_db": [-14, -10],
-            "sfx_restraint": "Place SFX only on genuine visual kinetic beats (title entrances, scene cuts, card pops); omit SFX on static stretches.",
-        },
-        "directing_guidelines": {
-            "audio_reuse_first": "Call search_voices and search_music before design_voice or generate_music so saved voiceprints and BGM tracks compound across projects.",
-            "commercial_pacing_60s": "Aim for 8-10 tight voice-driven acts (4.5-7.5s each) rather than slow 10s static slides; declare 12-22 EN words or 22-38 ZH chars of spoken narration per act directly on create_video.motion_blocks with voice_id and music_id.",
-            "anti_ppt_motion": "Never stack 3+ static text-card blocks consecutively without dynamic visual motion (product_showcase with zoom_scale 1.15-1.28, chat_demo, metric_grid count-up, data_chart) and alternate energetic transitions (whip_pan, zoom_through, wipe_reveal).",
-        },
     }

@@ -18,6 +18,7 @@ from app.models.database import AsyncSessionLocal, require_current_schema
 from app.chat.routes import chat_router, outputs_regenerate_router
 from app.distribution.routes import router as distribution_router
 from app.memory.routes import personas_router
+from app.routers.catalog import router as catalog_router
 from app.pipeline.music import seed_default_music
 from app.pipeline.routes import (
     assets,
@@ -52,6 +53,9 @@ async def lifespan(app: FastAPI):
     llm = get_llm_client()
     request_logger.info("llm_provider_ready", provider=llm.provider, model=llm.model)
     async with AsyncSessionLocal() as db:
+        from app.catalog.sync import sync_builtin_catalog
+        await sync_builtin_catalog(db)
+        await db.commit()
         await seed_default_music(db)
         await reconcile_configs(db)
     # Prefix-cache warmup (批3): fire-and-forget — seeds one backend pod per
@@ -248,6 +252,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     return JSONResponse({"detail": "Internal server error"}, status_code=500)
 
 
+app.include_router(catalog_router, prefix="/api/v1/catalog", tags=["catalog"])
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(personas_router, prefix="/api/v1/personas", tags=["personas"])
 app.include_router(projects, prefix="/api/v1/projects", tags=["projects"])

@@ -24,3 +24,21 @@ Worker 分别领取 Asset、NarrationAlignment、MediaJob、ExportJob、Publicat
 费用预占与 Job 入队同一事务提交。成功后的实际扣款与释放由同一账本处理。Stop 与成功争用原 Job；项目删除与付费入队争用原 Project。删除前校验后台任务、外部结果与账本。项目返回 409 时应保留素材、消息、账本及对象存储。
 
 各业务的详细合同见 [Chat](CHAT_ARCHITECTURE.md)、[作品](VIDEO_PROJECT.md)、[渲染](RENDERING.md)、[费用](BILLING.md)、[发布](DISTRIBUTION.md) 和 [支付](PAYMENTS.md)。排期及未来能力见 [PROGRESS](PROGRESS.md)。
+
+
+## 全资产语义目录
+
+`app/catalog` 将代码注册表同步到 PostgreSQL 的 `visual_presets` 与 `sound_effects`。
+`music` 与 `voices` 保存各自的导演语义、使用频次和检索文本。Studio 的只读目录和 Chat 共用可见性、状态与排序规则。
+`search_blocks`、`search_text_presets`、`search_sfx_library` 返回轻量大纲。对应的 `get_*` 一次读取 1–8 个 ID 的参数。
+目录元数据只参与检索。作品内容只记录展开的渲染参数以及经所有者校验的不可变素材引用。
+
+常驻音效包通过 API 目录下的 `uv run python scripts/seed_sfx_library.py manifest.json` 导入。
+省略 manifest 时，导入随库打包的三条 code4fukui CC0 实录（机械开关、金属架、钢盘）。
+manifest 为 JSON 数组，每项的 `file` 相对于 manifest 所在目录。示例条目如下。
+
+```json
+[{"file":"key.wav","slug":"keyboard_soft","name":"Soft key","name_zh":"轻按键帽","category":"tactile_ui","moods":["crisp"],"energy":"subtle","summary":"Dry single key contact","use_for":["Terminal input"],"avoid":["Room tone"],"license":"CC0-1.0","sync_cue":"energy_peak"}]
+```
+
+按实际授权填写 `license`、`source_provider`、`source_url` 和 `attribution`。导入器测量解码后的时长、能量峰与门控响度，按原字节计算 SHA-256。同一 slug 可更新标签，替换音频需使用新 slug。选中的实录通过 `insert_audio(sfx_slug=...)` 在现有音效轨上编译。

@@ -49,6 +49,8 @@ def _disposable_postgres():
     # Keep 1 persistent sync connection so per-test cleanup avoids TCP/auth reconnect overhead
     cleanup_engine = create_engine(sync_db_url, pool_size=1, max_overflow=0)
     try:
+        with cleanup_engine.begin() as conn:
+            conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
         Base.metadata.create_all(cleanup_engine)
         reverse_tables = [t.name for t in reversed(Base.metadata.sorted_tables)]
         delete_stmts = "".join(f'DELETE FROM "{t}";' for t in reverse_tables)

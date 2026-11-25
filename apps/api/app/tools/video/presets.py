@@ -60,6 +60,9 @@ _PREVIEWS = _preview_manifest()
 
 
 MOTION_PREVIEW_CATALOG = {
+    "code_terminal:typing_cli": {"title": "Release console", "lines": ["$ studio build", "Compiling motion modules", "+ Render ready"], "backdrop_style": "studio_spotlight"},
+    "logo_wall:marquee_strip": {"eyebrow": "Partner network", "headline": "Built together.", "items": [{"text": s} for s in ("Forma", "Arc", "Northline", "Morrow", "Index")], "backdrop_style": "studio_spotlight"},
+    "device_mockup:split_focus": {"eyebrow": "Product studio", "headline": "In sharp focus.", "backdrop_style": "warm_obsidian"},
     "kinetic_beat:impact_cut": {"headline": "Make it move", "highlight_phrase": "move", "scale_emphasis": "oversized"},
     "kinetic_beat:typewriter_swap": {"words": ["Imagine", "Design", "Launch"]},
     "kinetic_beat:slot_flip": {"prefix": "Make it", "words": ["clear", "bold", "move"]},
@@ -97,13 +100,18 @@ def build_motion_preview_spec(preview_id: str, *, composition_style: Composition
     settings = VersionSettings(width=1280, height=720, fps={"num": 30}, background=tokens["canvas_bg"], style=composition_style)
     props = dict(MOTION_PREVIEW_CATALOG[preview_id])
     if composition_style is None:
-        props.update(theme="dark", accent_color="#A1A1AA", backdrop_style="clean")
+        props.update(theme="dark", accent_color="#A1A1AA")
+        props.setdefault("backdrop_style", "clean")
     resources, snapshots = [], {}
-    if block == "ui_montage":
-        props["layout_mode"] = mode
-        for i, title in enumerate(("Workspace", "Library", "Timeline"), 1):
-            data = render_slot_placeholder_png(f"[{i:02}]", title, "Interface study",
-                                               width=480, height=300, tokens=tokens)
+    if block in {"ui_montage", "device_mockup"}:
+        props["layout_mode" if block == "ui_montage" else "layout"] = mode
+        screens = ("Workspace", "Library", "Timeline") if block == "ui_montage" else ("Workspace",)
+        for i, title in enumerate(screens, 1):
+            if block == "device_mockup":
+                data = (Path(__file__).resolve().parents[3] / "assets/catalog/material-study.png").read_bytes()
+            else:
+                data = render_slot_placeholder_png(f"[{i:02}]", title, "Interface study",
+                                                   width=480, height=300, tokens=tokens)
             digest = hashlib.sha256(data).hexdigest()
             sid = uuid5(NAMESPACE_URL, digest)
             snapshots[sid] = {"storage_key": "data:image/png;base64," + base64.b64encode(data).decode("ascii"),

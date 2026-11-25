@@ -81,6 +81,9 @@ class ListProjectMediaParams(BaseModel):
 
 
 class SearchMusicParams(BaseModel):
+    genre: str | None = None
+    energy: str | None = None
+    bpm: int | None = Field(default=None,gt=0)
     query: str | None = Field(
         default=None,
         description="用于匹配曲目标题、标签、情绪或提示词的关键词。null 或空字符串表示按复用优先级列出可用曲库。",
@@ -104,6 +107,7 @@ class SearchMusicParams(BaseModel):
 
 
 class SearchVoicesParams(BaseModel):
+    pacing: str | None = None
     language: str | None = Field(
         default=None,
         description="目标配音语言代码（如 'en', 'zh', 'fr', 'de', 'es', 'it'）。",
@@ -476,7 +480,7 @@ async def search_music(db: AsyncSession, project: Project, params: SearchMusicPa
         mood=mood,
         tags=tags,
         query=query or None,
-        instrumental_only=instrumental_only,
+        instrumental_only=instrumental_only, genre=params.genre, energy=params.energy, bpm=params.bpm,
         limit=12,
     )
     if not matches:
@@ -520,7 +524,7 @@ async def search_voices(db: AsyncSession, project: Project, params: SearchVoices
     library_rows = await query_voices(
         db,
         owner_id=project.user_id,
-        language=language,
+        language=language, pacing=params.pacing,
         style_preset=style_preset,
         tone=tone,
         query=query,

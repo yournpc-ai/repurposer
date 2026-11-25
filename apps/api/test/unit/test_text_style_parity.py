@@ -1,4 +1,4 @@
-"""Layer 0 pure contracts: 11 TextStyle presets, bilingual cinema, caption defaults, and Py<->TS parity."""
+"""Layer 0 pure contracts: 24 TextStyle presets, bilingual cinema, caption defaults, and Py<->TS parity."""
 
 from __future__ import annotations
 import pytest
@@ -129,7 +129,7 @@ def _node_eval_ts(code: str, payload: dict) -> dict:
 
 
 @pytest.mark.parity
-def test_python_and_ts_11_text_presets_and_style_captions_zero_drift():
+def test_python_and_ts_24_text_presets_and_style_captions_zero_drift():
     ts_script = """
 import { readFileSync } from "node:fs";
 import { TEXT_STYLE_PRESETS } from "../video-remotion/src/engine/textPresets.ts";
@@ -154,6 +154,19 @@ process.stdout.write(JSON.stringify({ textPresets: TEXT_STYLE_PRESETS, styleCapt
         "lower_third_tag",
         "karaoke_focus",
         "bilingual_cinema",
+        "apple_minimal_dark",
+        "apple_minimal_light",
+        "chrome_cinema",
+        "neon_pulse",
+        "frosted_badge",
+        "editorial_serif",
+        "brutal_stamp",
+        "terminal_mono",
+        "soft_gradient_pill",
+        "outline_ghost",
+        "split_accent_hook",
+        "news_ticker_bar",
+        "subtitle_netflix_clean",
     ]
     assert list(TEXT_STYLE_PRESETS.keys()) == expected_ids
     assert ts_out["textPresets"] == TEXT_STYLE_PRESETS
@@ -417,10 +430,10 @@ def test_caption_creation_defaults_inherit_style_or_clean_broadcast_without_blac
     assert nar_cap_clip.object.style.stroke == TextStroke(color="#F6F5F0", width=4.0)
 
 
-def test_catalog_prompt_index_exposes_all_11_text_style_presets():
+def test_catalog_prompt_index_exposes_all_24_text_style_presets():
     index = catalog_prompt_index()
     ids = [item["id"] for item in index["text_style_presets"]]
-    assert len(ids) == 11
+    assert len(ids) == 24
     assert ids == list(TEXT_STYLE_PRESETS.keys())
     for item in index["text_style_presets"]:
         assert item["name"]

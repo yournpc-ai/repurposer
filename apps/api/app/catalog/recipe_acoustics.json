@@ -1,0 +1,112 @@
+{
+  "whoosh": {
+    "duration_ms": 540,
+    "peak_offset_ms": 268,
+    "lufs": -11.23
+  },
+  "impact": {
+    "duration_ms": 380,
+    "peak_offset_ms": 8,
+    "lufs": -11.44
+  },
+  "click": {
+    "duration_ms": 65,
+    "peak_offset_ms": 5,
+    "lufs": -19.38
+  },
+  "riser": {
+    "duration_ms": 1050,
+    "peak_offset_ms": 1000,
+    "lufs": -12.11
+  },
+  "stinger": {
+    "duration_ms": 760,
+    "peak_offset_ms": 30,
+    "lufs": -13.7
+  },
+  "swoosh_cut": {
+    "duration_ms": 320,
+    "peak_offset_ms": 178,
+    "lufs": -12.97
+  },
+  "sub_swell": {
+    "duration_ms": 920,
+    "peak_offset_ms": 870,
+    "lufs": -10.22
+  },
+  "shimmer_lift": {
+    "duration_ms": 1150,
+    "peak_offset_ms": 835,
+    "lufs": -10.46
+  },
+  "deep_hit": {
+    "duration_ms": 530,
+    "peak_offset_ms": 5,
+    "lufs": -15.81
+  },
+  "sub_drop": {
+    "duration_ms": 660,
+    "peak_offset_ms": 10,
+    "lufs": -14
+  },
+  "kinetic_thud": {
+    "duration_ms": 270,
+    "peak_offset_ms": 23,
+    "lufs": -15.87
+  },
+  "velvet_pass": {
+    "duration_ms": 510,
+    "peak_offset_ms": 268,
+    "lufs": -12.97
+  },
+  "page_turn": {
+    "duration_ms": 365,
+    "peak_offset_ms": 198,
+    "lufs": -13.12
+  },
+  "title_bloom": {
+    "duration_ms": 780,
+    "peak_offset_ms": 325,
+    "lufs": -8.77
+  },
+  "metric_chime": {
+    "duration_ms": 460,
+    "peak_offset_ms": 5,
+    "lufs": -11.74
+  },
+  "callout_ping": {
+    "duration_ms": 235,
+    "peak_offset_ms": 5,
+    "lufs": -15.39
+  },
+  "studio_air": {
+    "duration_ms": 1550,
+    "peak_offset_ms": 870,
+    "lufs": -12.92
+  },
+  "pulse_bed": {
+    "duration_ms": 1380,
+    "peak_offset_ms": 628,
+    "lufs": -16.08
+  },
+  "soft_pop": {
+    "duration_ms": 96,
+    "peak_offset_ms": 5,
+    "lufs": -19.12
+  },
+  "toggle_on": {
+    "duration_ms": 138,
+    "peak_offset_ms": 5,
+    "lufs": -17.06
+  },
+  "select_tick": {
+    "duration_ms": 64,
+    "peak_offset_ms": 3,
+    "lufs": -22.06
+  },
+  "confirm_chime": {
+    "duration_ms": 340,
+    "peak_offset_ms": 5,
+    "lufs": -12.75
+  }
+}

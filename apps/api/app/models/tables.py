@@ -5,6 +5,7 @@ from uuid import uuid4
 
 from sqlalchemy import (
     JSON,
+    event,
     BigInteger,
     Boolean,
     CheckConstraint,
@@ -662,6 +663,128 @@ class MessageFeedback(Base):
     updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc, nullable=False)
 
 
+class SoundEffect(Base):
+
+    __tablename__ = "sound_effects"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+
+    slug = Column(String(120), nullable=False, unique=True, index=True)
+    engine_kind = Column(String(24), nullable=False)
+
+    category = Column(String(48), nullable=False, index=True)
+    subcategory = Column(String(64), nullable=True)
+    name = Column(String(160), nullable=False)
+    name_zh = Column(String(160), nullable=True)
+    summary = Column(String(280), nullable=False)
+    moods = Column(JSONB, nullable=False, default=list, server_default="[]")
+    energy = Column(String(16), nullable=False, default="medium", server_default="medium")
+    use_for = Column(JSONB, nullable=False, default=list, server_default="[]")
+    avoid = Column(JSONB, nullable=False, default=list, server_default="[]")
+    tags = Column(JSONB, nullable=False, default=list, server_default="[]")
+    compatible_styles = Column(JSONB, nullable=False, default=list, server_default="[]")
+
+    duration_ms = Column(Integer, nullable=False)
+    peak_offset_ms = Column(Integer, nullable=False, default=0, server_default="0")
+    sync_cue = Column(String(24), nullable=False, default="onset", server_default="onset")
+
+    lufs = Column(Float, nullable=True)
+    mix_hint = Column(String(280), nullable=True)
+
+    storage_key = Column(String(512), nullable=True)
+    ext = Column(String(12), nullable=True)
+    size_bytes = Column(BigInteger, nullable=True)
+    content_sha256 = Column(String(64), nullable=True)
+
+    recipe_id = Column(String(80), nullable=True)
+    recipe_version = Column(Integer, nullable=True)
+    params_schema = Column(JSONB, nullable=True)
+
+    source_provider = Column(String(32), nullable=False, default="curated", server_default="curated")
+
+    source_url = Column(String(512), nullable=True)
+    license = Column(String(100), nullable=True)
+    attribution = Column(Text, nullable=True)
+    owner_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
+    scope = Column(String(24), nullable=False, default="platform", server_default="platform")
+    status = Column(String(24), nullable=False, default="curated", server_default="curated")
+
+    use_count = Column(Integer, nullable=False, default=0, server_default="0")
+
+    search_text = Column(Text, nullable=False, default="", server_default="")
+    created_at = Column(DateTime(timezone=True), default=now_utc, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc, nullable=False)
+
+    __table_args__ = (
+        CheckConstraint("scope IN ('platform', 'user')", name="ck_sound_effects_scope"),
+        CheckConstraint("status IN ('curated', 'ready', 'archived')", name="ck_sound_effects_status"),
+        CheckConstraint("energy IN ('subtle', 'medium', 'high', 'explosive')", name="ck_sound_effects_energy"),
+        CheckConstraint("engine_kind IN ('sample', 'dsp_recipe')", name="ck_sound_effects_engine_kind"),
+        CheckConstraint("sync_cue IN ('onset', 'energy_peak', 'end_peak')", name="ck_sound_effects_sync_cue"),
+        Index("ix_sfx_scope_status_cat", "scope", "status", "category"),
+        Index("ix_sfx_energy_sync", "energy", "sync_cue"),
+        Index("ix_sfx_moods_gin", "moods", postgresql_using="gin"),
+        Index("ix_sfx_tags_gin", "tags", postgresql_using="gin"),
+        Index("ix_sfx_search_trgm", "search_text", postgresql_using="gin",
+              postgresql_ops={"search_text": "gin_trgm_ops"}),
+    )
+
+class VisualPreset(Base):
+
+    __tablename__ = "visual_presets"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    asset_kind = Column(String(24), nullable=False, index=True)
+
+    preset_id = Column(String(120), nullable=False)
+    render_version = Column(Integer, nullable=False, default=1, server_default="1")
+
+    domain = Column(String(32), nullable=False)
+    category = Column(String(48), nullable=False, index=True)
+    subcategory = Column(String(64), nullable=True)
+    name = Column(String(160), nullable=False)
+    name_zh = Column(String(160), nullable=True)
+    summary = Column(String(280), nullable=False)
+    moods = Column(JSONB, nullable=False, default=list, server_default="[]")
+    energy = Column(String(16), nullable=False, default="medium", server_default="medium")
+    use_for = Column(JSONB, nullable=False, default=list, server_default="[]")
+    avoid = Column(JSONB, nullable=False, default=list, server_default="[]")
+    tags = Column(JSONB, nullable=False, default=list, server_default="[]")
+    compatible_styles = Column(JSONB, nullable=False, default=list, server_default="[]")
+
+    slot_summary = Column(JSONB, nullable=False, default=dict, server_default="{}")
+    recommended_sfx = Column(JSONB, nullable=False, default=list, server_default="[]")
+
+    props_schema = Column(JSONB, nullable=False, default=dict, server_default="{}")
+    example_props = Column(JSONB, nullable=False, default=dict, server_default="{}")
+    director_notes = Column(Text, nullable=True)
+
+    preview_spec = Column(JSONB, nullable=False, default=dict, server_default="{}")
+    preview_duration_s = Column(Float, nullable=False, default=3.0, server_default="3.0")
+
+    is_builtin = Column(Boolean, nullable=False, default=True, server_default="true")
+    owner_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
+    scope = Column(String(24), nullable=False, default="platform", server_default="platform")
+    status = Column(String(24), nullable=False, default="curated", server_default="curated")
+    use_count = Column(Integer, nullable=False, default=0, server_default="0")
+    search_text = Column(Text, nullable=False, default="", server_default="")
+    created_at = Column(DateTime(timezone=True), default=now_utc, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc, nullable=False)
+
+    __table_args__ = (
+        CheckConstraint("scope IN ('platform', 'user')", name="ck_visual_presets_scope"),
+        CheckConstraint("status IN ('curated', 'ready', 'archived')", name="ck_visual_presets_status"),
+        CheckConstraint("energy IN ('subtle', 'medium', 'high', 'explosive')", name="ck_visual_presets_energy"),
+        CheckConstraint("asset_kind IN ('block', 'text_preset', 'transition')", name="ck_visual_presets_asset_kind"),
+        UniqueConstraint("asset_kind", "preset_id", name="uq_visual_presets_kind_id"),
+        Index("ix_vp_kind_scope_status_cat", "asset_kind", "scope", "status", "category"),
+        Index("ix_vp_moods_gin", "moods", postgresql_using="gin"),
+        Index("ix_vp_tags_gin", "tags", postgresql_using="gin"),
+        Index("ix_vp_search_trgm", "search_text", postgresql_using="gin",
+              postgresql_ops={"search_text": "gin_trgm_ops"}),
+    )
+
+
 class Voice(Base):
     """Permanent voiceprint asset (platform curated or owner-scoped designed/cloned voice).
 
@@ -671,6 +794,11 @@ class Voice(Base):
     """
 
     __tablename__ = "voices"
+
+    pacing = Column(String(24))
+    use_for = Column(JSONB, nullable=False, default=list, server_default="[]")
+    avoid = Column(JSONB, nullable=False, default=list, server_default="[]")
+    search_text = Column(Text, nullable=False, server_default="")
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     owner_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
@@ -696,6 +824,7 @@ class Voice(Base):
     updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc, nullable=False)
 
     __table_args__ = (
+        Index("ix_voices_search_trgm", "search_text", postgresql_using="gin", postgresql_ops={"search_text": "gin_trgm_ops"}),
         Index("ix_voices_scope_status", "scope", "status"),
         Index("ix_voices_owner_status", "owner_id", "status"),
     )
@@ -710,6 +839,16 @@ class Music(Base):
     """
 
     __tablename__ = "music"
+    __table_args__ = (Index("ix_music_search_trgm", "search_text", postgresql_using="gin", postgresql_ops={"search_text": "gin_trgm_ops"}),
+                      Index("ix_music_bpm", "bpm"))
+
+    genre = Column(String(48))
+    energy = Column(String(16), nullable=False, server_default="medium")
+    bpm = Column(Integer)
+    summary = Column(String(280))
+    use_for = Column(JSONB, nullable=False, default=list, server_default="[]")
+    avoid = Column(JSONB, nullable=False, default=list, server_default="[]")
+    search_text = Column(Text, nullable=False, server_default="")
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     mood = Column(String(50), nullable=False, index=True)
@@ -739,6 +878,27 @@ class Music(Base):
     updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=now_utc)
 
 
+
+
+@event.listens_for(Music, "before_insert")
+@event.listens_for(Music, "before_update")
+@event.listens_for(Voice, "before_insert")
+@event.listens_for(Voice, "before_update")
+def index_library_audio(mapper, connection, row):
+    """Keep searchable bilingual facets current on ordinary library writes."""
+    if isinstance(row, Music):
+        meta = row.meta or {}
+        reference = meta.get("bpm") or meta.get("reference_bpm")
+        if row.bpm is None and str(reference).isdigit() and 0 < int(reference) <= 1000:
+            row.bpm = int(reference)
+        values = [row.title,row.mood,row.prompt,row.tags,row.genre,row.energy,row.summary,
+                  meta.get("style"),row.bpm]
+    else:
+        values = [row.name,row.description,row.design_prompt,row.gender,row.age_band,row.provider_voice_id,
+                  row.languages,row.tone_tags,row.pacing]
+    values.extend([row.compatible_styles,row.use_for,row.avoid])
+    row.search_text = " ".join(" ".join(map(str,v)) if isinstance(v,list) else str(v)
+                               for v in values if v is not None)
 
 
 class VideoNarration(Base):
