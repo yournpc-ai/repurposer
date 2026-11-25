@@ -12,7 +12,7 @@ import io
 import math
 from dataclasses import dataclass
 from fractions import Fraction
-from typing import Any, TypedDict
+from typing import Any, NotRequired, TypedDict
 from uuid import NAMESPACE_DNS, UUID, uuid4, uuid5
 
 import av
@@ -283,12 +283,13 @@ class CuratedMusicEntry(TypedDict):
     license: str
     attribution: str
     provenance: str
+    use_for: NotRequired[list[str]]
 
 
 # These license strings apply to the music recordings, not Shotcraft source
 # code. They transcribe the supplied attribution metadata; they are not an
 # independent legal verification or approval claim.
-CURATED_MUSIC_CATALOG: list[CuratedMusicEntry] = [
+SHOTCRAFT_MUSIC_CATALOG: list[CuratedMusicEntry] = [
     {
         "mood": "mixkit-tech-house",
         "title": "Tech House",
@@ -350,6 +351,74 @@ CURATED_MUSIC_CATALOG: list[CuratedMusicEntry] = [
         "provenance": "Shotcraft assets/audio/ATTRIBUTION.md",
     },
 ]
+
+
+_DRUMPRINTS_URL = "https://spencertweedy.com/drumprints"
+_DRUMPRINTS_SESSION = (
+    "Spencer Tweedy, Slingerland drums and Zildjian K Constantinople cymbals. "
+    "Performed and engineered at The Pocket, Chicago, January 2023."
+)
+_DRUMPRINTS_CREDIT = (
+    "Drum samples by Spencer Tweedy’s Drumprints, vol. 1. "
+    "https://spencertweedy.com/drumprints · CC BY 4.0 · https://creativecommons.org/licenses/by/4.0/"
+)
+
+DRUMPRINTS_MUSIC_CATALOG: list[CuratedMusicEntry] = [
+    {
+        "mood": "pocket-proof",
+        "title": "Pocket Proof",
+        "author": "Rookie Cut arrangement / Spencer Tweedy (drums)",
+        "style": "Funk",
+        "reference_bpm": 101,
+        "original_filename": "pocket-proof.mp3",
+        "source_url": _DRUMPRINTS_URL,
+        "license": "CC BY 4.0",
+        "attribution": "Pocket Proof adapts DP2301 Longform 101 with new bass and tine chords. " + _DRUMPRINTS_CREDIT,
+        "provenance": "Track 04, first 12 bars, closing hit at 28.515 s. " + _DRUMPRINTS_SESSION,
+        "use_for": ["磁吸 CTA、短网址键入", "Twelve-bar launch edit with syncopated bass and a final downbeat"],
+    },
+    {
+        "mood": "relay-glass",
+        "title": "Relay Glass",
+        "author": "Rookie Cut arrangement / Spencer Tweedy (drums)",
+        "style": "Electro",
+        "reference_bpm": 128,
+        "original_filename": "relay-glass.mp3",
+        "source_url": _DRUMPRINTS_URL,
+        "license": "CC BY 4.0",
+        "attribution": "Relay Glass adapts DP2301 Contact Sheet 128 with electronic bass and stereo bell pulses. " + _DRUMPRINTS_CREDIT,
+        "provenance": "Track 01, first 16 bars, closing hit at 30.000 s. " + _DRUMPRINTS_SESSION,
+        "use_for": ["黑白灰产品揭示", "Cut on bass pulses and reveal the product with the stereo bells"],
+    },
+    {
+        "mood": "open-window",
+        "title": "Open Window",
+        "author": "Rookie Cut arrangement / Spencer Tweedy (drums)",
+        "style": "Upbeat Indie",
+        "reference_bpm": 158,
+        "original_filename": "open-window.mp3",
+        "source_url": _DRUMPRINTS_URL,
+        "license": "CC BY 4.0",
+        "attribution": "Open Window adapts DP2301 Longform 158 with bass and layered plucked strings. " + _DRUMPRINTS_CREDIT,
+        "provenance": "Track 06, 16 bars from 6.076 s, closing chord at 24.304 s. " + _DRUMPRINTS_SESSION,
+        "use_for": ["工作台铺陈至产品全景", "Build from sparse strums to the high plucked line in bar nine"],
+    },
+    {
+        "mood": "contact-sheet-101-a",
+        "title": "DP2301 Contact Sheet 101 A",
+        "author": "Spencer Tweedy",
+        "style": "Minimal Percussion",
+        "reference_bpm": 101,
+        "original_filename": "contact-sheet-101-a.mp3",
+        "source_url": _DRUMPRINTS_URL,
+        "license": "CC BY 4.0",
+        "attribution": "DP2301 Contact Sheet 101 A, level adjusted and encoded as MP3. " + _DRUMPRINTS_CREDIT,
+        "provenance": "Track 07, full solo drum performance. " + _DRUMPRINTS_SESSION,
+        "use_for": ["界面细节特写与实录翻页", "Drums alone under a sequence of tactile actions"],
+    },
+]
+
+CURATED_MUSIC_CATALOG = SHOTCRAFT_MUSIC_CATALOG + DRUMPRINTS_MUSIC_CATALOG
 
 
 def default_music_id(mood: str) -> UUID:
@@ -674,6 +743,11 @@ async def _reconcile_curated_music(db: AsyncSession) -> list[Music]:
             "provenance": entry["provenance"],
         })
         lufs_val = measure_audio_lufs(data) if data is not None else (row.lufs if row is not None else None)
+        discovery = {
+            "genre": entry["style"].lower(),
+            "bpm": entry["reference_bpm"],
+            "use_for": entry["use_for"],
+        } if "use_for" in entry else {}
         if row is None:
             if data is None or duration_seconds is None:
                 raise RuntimeError(f"curated music {mood} was not probed")
@@ -700,6 +774,7 @@ async def _reconcile_curated_music(db: AsyncSession) -> list[Music]:
                 instrumental=True,
                 lufs=lufs_val,
                 meta=meta,
+                **discovery,
             )
             db.add(row)
             created.append(row)
@@ -721,6 +796,7 @@ async def _reconcile_curated_music(db: AsyncSession) -> list[Music]:
             "status": "curated",
             "instrumental": True,
             "meta": meta,
+            **discovery,
         }
         if lufs_val is not None:
             updates["lufs"] = lufs_val

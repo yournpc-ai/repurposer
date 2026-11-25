@@ -1171,9 +1171,10 @@ def test_compile_all_20_motion_blocks_and_zod_video_spec_parity():
     # Verify exact parity against packages/video-spec Zod videoSpecSchema.parse!
     node_script = (
         'import { videoSpecSchema, motionBlockIds } from "./src/index.ts";'
+        'import { assertVideoSupported } from "../video-remotion/src/capabilities.ts";'
         'import fs from "node:fs";'
         'const specs = JSON.parse(fs.readFileSync(0, "utf-8"));'
-        'for (const s of specs) { videoSpecSchema.parse(s); }'
+        'for (const s of specs) { assertVideoSupported(videoSpecSchema.parse(s)); }'
         'console.log(JSON.stringify({count: specs.length, ids: motionBlockIds}));'
     )
     proc = subprocess.run(

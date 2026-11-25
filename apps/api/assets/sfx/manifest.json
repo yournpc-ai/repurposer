@@ -103,5 +103,972 @@
     "source_provider": "code4fukui",
     "source_url": "https://github.com/code4fukui/sound-cc0/blob/main/steel1.wav",
     "attribution": "code4fukui / sound-cc0"
+  },
+  {
+    "file": "mouse_down.wav",
+    "slug": "foley_mouse_down",
+    "name": "Mouse button contact",
+    "name_zh": "鼠标按下",
+    "domain": "interface",
+    "category": "tap",
+    "subcategory": "mouse_down",
+    "moods": [
+      "tactile"
+    ],
+    "energy": "subtle",
+    "summary": "One isolated contact from a Logitech three-button mouse recorded in stereo with a Zoom H4n.",
+    "use_for": [
+      "磁吸按钮刚压下的一帧"
+    ],
+    "avoid": [],
+    "sync_cue": "energy_peak",
+    "mix_hint": "Align contact to the compressed button, then clear the next beat.",
+    "tags": [
+      "recorded",
+      "mouse",
+      "button",
+      "contact"
+    ],
+    "license": "CC0-1.0",
+    "source_provider": "Freesound / OpenGameArt",
+    "source_url": "https://freesound.org/people/OwlStorm/sounds/320146/",
+    "attribution": "OwlishMedia — Technology/mouse-clicks-scrolls.wav (excerpt 0.526–0.650 s)"
+  },
+  {
+    "file": "cherry_key.wav",
+    "slug": "foley_cherry_key",
+    "name": "Cherry single keystroke",
+    "name_zh": "单键按下回弹",
+    "domain": "interface",
+    "category": "type",
+    "subcategory": "cherry_key",
+    "moods": [
+      "tactile"
+    ],
+    "energy": "subtle",
+    "summary": "One Cherry key press with a separated release.",
+    "use_for": [
+      "输入最后一个字符"
+    ],
+    "avoid": [],
+    "sync_cue": "onset",
+    "mix_hint": "Place the first contact at glyph reveal and keep the release.",
+    "tags": [
+      "recorded",
+      "cherry",
+      "single",
+      "keystroke"
+    ],
+    "license": "CC0-1.0",
+    "source_provider": "OpenGameArt",
+    "source_url": "https://opengameart.org/content/keyboard-soundpack-1-typing-and-single-keystrokes",
+    "attribution": "unicaegames — Single Keys/keypress-001.wav"
+  },
+  {
+    "file": "url_typing.wav",
+    "slug": "foley_url_typing",
+    "name": "Short URL typing",
+    "name_zh": "短网址键入",
+    "domain": "interface",
+    "category": "type",
+    "subcategory": "url_typing",
+    "moods": [
+      "tactile"
+    ],
+    "energy": "subtle",
+    "summary": "A short phrase from a human Cherry KC 1000 typing take.",
+    "use_for": [
+      "地址栏短网址逐字显现"
+    ],
+    "avoid": [],
+    "sync_cue": "onset",
+    "mix_hint": "Start with the first glyph and leave the following pause for submit.",
+    "tags": [
+      "recorded",
+      "short",
+      "url",
+      "typing"
+    ],
+    "license": "CC0-1.0",
+    "source_provider": "OpenGameArt",
+    "source_url": "https://opengameart.org/content/keyboard-soundpack-1-typing-and-single-keystrokes",
+    "attribution": "unicaegames — Human Typing/human_vel-002.wav (excerpt 0.040–1.350 s)"
+  },
+  {
+    "file": "typing_roll.wav",
+    "slug": "foley_typing_roll",
+    "name": "Fast keyboard run",
+    "name_zh": "快速连打",
+    "domain": "interface",
+    "category": "type",
+    "subcategory": "typing_roll",
+    "moods": [
+      "tactile"
+    ],
+    "energy": "medium",
+    "summary": "A sustained human typing run on a Cherry KC 1000.",
+    "use_for": [
+      "多行命令快速补全"
+    ],
+    "avoid": [],
+    "sync_cue": "onset",
+    "mix_hint": "Use across a run of text and stop before the result appears.",
+    "tags": [
+      "recorded",
+      "fast",
+      "keyboard",
+      "run"
+    ],
+    "license": "CC0-1.0",
+    "source_provider": "OpenGameArt",
+    "source_url": "https://opengameart.org/content/keyboard-soundpack-1-typing-and-single-keystrokes",
+    "attribution": "unicaegames — Human Typing/human_vel-010.wav"
+  },
+  {
+    "file": "switch_confirm.wav",
+    "slug": "foley_switch_confirm",
+    "name": "Switch contact",
+    "name_zh": "机械确认触点",
+    "domain": "interface",
+    "category": "toggle",
+    "subcategory": "switch_confirm",
+    "moods": [
+      "tactile"
+    ],
+    "energy": "medium",
+    "summary": "A compact switch contact with a short decay.",
+    "use_for": [
+      "确认键压实后锁定选择"
+    ],
+    "avoid": [],
+    "sync_cue": "energy_peak",
+    "mix_hint": "Put the energy peak on the pressed frame.",
+    "tags": [
+      "recorded",
+      "switch",
+      "contact"
+    ],
+    "license": "CC0-1.0",
+    "source_provider": "OpenGameArt",
+    "source_url": "https://opengameart.org/content/100-cc0-sfx",
+    "attribution": "rubberduck — switch_02.ogg"
+  },
+  {
+    "file": "unplug.wav",
+    "slug": "foley_unplug",
+    "name": "Plug withdrawal",
+    "name_zh": "拔出接头",
+    "domain": "interface",
+    "category": "drag",
+    "subcategory": "unplug",
+    "moods": [
+      "tactile"
+    ],
+    "energy": "subtle",
+    "summary": "A recorded plug pull with a single contact near the front.",
+    "use_for": [
+      "连接线在接口处断开"
+    ],
+    "avoid": [],
+    "sync_cue": "onset",
+    "mix_hint": "Leave the lead-in ahead of separation.",
+    "tags": [
+      "recorded",
+      "plug",
+      "withdrawal"
+    ],
+    "license": "CC0-1.0",
+    "source_provider": "OpenGameArt",
+    "source_url": "https://opengameart.org/node/86682",
+    "attribution": "OwlishMedia — Technology/plugpull.wav"
+  },
+  {
+    "file": "olympus_shutter.wav",
+    "slug": "foley_olympus_shutter",
+    "name": "Olympus E-1 shutter",
+    "name_zh": "相机快门",
+    "domain": "video",
+    "category": "accents",
+    "subcategory": "olympus_shutter",
+    "moods": [
+      "tactile"
+    ],
+    "energy": "medium",
+    "summary": "Two-part shutter edit from an Olympus E-1 recording.",
+    "use_for": [
+      "截图冻结后保留机械回位"
+    ],
+    "avoid": [],
+    "sync_cue": "onset",
+    "mix_hint": "Set the first shutter action at freeze and leave room for the return.",
+    "tags": [
+      "recorded",
+      "olympus",
+      "e-1",
+      "shutter"
+    ],
+    "license": "CC0-1.0",
+    "source_provider": "OpenGameArt",
+    "source_url": "https://opengameart.org/content/camera",
+    "attribution": "themightyglider / original Olympus recording by A Clock in the Kingdom — photo.ogg"
+  },
+  {
+    "file": "latch_seat.wav",
+    "slug": "foley_latch_seat",
+    "name": "Door latch seating",
+    "name_zh": "门扣落锁",
+    "domain": "interface",
+    "category": "select",
+    "subcategory": "latch_seat",
+    "moods": [
+      "tactile"
+    ],
+    "energy": "medium",
+    "summary": "The closing catch isolated from a microwave door recording.",
+    "use_for": [
+      "较沉的机械确认或面板扣合"
+    ],
+    "avoid": [],
+    "sync_cue": "energy_peak",
+    "mix_hint": "Put the latch impact on lock, with room for the casing to settle.",
+    "tags": [
+      "recorded",
+      "door",
+      "latch",
+      "seating"
+    ],
+    "license": "CC0-1.0",
+    "source_provider": "OpenGameArt",
+    "source_url": "https://opengameart.org/content/100-cc0-sfx",
+    "attribution": "rubberduck — microwave_door_close.ogg (excerpt 0.255–0.670 s)"
+  },
+  {
+    "file": "key_unlock.wav",
+    "slug": "foley_key_unlock",
+    "name": "Key unlock",
+    "name_zh": "钥匙开锁",
+    "domain": "interface",
+    "category": "select",
+    "subcategory": "key_unlock",
+    "moods": [
+      "tactile"
+    ],
+    "energy": "subtle",
+    "summary": "Short key operation from a recorded lock opening.",
+    "use_for": [
+      "受限面板解锁展开"
+    ],
+    "avoid": [],
+    "sync_cue": "energy_peak",
+    "mix_hint": "Lead the reveal with the key movement.",
+    "tags": [
+      "recorded",
+      "key",
+      "unlock"
+    ],
+    "license": "CC0-1.0",
+    "source_provider": "OpenGameArt",
+    "source_url": "https://opengameart.org/content/100-cc0-sfx",
+    "attribution": "rubberduck — key_open_01.ogg"
+  },
+  {
+    "file": "box_open.wav",
+    "slug": "foley_box_open",
+    "name": "Wooden box opening",
+    "name_zh": "木盒开启",
+    "domain": "video",
+    "category": "transitions",
+    "subcategory": "box_open",
+    "moods": [
+      "tactile"
+    ],
+    "energy": "medium",
+    "summary": "Two contacts as a wooden box opens.",
+    "use_for": [
+      "详情抽屉开到位"
+    ],
+    "avoid": [],
+    "sync_cue": "onset",
+    "mix_hint": "Let the first movement lead the reveal.",
+    "tags": [
+      "recorded",
+      "wooden",
+      "box",
+      "opening"
+    ],
+    "license": "CC0-1.0",
+    "source_provider": "OpenGameArt",
+    "source_url": "https://opengameart.org/content/100-cc0-sfx",
+    "attribution": "rubberduck — wooded_box_open.ogg"
+  },
+  {
+    "file": "spring_return.wav",
+    "slug": "foley_spring_return",
+    "name": "Spring return",
+    "name_zh": "弹簧回位",
+    "domain": "interface",
+    "category": "motion",
+    "subcategory": "spring_return",
+    "moods": [
+      "tactile"
+    ],
+    "energy": "medium",
+    "summary": "Spring contact followed by a vibrating tail.",
+    "use_for": [
+      "滑块越过终点后回弹"
+    ],
+    "avoid": [],
+    "sync_cue": "energy_peak",
+    "mix_hint": "Leave space after the stop for the spring.",
+    "tags": [
+      "recorded",
+      "spring",
+      "return"
+    ],
+    "license": "CC0-1.0",
+    "source_provider": "OpenGameArt",
+    "source_url": "https://opengameart.org/content/100-cc0-sfx",
+    "attribution": "rubberduck — spring_01.ogg"
+  },
+  {
+    "file": "rail_scrape.wav",
+    "slug": "foley_rail_scrape",
+    "name": "Short scrape",
+    "name_zh": "短程刮擦",
+    "domain": "interface",
+    "category": "drag",
+    "subcategory": "rail_scrape",
+    "moods": [
+      "tactile"
+    ],
+    "energy": "subtle",
+    "summary": "A short scraping motion from a recorded impact set.",
+    "use_for": [
+      "横移卡片带少量摩擦"
+    ],
+    "avoid": [],
+    "sync_cue": "onset",
+    "mix_hint": "Run beneath travel and end at the stop.",
+    "tags": [
+      "recorded",
+      "short",
+      "scrape"
+    ],
+    "license": "CC0-1.0",
+    "source_provider": "OpenGameArt",
+    "source_url": "https://opengameart.org/node/86682",
+    "attribution": "OwlishMedia — Impacts/scrape1.wav"
+  },
+  {
+    "file": "page_turn.wav",
+    "slug": "foley_page_turn",
+    "name": "Single page turn",
+    "name_zh": "单页翻转",
+    "domain": "video",
+    "category": "transitions",
+    "subcategory": "page_turn",
+    "moods": [
+      "tactile"
+    ],
+    "energy": "subtle",
+    "summary": "One short page turn with a settling edge.",
+    "use_for": [
+      "研究报告翻到下一页"
+    ],
+    "avoid": [],
+    "sync_cue": "onset",
+    "mix_hint": "Start on lift and finish as the new page lies flat.",
+    "tags": [
+      "recorded",
+      "single",
+      "page",
+      "turn"
+    ],
+    "license": "CC0-1.0",
+    "source_provider": "OpenGameArt",
+    "source_url": "https://opengameart.org/node/86682",
+    "attribution": "OwlishMedia — Paper/pageturn1.wav"
+  },
+  {
+    "file": "sketch_leaf.wav",
+    "slug": "foley_sketch_leaf",
+    "name": "Sketchbook leaf",
+    "name_zh": "速写本翻页",
+    "domain": "video",
+    "category": "transitions",
+    "subcategory": "sketch_leaf",
+    "moods": [
+      "tactile"
+    ],
+    "energy": "medium",
+    "summary": "One leaf movement taken from a sketchbook page-flip session.",
+    "use_for": [
+      "作品集换幅"
+    ],
+    "avoid": [],
+    "sync_cue": "onset",
+    "mix_hint": "Let the leaf move before the image changes.",
+    "tags": [
+      "recorded",
+      "sketchbook",
+      "leaf"
+    ],
+    "license": "CC0-1.0",
+    "source_provider": "OpenGameArt",
+    "source_url": "https://opengameart.org/node/86682",
+    "attribution": "OwlishMedia — Paper/paper-sketchbook-page-flips-1.wav (excerpt 6.820–7.830 s)"
+  },
+  {
+    "file": "paper_crumple.wav",
+    "slug": "foley_paper_crumple",
+    "name": "Paper crumple",
+    "name_zh": "揉纸",
+    "domain": "video",
+    "category": "transitions",
+    "subcategory": "paper_crumple",
+    "moods": [
+      "tactile"
+    ],
+    "energy": "subtle",
+    "summary": "A sustained crumpling gesture.",
+    "use_for": [
+      "废弃草稿收成一团"
+    ],
+    "avoid": [],
+    "sync_cue": "onset",
+    "mix_hint": "Start as the card folds and keep the final rustle.",
+    "tags": [
+      "recorded",
+      "paper",
+      "crumple"
+    ],
+    "license": "CC0-1.0",
+    "source_provider": "OpenGameArt",
+    "source_url": "https://opengameart.org/node/86682",
+    "attribution": "OwlishMedia — Paper/crumples1.wav"
+  },
+  {
+    "file": "pencil_mark.wav",
+    "slug": "foley_pencil_mark",
+    "name": "Pencil mark",
+    "name_zh": "铅笔划记",
+    "domain": "video",
+    "category": "accents",
+    "subcategory": "pencil_mark",
+    "moods": [
+      "tactile"
+    ],
+    "energy": "subtle",
+    "summary": "A cluster of short pencil strokes.",
+    "use_for": [
+      "手绘批注下划线"
+    ],
+    "avoid": [],
+    "sync_cue": "energy_peak",
+    "mix_hint": "Run the scratch under the drawing motion.",
+    "tags": [
+      "recorded",
+      "pencil",
+      "mark"
+    ],
+    "license": "CC0-1.0",
+    "source_provider": "OpenGameArt",
+    "source_url": "https://opengameart.org/node/86682",
+    "attribution": "OwlishMedia — Paper/pencil-scratch-1.wav (excerpt 1.570–2.200 s)"
+  },
+  {
+    "file": "sheet_pull.wav",
+    "slug": "foley_sheet_pull",
+    "name": "Tissue pull",
+    "name_zh": "抽取薄纸",
+    "domain": "interface",
+    "category": "drag",
+    "subcategory": "sheet_pull",
+    "moods": [
+      "tactile"
+    ],
+    "energy": "subtle",
+    "summary": "A pull from a tissue recording with a longer rustling release.",
+    "use_for": [
+      "薄卡从叠层抽出"
+    ],
+    "avoid": [],
+    "sync_cue": "onset",
+    "mix_hint": "Let movement start before the card clears the stack.",
+    "tags": [
+      "recorded",
+      "tissue",
+      "pull"
+    ],
+    "license": "CC0-1.0",
+    "source_provider": "OpenGameArt",
+    "source_url": "https://opengameart.org/node/86682",
+    "attribution": "OwlishMedia — Paper/tissue-pull.wav (excerpt 0.510–1.900 s)"
+  },
+  {
+    "file": "surface_tap.wav",
+    "slug": "foley_surface_tap",
+    "name": "Surface tap",
+    "name_zh": "台面轻敲",
+    "domain": "interface",
+    "category": "tap",
+    "subcategory": "surface_tap",
+    "moods": [
+      "tactile"
+    ],
+    "energy": "subtle",
+    "summary": "A single tap from a recorded impact set.",
+    "use_for": [
+      "数字落位时轻点一下"
+    ],
+    "avoid": [],
+    "sync_cue": "energy_peak",
+    "mix_hint": "Align the sharp contact to the number landing.",
+    "tags": [
+      "recorded",
+      "surface",
+      "tap"
+    ],
+    "license": "CC0-1.0",
+    "source_provider": "OpenGameArt",
+    "source_url": "https://opengameart.org/node/86682",
+    "attribution": "OwlishMedia — Impacts/tap.wav (excerpt 0.130–0.520 s)"
+  },
+  {
+    "file": "finger_snap.wav",
+    "slug": "foley_finger_snap",
+    "name": "Finger snap",
+    "name_zh": "响指",
+    "domain": "video",
+    "category": "accents",
+    "subcategory": "finger_snap",
+    "moods": [
+      "tactile"
+    ],
+    "energy": "medium",
+    "summary": "One finger snap with a brief release.",
+    "use_for": [
+      "人物段落切到标题"
+    ],
+    "avoid": [],
+    "sync_cue": "energy_peak",
+    "mix_hint": "Place the snap on the cut.",
+    "tags": [
+      "recorded",
+      "finger",
+      "snap"
+    ],
+    "license": "CC0-1.0",
+    "source_provider": "OpenGameArt",
+    "source_url": "https://opengameart.org/node/86682",
+    "attribution": "OwlishMedia — Human/click-finger-snap.wav"
+  },
+  {
+    "file": "zip_pull.wav",
+    "slug": "foley_zip_pull",
+    "name": "Bag zipper",
+    "name_zh": "拉链滑动",
+    "domain": "video",
+    "category": "transitions",
+    "subcategory": "zip_pull",
+    "moods": [
+      "tactile"
+    ],
+    "energy": "subtle",
+    "summary": "One short pull of a bag zipper.",
+    "use_for": [
+      "拉开遮罩揭示下一层"
+    ],
+    "avoid": [],
+    "sync_cue": "onset",
+    "mix_hint": "Use the travel as the wipe.",
+    "tags": [
+      "recorded",
+      "bag",
+      "zipper"
+    ],
+    "license": "CC0-1.0",
+    "source_provider": "OpenGameArt",
+    "source_url": "https://opengameart.org/node/86682",
+    "attribution": "OwlishMedia — Cloth, Rustle/212180__owlstorm__bag-zipper.wav (excerpt 1.680–2.410 s)"
+  },
+  {
+    "file": "djembe_hit.wav",
+    "slug": "foley_djembe_hit",
+    "name": "Djembe strike",
+    "name_zh": "非洲鼓单击",
+    "domain": "video",
+    "category": "impacts",
+    "subcategory": "djembe_hit",
+    "moods": [
+      "tactile"
+    ],
+    "energy": "medium",
+    "summary": "One recorded djembe hit with a short decay.",
+    "use_for": [
+      "开场标题第一拍"
+    ],
+    "avoid": [],
+    "sync_cue": "energy_peak",
+    "mix_hint": "Start the drum on the title landing.",
+    "tags": [
+      "recorded",
+      "djembe",
+      "strike"
+    ],
+    "license": "CC0-1.0",
+    "source_provider": "OpenGameArt",
+    "source_url": "https://opengameart.org/node/86682",
+    "attribution": "OwlishMedia — Impacts/djembe1.wav"
+  },
+  {
+    "file": "gong_ring.wav",
+    "slug": "foley_gong_ring",
+    "name": "Gong accent",
+    "name_zh": "锣声延音",
+    "domain": "video",
+    "category": "stingers",
+    "subcategory": "gong_ring",
+    "moods": [
+      "tactile"
+    ],
+    "energy": "high",
+    "summary": "A struck gong sound with a ringing tail.",
+    "use_for": [
+      "片尾标志定格"
+    ],
+    "avoid": [],
+    "sync_cue": "energy_peak",
+    "mix_hint": "Leave room for the ring after the logo lands.",
+    "tags": [
+      "recorded",
+      "gong",
+      "accent"
+    ],
+    "license": "CC0-1.0",
+    "source_provider": "OpenGameArt",
+    "source_url": "https://opengameart.org/content/100-cc0-sfx",
+    "attribution": "rubberduck — gong_01.ogg"
+  },
+  {
+    "file": "glass_tick.wav",
+    "slug": "foley_glass_tick",
+    "name": "Glass contact",
+    "name_zh": "玻璃触碰",
+    "domain": "video",
+    "category": "accents",
+    "subcategory": "glass_tick",
+    "moods": [
+      "tactile"
+    ],
+    "energy": "subtle",
+    "summary": "A compact glass contact.",
+    "use_for": [
+      "透明卡片堆叠到位"
+    ],
+    "avoid": [],
+    "sync_cue": "energy_peak",
+    "mix_hint": "Put the contact on the upper card landing.",
+    "tags": [
+      "recorded",
+      "glass",
+      "contact"
+    ],
+    "license": "CC0-1.0",
+    "source_provider": "OpenGameArt",
+    "source_url": "https://opengameart.org/content/100-cc0-sfx",
+    "attribution": "rubberduck — glass_01.ogg"
+  },
+  {
+    "file": "small_bell.wav",
+    "slug": "foley_small_bell",
+    "name": "Bell strike",
+    "name_zh": "小铃单击",
+    "domain": "interface",
+    "category": "notify",
+    "subcategory": "small_bell",
+    "moods": [
+      "tactile"
+    ],
+    "energy": "medium",
+    "summary": "A bell strike followed by decay.",
+    "use_for": [
+      "消息计数首次出现"
+    ],
+    "avoid": [],
+    "sync_cue": "energy_peak",
+    "mix_hint": "Keep the tail clear of the next alert.",
+    "tags": [
+      "recorded",
+      "bell",
+      "strike"
+    ],
+    "license": "CC0-1.0",
+    "source_provider": "OpenGameArt",
+    "source_url": "https://opengameart.org/content/100-cc0-sfx",
+    "attribution": "rubberduck — bell_01.ogg"
+  },
+  {
+    "file": "slam_stop.wav",
+    "slug": "foley_slam_stop",
+    "name": "Closing slam",
+    "name_zh": "关合重击",
+    "domain": "video",
+    "category": "impacts",
+    "subcategory": "slam_stop",
+    "moods": [
+      "tactile"
+    ],
+    "energy": "high",
+    "summary": "One recorded slam with a short impact body.",
+    "use_for": [
+      "整屏切黑或重章节切点"
+    ],
+    "avoid": [],
+    "sync_cue": "energy_peak",
+    "mix_hint": "Use once on the hard cut.",
+    "tags": [
+      "recorded",
+      "closing",
+      "slam"
+    ],
+    "license": "CC0-1.0",
+    "source_provider": "OpenGameArt",
+    "source_url": "https://opengameart.org/content/100-cc0-sfx",
+    "attribution": "rubberduck — slam_01.ogg"
+  },
+  {
+    "file": "door_close.wav",
+    "slug": "foley_door_close",
+    "name": "Door closing",
+    "name_zh": "关门落位",
+    "domain": "video",
+    "category": "impacts",
+    "subcategory": "door_close",
+    "moods": [
+      "tactile"
+    ],
+    "energy": "medium",
+    "summary": "Closing-door contact and decay.",
+    "use_for": [
+      "大面板合拢"
+    ],
+    "avoid": [],
+    "sync_cue": "energy_peak",
+    "mix_hint": "Match the close to the panel meeting the frame.",
+    "tags": [
+      "recorded",
+      "door",
+      "closing"
+    ],
+    "license": "CC0-1.0",
+    "source_provider": "OpenGameArt",
+    "source_url": "https://opengameart.org/content/100-cc0-sfx",
+    "attribution": "rubberduck — door_close_01.ogg"
+  },
+  {
+    "file": "phone_buzz.wav",
+    "slug": "foley_phone_buzz",
+    "name": "Phone vibration",
+    "name_zh": "手机振动",
+    "domain": "interface",
+    "category": "message",
+    "subcategory": "phone_buzz",
+    "moods": [
+      "tactile"
+    ],
+    "energy": "medium",
+    "summary": "One vibration cycle taken from a phone recording.",
+    "use_for": [
+      "通知卡片入场"
+    ],
+    "avoid": [],
+    "sync_cue": "energy_peak",
+    "mix_hint": "Start on the alert and end before a second pulse.",
+    "tags": [
+      "recorded",
+      "phone",
+      "vibration"
+    ],
+    "license": "CC0-1.0",
+    "source_provider": "OpenGameArt",
+    "source_url": "https://opengameart.org/node/86682",
+    "attribution": "OwlishMedia — Technology/Phone_vibrate.wav (excerpt 0.460–1.910 s)"
+  },
+  {
+    "file": "clock_room.wav",
+    "slug": "foley_clock_room",
+    "name": "Clock ticking",
+    "name_zh": "室内时钟走秒",
+    "domain": "video",
+    "category": "ambience",
+    "subcategory": "clock_room",
+    "moods": [
+      "steady"
+    ],
+    "energy": "subtle",
+    "summary": "Four evenly spaced wall-clock ticks in a loopable stereo take.",
+    "use_for": [
+      "安静开场的等待段"
+    ],
+    "avoid": [],
+    "sync_cue": "onset",
+    "mix_hint": "Lay under a hold at its recorded cadence.",
+    "tags": [
+      "recorded",
+      "clock",
+      "ticking"
+    ],
+    "license": "CC0-1.0",
+    "source_provider": "Freesound / OpenGameArt",
+    "source_url": "https://freesound.org/people/OwlStorm/sounds/212181/",
+    "attribution": "OwlishMedia — Ambience/loopable-ticking-clock.wav"
+  },
+  {
+    "file": "machine_cycle.wav",
+    "slug": "foley_machine_cycle",
+    "name": "Machine cycle",
+    "name_zh": "设备循环运转",
+    "domain": "video",
+    "category": "ambience",
+    "subcategory": "machine_cycle",
+    "moods": [
+      "steady"
+    ],
+    "energy": "medium",
+    "summary": "A short machine loop from the recorder’s machine set.",
+    "use_for": [
+      "设备工作状态特写"
+    ],
+    "avoid": [],
+    "sync_cue": "onset",
+    "mix_hint": "Keep beneath foreground contacts.",
+    "tags": [
+      "recorded",
+      "machine",
+      "cycle"
+    ],
+    "license": "CC0-1.0",
+    "source_provider": "OpenGameArt",
+    "source_url": "https://opengameart.org/content/100-cc0-sfx",
+    "attribution": "rubberduck — machine_01.ogg"
+  },
+  {
+    "file": "turntable_bed.wav",
+    "slug": "foley_turntable_bed",
+    "name": "Record player loop",
+    "name_zh": "唱机运行底纹",
+    "domain": "video",
+    "category": "ambience",
+    "subcategory": "turntable_bed",
+    "moods": [
+      "steady"
+    ],
+    "energy": "subtle",
+    "summary": "Loopable vinyl crackle recorded from a turntable.",
+    "use_for": [
+      "模拟介质或唱机细节"
+    ],
+    "avoid": [],
+    "sync_cue": "onset",
+    "mix_hint": "Fade under the reveal.",
+    "tags": [
+      "recorded",
+      "record",
+      "player",
+      "loop"
+    ],
+    "license": "CC0-1.0",
+    "source_provider": "Freesound / OpenGameArt",
+    "source_url": "https://freesound.org/people/OwlStorm/sounds/371583/",
+    "attribution": "OwlishMedia — Technology/record_player_loop.wav"
+  },
+  {
+    "file": "pot_knock.wav",
+    "slug": "foley_pot_knock",
+    "name": "Pot strike",
+    "name_zh": "锅体敲击",
+    "domain": "video",
+    "category": "impacts",
+    "subcategory": "pot_knock",
+    "moods": [
+      "tactile"
+    ],
+    "energy": "medium",
+    "summary": "A pot strike from a household recording session.",
+    "use_for": [
+      "金属外壳装配落位"
+    ],
+    "avoid": [],
+    "sync_cue": "energy_peak",
+    "mix_hint": "Keep the body of the strike after contact.",
+    "tags": [
+      "recorded",
+      "pot",
+      "strike"
+    ],
+    "license": "CC0-1.0",
+    "source_provider": "OpenGameArt",
+    "source_url": "https://opengameart.org/content/100-cc0-sfx",
+    "attribution": "rubberduck — pot_01.ogg"
+  },
+  {
+    "file": "bottle_rattle.wav",
+    "slug": "foley_bottle_rattle",
+    "name": "Pill bottle movement",
+    "name_zh": "小瓶晃动",
+    "domain": "video",
+    "category": "accents",
+    "subcategory": "bottle_rattle",
+    "moods": [
+      "tactile"
+    ],
+    "energy": "medium",
+    "summary": "A brief movement from a pill-bottle recording.",
+    "use_for": [
+      "小物件成组滑入"
+    ],
+    "avoid": [],
+    "sync_cue": "energy_peak",
+    "mix_hint": "Place the movement before the group settles.",
+    "tags": [
+      "recorded",
+      "pill",
+      "bottle",
+      "movement"
+    ],
+    "license": "CC0-1.0",
+    "source_provider": "OpenGameArt",
+    "source_url": "https://opengameart.org/node/86682",
+    "attribution": "OwlishMedia — Misc Foley/pill-bottle.wav (excerpt 0.370–0.940 s)"
+  },
+  {
+    "file": "wood_knock.wav",
+    "slug": "foley_wood_knock",
+    "name": "Wood contact",
+    "name_zh": "木质敲击",
+    "domain": "video",
+    "category": "impacts",
+    "subcategory": "wood_knock",
+    "moods": [
+      "tactile"
+    ],
+    "energy": "medium",
+    "summary": "Short wooden contact from a recorded wood set.",
+    "use_for": [
+      "实体卡片落到木面"
+    ],
+    "avoid": [],
+    "sync_cue": "energy_peak",
+    "mix_hint": "Set the strongest contact on the card landing.",
+    "tags": [
+      "recorded",
+      "wood",
+      "contact"
+    ],
+    "license": "CC0-1.0",
+    "source_provider": "OpenGameArt",
+    "source_url": "https://opengameart.org/content/100-cc0-sfx",
+    "attribution": "rubberduck — wooden_01.ogg"
   }
 ]

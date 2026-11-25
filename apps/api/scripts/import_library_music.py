@@ -1,6 +1,6 @@
-"""Import the curated local Mixkit objects without generation or DB access.
+"""Import selected local music objects without generation or DB access.
 
-The required argument is Shotcraft's ``assets/audio/bgm`` directory. Each MP3 is
+The positional argument is the source directory. Each MP3 is
 decoded with PyAV, hashed and uploaded under the deterministic music object key.
 Startup reconcile creates the corresponding ``Music`` rows.
 
@@ -9,6 +9,7 @@ a mismatch is an error and is never overwritten.
 
 Usage (from apps/api/):
     uv run python scripts/import_library_music.py /path/to/assets/audio/bgm
+    uv run python scripts/import_library_music.py assets/music --mood pocket-proof relay-glass open-window contact-sheet-101-a
 """
 
 import argparse
@@ -23,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from app.pipeline.music import (  # noqa: E402
     AUDIO_EXT,
     CURATED_MUSIC_CATALOG,
+    SHOTCRAFT_MUSIC_CATALOG,
     CuratedMusicAudio,
     CuratedMusicEntry,
     default_music_id,
@@ -72,13 +74,16 @@ async def _import_one(bgm_dir: Path, entry: CuratedMusicEntry) -> bool:
     return True
 
 
-async def _main(bgm_dir: Path) -> int:
+async def _main(bgm_dir: Path, moods: list[str] | None = None) -> int:
     if not bgm_dir.is_dir():
         print(f"Source BGM directory does not exist: {bgm_dir}", file=sys.stderr)
         return 1
 
     written = 0
-    for entry in CURATED_MUSIC_CATALOG:
+    entries = SHOTCRAFT_MUSIC_CATALOG if moods is None else [
+        entry for entry in CURATED_MUSIC_CATALOG if entry["mood"] in moods
+    ]
+    for entry in entries:
         try:
             if await _import_one(bgm_dir, entry):
                 written += 1
@@ -92,15 +97,21 @@ async def _main(bgm_dir: Path) -> int:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Import the five curated local Mixkit tracks without generation."
+        description="Import selected curated local tracks without generation."
     )
     parser.add_argument(
         "bgm_dir",
         type=Path,
-        help="Shotcraft assets/audio/bgm directory containing the five curated MP3s.",
+        help="Directory containing the selected MP3 files.",
+    )
+    parser.add_argument(
+        "--mood",
+        nargs="+",
+        choices=[entry["mood"] for entry in CURATED_MUSIC_CATALOG],
+        help="Import only these catalog moods. Defaults to the original five Shotcraft tracks.",
     )
     args = parser.parse_args()
-    raise SystemExit(asyncio.run(_main(args.bgm_dir)))
+    raise SystemExit(asyncio.run(_main(args.bgm_dir, args.mood)))
 
 
 if __name__ == "__main__":

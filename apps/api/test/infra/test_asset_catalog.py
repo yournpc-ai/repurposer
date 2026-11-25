@@ -151,3 +151,20 @@ async def test_ensure_builtin_catalog_backfills_sounds_when_visual_catalog_exist
         assert len(sounds) == 80
         assert sounds["dsp_click"] == "interface"
         assert sounds["dsp_tension_radar"] == "video"
+
+
+async def test_selective_music_import_reconciles_searchable_recording(database, monkeypatch, tmp_path):
+    from app.pipeline.music import search_music_library, seed_default_music
+    from scripts.import_library_music import _main
+
+    monkeypatch.setattr(settings, "s3_endpoint_url", f"local://{tmp_path}")
+    music_dir = Path(__file__).resolve().parents[2] / "assets/music"
+    assert await _main(music_dir, ["pocket-proof"]) == 0
+    assert await _main(music_dir, ["pocket-proof"]) == 0
+    async with database() as db:
+        created = await seed_default_music(db)
+        assert [row.mood for row in created] == ["pocket-proof"]
+        track, = await search_music_library(db, genre="funk", bpm=101, query="Pocket Proof")
+        assert track.id == created[0].id
+        assert (tmp_path / track.file_path).read_bytes() == (music_dir / "pocket-proof.mp3").read_bytes()
+        assert track.meta["origin"] == "estimated" and track.meta["beats"]
