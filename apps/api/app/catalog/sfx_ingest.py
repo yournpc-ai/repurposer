@@ -11,10 +11,7 @@ import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
 
-from app.catalog.search import Energy
-from app.catalog.sync import search_document
-from app.models.tables import SoundEffect
-from app.providers import storage
+from app.catalog import Energy
 
 RATE = 48000
 
@@ -109,7 +106,16 @@ def analyze_audio(data: bytes):
     window = min(len(power), RATE // 100)
     cumulative = np.concatenate(([0.0], np.cumsum(power)))
     peak = int(np.argmax(cumulative[window:] - cumulative[:-window])) + window // 2
+    amplitude = np.abs(pcm).max(axis=0)
+    max_abs = float(amplitude.max())
+    waveform_peaks: list[float] = []
+    for bar in range(32):
+        start = bar * len(amplitude) // 32
+        end = max(start + 1, (bar + 1) * len(amplitude) // 32)
+        normalized = float(amplitude[start:end].max()) / max_abs if max_abs > 1e-6 else 0.0
+        waveform_peaks.append(int(normalized * 1000 + 0.5) / 1000)
     return dict(
+        waveform_peaks=waveform_peaks,
         duration_ms=max(1, round(len(power) * 1000 / RATE)),
         peak_offset_ms=round(peak * 1000 / RATE),
         lufs=_integrated_loudness(pcm, layout),
@@ -117,13 +123,21 @@ def analyze_audio(data: bytes):
     )
 
 
-async def ingest_recording(db, entry: Recording, directory: Path, *, owner_id=None):
+def read_recording(entry: Recording, directory: Path) -> tuple[str, bytes]:
     path = (directory / entry.file).resolve()
     path.relative_to(directory.resolve())
     ext = path.suffix.lower().lstrip(".")
     if ext not in {"wav", "mp3"}:
         raise ValueError("Expected a WAV or MP3 file")
-    data = path.read_bytes()
+    return ext, path.read_bytes()
+
+
+async def ingest_recording(db, entry: Recording, directory: Path, *, owner_id=None):
+    from app.catalog.sync import search_document
+    from app.models.tables import SoundEffect
+    from app.providers import storage
+
+    ext, data = read_recording(entry, directory)
     facts = analyze_audio(data)
     await db.execute(
         select(func.pg_advisory_xact_lock(func.hashtextextended("sfx/" + entry.slug, 0)))

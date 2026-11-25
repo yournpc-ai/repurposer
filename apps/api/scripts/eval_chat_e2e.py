@@ -10,6 +10,7 @@ writes ``eval_scorecard.json`` + ``EVAL_REPORT.md``.
 
 Usage:
     cd apps/api && uv run python scripts/eval_chat_e2e.py --list-scenarios
+    cd apps/api && uv run python scripts/eval_chat_e2e.py --scenario rookie_flagship_launch --assets-dir ./screenshots
     cd apps/api && uv run python scripts/eval_chat_e2e.py --scenario motion_block_promo --out-dir ../../scratch/eval-run
 """
 
@@ -18,14 +19,13 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
-import os
 import re
 import sys
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import UUID
 
 API_ROOT = Path(__file__).resolve().parents[1]
 if str(API_ROOT) not in sys.path:
@@ -61,6 +61,18 @@ class EvalScenario:
 
 
 SCENARIOS: dict[str, EvalScenario] = {
+    "rookie_flagship_launch": EvalScenario(
+        name="rookie_flagship_launch",
+        title="Rookie flagship product launch from real screenshots",
+        turns=(
+            "Rookie，用我上传的真实产品截图剪一条 25–30 秒、16:9 的旗舰发布片。"
+            "全程零旁白，用强鼓点器乐推进，把操作音效的峰值贴到重拍和关键切点，最后定格产品名。",
+            "把这版保存成可复用的发布片模板，让我下次可以按编号替换截图和文案。",
+            "预览确认这版后，请导出 1080p MP4 成片。",
+        ),
+        expected_tools=("load_skill", "create_video", "save_composition_as_skill", "export_video"),
+        max_iterations_per_turn=20,
+    ),
     "motion_block_promo": EvalScenario(
         name="motion_block_promo",
         title="Direct Motion-Block Promo Creation & Style Refinement",
@@ -325,6 +337,7 @@ def probe_mp4_audiovisual(
     *,
     frame_out_dir: Path | None = None,
     sample_fractions: tuple[float, ...] = (0.15, 0.5, 0.85),
+    sample_seconds: tuple[float, ...] | None = None,
     expect_hd_1080p: bool = True,
     expect_audio: bool = True,
 ) -> MediaProbeReport:
@@ -359,7 +372,9 @@ def probe_mp4_audiovisual(
             report.video_codec = vs.codec_context.name
             if vs.average_rate:
                 report.fps = round(float(vs.average_rate), 3)
-            if container.duration:
+            if vs.duration is not None:
+                report.duration_seconds = round(float(vs.duration * vs.time_base), 3)
+            elif container.duration:
                 report.duration_seconds = round(float(container.duration) / av.time_base, 3)
 
             if a_streams:
@@ -368,28 +383,28 @@ def probe_mp4_audiovisual(
                 report.audio_sample_rate = int(aus.rate) if aus.rate else None
 
             # Decode video frames and pick mid-act samples
-            all_frames = list(container.decode(video=0))
-            if all_frames:
-                indices = sorted(
-                    {
-                        min(len(all_frames) - 1, max(0, int(len(all_frames) * frac)))
-                        for frac in sample_fractions
-                    }
-                )
-                report.sampled_frames = len(indices)
+            # Stream frames so a full-length 1080p cut does not fill memory.
+            if sample_seconds is None:
+                duration = report.duration_seconds or float(vs.duration * vs.time_base)
+                sample_seconds = tuple(duration * frac for frac in sample_fractions)
+            targets = iter(sorted(sample_seconds))
+            target = next(targets, None)
+            if frame_out_dir is not None:
+                frame_out_dir.mkdir(parents=True, exist_ok=True)
+            for frame_idx, frame in enumerate(container.decode(video=0)):
+                if target is None:
+                    break
+                if frame.time is None or frame.time < target:
+                    continue
+                rgb = frame.to_ndarray(format="rgb24")
+                report.sampled_frames += 1
+                if float(rgb.mean()) > 4.0 or float(rgb.std()) > 4.0:
+                    report.non_black_frames += 1
                 if frame_out_dir is not None:
-                    frame_out_dir.mkdir(parents=True, exist_ok=True)
-                for idx_num, frame_idx in enumerate(indices):
-                    frame = all_frames[frame_idx]
-                    rgb = frame.to_ndarray(format="rgb24")
-                    mean_luma = float(rgb.mean())
-                    std_luma = float(rgb.std())
-                    if mean_luma > 4.0 or std_luma > 4.0:
-                        report.non_black_frames += 1
-                    if frame_out_dir is not None:
-                        png_path = frame_out_dir / f"act_sample_{idx_num + 1:02d}_f{frame_idx:04d}.png"
-                        frame.to_image().save(png_path)
-                        report.extracted_pngs.append(str(png_path))
+                    png_path = frame_out_dir / f"act_sample_{report.sampled_frames:02d}_f{frame_idx:04d}.png"
+                    frame.to_image().save(png_path)
+                    report.extracted_pngs.append(str(png_path))
+                target = next(targets, None)
 
             # Decode audio for RMS / peak checks
             if a_streams:
@@ -418,7 +433,7 @@ def probe_mp4_audiovisual(
         "readable_mp4": True,
         "video_codec_h264": report.video_codec == "h264",
         "positive_duration": (report.duration_seconds or 0.0) > 0.5,
-        "non_black_visuals": report.sampled_frames > 0 and report.non_black_frames == report.sampled_frames,
+        "non_black_visuals": bool(sample_seconds) and report.non_black_frames == len(sample_seconds),
     }
     if expect_hd_1080p:
         dims = sorted([report.width or 0, report.height or 0])
@@ -470,177 +485,133 @@ def render_eval_report(scorecard: dict[str, Any]) -> str:
                 f"- **Audio**: `{media.get('audio_codec')}` {media.get('audio_sample_rate')} Hz (RMS {media.get('audio_rms_dbfs')} dBFS, Peak {media.get('audio_peak_dbfs')} dBFS)",
                 f"- **Frames Non-Black**: {media.get('non_black_frames')}/{media.get('sampled_frames')}",
                 f"- **Media Status**: {'PASS' if media.get('passed') else 'FAIL'}",
+                *(f"- {name} — {'PASS' if passed else 'FAIL'}" for name, passed in media.get("checks", {}).items()),
             ]
         )
+    if checks := scorecard.get("overall_checks"):
+        lines.extend(["", "## Checks", ""])
+        lines.extend(f"- {key} — {'PASS' if passed else 'FAIL'}" for key, passed in checks.items())
+    if evidence := scorecard.get("flagship_evidence"):
+        lines.extend(["", "## Flagship evidence", "",
+                      f"- Exported version `{evidence['version_id']}`",
+                      f"- Slot preview HTTP {evidence['slot_preview_status']} · {' '.join(evidence['slot_codes'])}"])
+        for path in (media or {}).get("extracted_pngs", []):
+            lines.append(f"- [{Path(path).name}]({Path('frames', Path(path).name).as_posix()})")
     lines.append("")
     return "\n".join(lines)
 
 
-async def _run_live_scenario(scenario: EvalScenario, out_dir: Path, keep_db: bool = False) -> dict[str, Any]:
-    import httpx
-    from alembic import command as alembic_command
-    from alembic.config import Config as AlembicConfig
-    from dotenv import dotenv_values
-    from sqlalchemy import text
-    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+async def _run_live_scenario(scenario: EvalScenario, out_dir: Path, keep_db: bool = False,
+                             image_paths: tuple[Path, ...] = ()) -> dict[str, Any]:
+    from sqlalchemy import select
+    from scripts.eval_chat_runtime import live_project
+    from scripts.eval_flagship import inspect_delivery, upload_screens
 
-    # Load repo .env safely (handles unquoted angle brackets)
-    env_file = API_ROOT.parents[1] / ".env"
-    if env_file.exists():
-        for k, v in dotenv_values(env_file).items():
-            if v is not None:
-                os.environ.setdefault(k, v)
-
-    from app.config import settings
-    from app.dependencies import get_current_user_required, get_db
-    from app.main import app
-    from app.models import database as database_module
-    from app.models.tables import Project, User, Wallet
-
-    out_dir.mkdir(parents=True, exist_ok=True)
-    storage_dir = out_dir / "local_storage"
-    storage_dir.mkdir(parents=True, exist_ok=True)
-
-    # Create disposable PostgreSQL DB and run real Alembic migrations
-    db_name = f"rep_eval_{uuid4().hex[:10]}"
-    server = settings.database_url.rsplit("/", 1)[0]
-    admin = create_async_engine(f"{server}/postgres", isolation_level="AUTOCOMMIT")
-    async with admin.connect() as conn:
-        await conn.execute(text(f'CREATE DATABASE "{db_name}"'))
-
-    old_db_url = settings.database_url
-    old_storage_backend = getattr(settings, "storage_backend", None)
-    old_local_root = getattr(settings, "local_storage_root", None)
-    settings.database_url = f"{server}/{db_name}"
-    if hasattr(settings, "storage_backend"):
-        settings.storage_backend = "local"
-    if hasattr(settings, "local_storage_root"):
-        settings.local_storage_root = str(storage_dir)
-
-    alembic_cfg = AlembicConfig(str(API_ROOT / "alembic.ini"))
-    alembic_command.upgrade(alembic_cfg, "head")
-
-    engine = create_async_engine(settings.database_url)
-    session_factory = async_sessionmaker(engine, expire_on_commit=False)
-    rebind_targets = (
-        "app.models.database",
-        "app.chat.editor",
-        "app.chat.editor_media",
-        "app.chat.conversation_context",
-        "app.tools.project_context",
-        "app.tools.video.design",
-        "app.tools.video.brand",
-        "app.tools.video.music_preparation",
-        "app.tools.video.sfx_synthesis",
-        "app.tools.video.visual_assets",
-        "app.tools.world",
-    )
-    saved_sessions: list[tuple[Any, Any]] = []
-    for mod_name in rebind_targets:
-        mod = __import__(mod_name, fromlist=["AsyncSessionLocal"])
-        if hasattr(mod, "AsyncSessionLocal"):
-            saved_sessions.append((mod, mod.AsyncSessionLocal))
-            mod.AsyncSessionLocal = session_factory
-
+    out_dir = out_dir.resolve()
+    flagship = scenario.name == "rookie_flagship_launch"
+    exchanges = []
+    media = None
+    evidence = {}
+    delivery_checks = {}
     t_start = time.perf_counter()
     turn_scores: list[TurnScore] = []
     feedback_verified = False
     workbench_snapshot: dict[str, Any] | None = None
 
-    try:
-        async with session_factory() as db:
-            user = User(email=f"eval-{uuid4().hex[:8]}@rookiecut.local", name="Eval Harness")
-            db.add(user)
-            await db.flush()
-            db.add(Wallet(user_id=user.id, balance=5000))
-            project = Project(user_id=user.id, title=f"Eval: {scenario.name}", language="zh")
-            db.add(project)
-            await db.commit()
-            user_id = user.id
-            project_id = project.id
+    async with live_project(scenario.name, out_dir, keep_db) as (client, sessions, owner, project_id, storage_dir):
+        from app.chat.conversation_context import context_items
+        from app.chat.service import MAX_ATTACHMENTS_PER_TURN
+        from app.models.tables import Conversation, MessageFeedback
 
-        async def _override_db():
-            async with session_factory() as db:
-                yield db
+        conversation_id = None
+        last_assistant_id = None
+        attachments = await upload_screens(client, project_id, image_paths) if flagship else []
+        for idx, prompt in enumerate(scenario.turns, start=1):
+            t0 = time.perf_counter()
+            body: dict[str, Any] = {
+                "project_id": str(project_id),
+                "message": prompt,
+            }
+            if idx == 1 and attachments:
+                body["attachments"] = attachments[:MAX_ATTACHMENTS_PER_TURN]
+            if conversation_id:
+                body["conversation_id"] = conversation_id
+            resp = await client.post(
+                "/api/v1/chat",
+                json=body,
+                headers={"Accept": "text/event-stream"},
+            )
+            elapsed = time.perf_counter() - t0
+            raw_sse = resp.text
+            (out_dir / f"turn_{idx:02d}.sse").write_text(raw_sse, encoding="utf-8")
+            frames = parse_sse_frames(raw_sse)
+            telemetry = collect_sse_telemetry(frames)
+            if not resp.is_success:
+                telemetry.error_payload = {"http_status": resp.status_code}
 
-        async def _override_user():
-            async with session_factory() as db:
-                return await db.get(User, user_id)
+            if telemetry.done_payload:
+                conv_val = telemetry.done_payload.get("conversation_id")
+                if conv_val:
+                    conversation_id = str(conv_val)
 
-        app.dependency_overrides[get_db] = _override_db
-        app.dependency_overrides[get_current_user_required] = _override_user
+            opening_id = (telemetry.done_payload or {}).get("user_message", {}).get("id")
+            items = []
+            if conversation_id and opening_id:
+                async with sessions() as db:
+                    conv = await db.get(Conversation, UUID(conversation_id))
+                    items = [i for i in context_items(conv.context) if i["turn_id"] == opening_id]
+                # The SSE presentation can omit tool names. Use the persisted exchanges
+                # for this exact opening, deduplicated by the scorer's call ID.
+                telemetry.activities.extend({"call_id": i["call_id"], "tool_name": i["tool"]} for i in items)
+            exchanges.append(items)
+            score = score_chat_turn(
+                turn_index=idx,
+                prompt=prompt,
+                telemetry=telemetry,
+                elapsed_seconds=elapsed,
+                max_remove_clip_calls=scenario.max_remove_clip_calls,
+                max_iterations=scenario.max_iterations_per_turn,
+                require_steps_or_focus=scenario.expect_steps_or_focus,
+            )
+            turn_scores.append(score)
+            if score.assistant_message_id:
+                last_assistant_id = score.assistant_message_id
+            if not telemetry.done_payload or telemetry.error_payload:
+                break
 
-        conversation_id: str | None = None
-        last_assistant_id: str | None = None
+        # Verify workbench state
+        wb_resp = await client.get(f"/api/v1/projects/{project_id}/workbench")
+        if wb_resp.status_code == 200:
+            workbench_snapshot = wb_resp.json()
 
-        async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=app),
-            base_url="http://eval-harness",
-            timeout=httpx.Timeout(240.0),
-        ) as client:
-            for idx, prompt in enumerate(scenario.turns, start=1):
-                t0 = time.perf_counter()
-                body: dict[str, Any] = {
-                    "project_id": str(project_id),
-                    "message": prompt,
-                }
-                if conversation_id:
-                    body["conversation_id"] = conversation_id
-                resp = await client.post(
-                    "/api/v1/chat",
-                    json=body,
-                    headers={"Accept": "text/event-stream"},
+        # Verify message_feedback Eval context_snapshot freeze
+        if last_assistant_id:
+            fb_resp = await client.post(
+                f"/api/v1/chat/messages/{last_assistant_id}/feedback",
+                json={"rating": "good", "reason": "automated eval check", "tags": ["eval"]},
+            )
+            if fb_resp.status_code == 200 and fb_resp.json().get("feedback", {}).get("rating") == "good":
+                async with sessions() as db:
+                    feedback = await db.scalar(select(MessageFeedback).where(
+                        MessageFeedback.message_id == UUID(last_assistant_id), MessageFeedback.user_id == owner))
+                    feedback_verified = bool(feedback and feedback.context_snapshot)
+        if flagship:
+            async with sessions() as db:
+                delivery_checks, evidence, media = await inspect_delivery(
+                    client, db, owner, project_id, storage_dir, {a["id"] for a in attachments},
+                    exchanges, out_dir, probe_mp4_audiovisual,
                 )
-                elapsed = time.perf_counter() - t0
-                if resp.status_code != 200:
-                    raise RuntimeError(f"Turn {idx} failed HTTP {resp.status_code}: {resp.text[:500]}")
-
-                raw_sse = resp.text
-                (out_dir / f"turn_{idx:02d}.sse").write_text(raw_sse, encoding="utf-8")
-                frames = parse_sse_frames(raw_sse)
-                telemetry = collect_sse_telemetry(frames)
-
-                if telemetry.done_payload:
-                    conv_val = telemetry.done_payload.get("conversation_id")
-                    if conv_val:
-                        conversation_id = str(conv_val)
-
-                score = score_chat_turn(
-                    turn_index=idx,
-                    prompt=prompt,
-                    telemetry=telemetry,
-                    elapsed_seconds=elapsed,
-                    max_remove_clip_calls=scenario.max_remove_clip_calls,
-                    max_iterations=scenario.max_iterations_per_turn,
-                    require_steps_or_focus=scenario.expect_steps_or_focus,
-                )
-                turn_scores.append(score)
-                if score.assistant_message_id:
-                    last_assistant_id = score.assistant_message_id
-
-            # Verify workbench state
-            wb_resp = await client.get(f"/api/v1/projects/{project_id}/workbench")
-            if wb_resp.status_code == 200:
-                workbench_snapshot = wb_resp.json()
-
-            # Verify message_feedback Eval context_snapshot freeze
-            if last_assistant_id:
-                fb_resp = await client.post(
-                    f"/api/v1/chat/messages/{last_assistant_id}/feedback",
-                    json={"rating": "good", "reason": "automated eval check", "tags": ["eval"]},
-                )
-                if fb_resp.status_code == 200 and fb_resp.json().get("feedback", {}).get("rating") == "good":
-                    feedback_verified = True
 
         all_tools = {name for ts in turn_scores for name in ts.tool_names}
         expected_tools_hit = all(tool in all_tools for tool in scenario.expected_tools)
         composition_created = bool(workbench_snapshot and workbench_snapshot.get("compositions"))
 
         overall_checks = {
-            "all_turns_passed": all(ts.passed for ts in turn_scores),
+            "all_turns_passed": len(turn_scores) == len(scenario.turns) and all(ts.passed for ts in turn_scores),
             "expected_tools_hit": expected_tools_hit,
             "composition_created": (not scenario.expect_composition) or composition_created,
-            "feedback_snapshot_verified": feedback_verified if last_assistant_id else True,
+            "feedback_snapshot_verified": feedback_verified,
+            **delivery_checks,
         }
         scorecard: dict[str, Any] = {
             "scenario": scenario.name,
@@ -654,7 +625,8 @@ async def _run_live_scenario(scenario: EvalScenario, out_dir: Path, keep_db: boo
                 "outputs": len((workbench_snapshot or {}).get("outputs", [])),
                 "assets": len((workbench_snapshot or {}).get("assets", [])),
             },
-            "media_probe": None,
+            "media_probe": asdict(media) if media else None,
+            **({"flagship_evidence": evidence} if flagship else {}),
             "passed": all(overall_checks.values()),
         }
         (out_dir / "eval_scorecard.json").write_text(
@@ -662,20 +634,6 @@ async def _run_live_scenario(scenario: EvalScenario, out_dir: Path, keep_db: boo
         )
         (out_dir / "EVAL_REPORT.md").write_text(render_eval_report(scorecard), encoding="utf-8")
         return scorecard
-    finally:
-        app.dependency_overrides.clear()
-        for mod, orig_session in saved_sessions:
-            mod.AsyncSessionLocal = orig_session
-        settings.database_url = old_db_url
-        if old_storage_backend is not None:
-            settings.storage_backend = old_storage_backend
-        if old_local_root is not None:
-            settings.local_storage_root = old_local_root
-        await engine.dispose()
-        if not keep_db:
-            async with admin.connect() as conn:
-                await conn.execute(text(f'DROP DATABASE "{db_name}" WITH (FORCE)'))
-        await admin.dispose()
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -684,6 +642,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--scenario", default="motion_block_promo", help="Scenario key to execute.")
     parser.add_argument("--out-dir", default="scratch/eval-chat", help="Directory for scorecard, report, and traces.")
     parser.add_argument("--probe-mp4", default=None, help="Offline mode: probe an existing rendered MP4 and write report.")
+    parser.add_argument("--assets-dir", type=Path, help="Directory of PNG/JPG product screenshots for the flagship launch.")
     parser.add_argument("--keep-db", action="store_true", help="Do not drop disposable eval Postgres database.")
     args = parser.parse_args(argv)
 
@@ -716,7 +675,16 @@ def main(argv: list[str] | None = None) -> int:
     if args.scenario not in SCENARIOS:
         parser.error(f"Unknown scenario {args.scenario!r}. Available: {', '.join(sorted(SCENARIOS))}")
 
-    scorecard = asyncio.run(_run_live_scenario(SCENARIOS[args.scenario], out_dir, keep_db=args.keep_db))
+    image_paths = ()
+    if args.scenario == "rookie_flagship_launch":
+        from scripts.eval_flagship import screenshots
+        try:
+            image_paths = tuple(screenshots(args.assets_dir))
+        except (OSError, ValueError) as exc:
+            parser.error(str(exc))
+    elif args.assets_dir:
+        parser.error("--assets-dir is used by rookie_flagship_launch")
+    scorecard = asyncio.run(_run_live_scenario(SCENARIOS[args.scenario], out_dir, args.keep_db, image_paths))
     print(f"Eval finished: scenario={scorecard['scenario']} passed={scorecard['passed']} out={out_dir}")
     return 0 if scorecard["passed"] else 1
 

@@ -26,6 +26,7 @@ async def scheduled(database, video):
         await db.flush()
         pub = await core.create_publication(db, user_id=uid, project_id=pid, output_id=out.id,
                                             channel_account_id=channel.id, client_key="first-publication")
+        pub.due_at = func.now()
         if video:
             pub.platform_job_id = "urn:li:video:fixture"
         await db.commit()
@@ -174,6 +175,7 @@ async def test_tiktok_polls_known_id_without_a_second_publish(database, monkeypa
     async with database() as db:
         (await db.get(ChannelAccount, cid)).platform = ChannelPlatform.TIKTOK
         pub = await db.get(Publication, pub_id)
+        pub.due_at = func.now()
         pub.payload = {**pub.payload, "media": {"video": "https://test.invalid/synthetic.mp4"}}
         await db.commit()
     monkeypatch.setattr(publishing, "AsyncSessionLocal", database)

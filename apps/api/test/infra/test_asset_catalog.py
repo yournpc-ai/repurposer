@@ -1,10 +1,16 @@
 """Catalog synchronization, tenant visibility and deterministic SQL projections."""
 
+import json
+from pathlib import Path
+
 import pytest
 from sqlalchemy import delete, func, select, update
 
 from app.catalog.search import BlockArgs, SearchArgs, catalog_details, search_catalog
+from app.catalog.sfx_ingest import Recording, ingest_recording
+from app.config import settings
 from app.catalog.sync import ensure_builtin_catalog, sync_builtin_catalog
+from app.editing.catalog import SOUND_ACOUSTICS
 from app.models.tables import SoundEffect, User, VisualPreset
 from test.support.db_helpers import _user, full_api_client
 
@@ -29,6 +35,8 @@ async def test_catalog_sync_visibility_and_gallery(database):
             ).all()
         ) == {"block": 17, "transition": 5, "text_preset": 24}
         assert await db.scalar(select(func.count()).select_from(SoundEffect)) == 80
+        assert not await db.scalar(select(func.count()).select_from(SoundEffect).where(
+            SoundEffect.engine_kind == "dsp_recipe", func.jsonb_array_length(SoundEffect.waveform_peaks) != 0))
         db.add_all(
             [
                 VisualPreset(
@@ -82,12 +90,36 @@ async def test_catalog_sync_visibility_and_gallery(database):
         ):
             r = await client.get(f"/api/v1/catalog/{path}", params={"query": key, "limit": 1})
             assert r.status_code == 200 and r.json()["items"][0]["id"] == key
+            if path == "sfx":
+                recipe = r.json()["items"][0]
+                assert recipe["waveform_peaks"] == SOUND_ACOUSTICS[recipe["recipe_id"]]["waveform_peaks"]
             assert not (
                 {"preview_spec", "example_props", "props_schema", "params_schema"}
                 & r.json()["items"][0].keys()
             )
         r = await client.get("/api/v1/catalog/blocks", params={"category": "private"})
         assert [row["id"] for row in r.json()["items"]] == ["own"]
+
+
+async def test_recorded_switch_waveform_reaches_sound_gallery(database, monkeypatch, tmp_path):
+    monkeypatch.setattr(settings, "s3_endpoint_url", f"local://{tmp_path}")
+    pack = Path(__file__).resolve().parents[2] / "assets/sfx"
+    entry = next(e for e in json.loads((pack / "manifest.json").read_bytes()) if e["file"] == "switch.wav")
+    owner_id = await _user(database)
+    async with database.begin() as db:
+        await ingest_recording(db, Recording.model_validate(entry), pack)
+    async with database() as db:
+        user = await db.get(User, owner_id)
+        sample = await db.scalar(select(SoundEffect).where(SoundEffect.slug == entry["slug"]))
+        peaks = sample.waveform_peaks
+        assert len(peaks) == 32 and max(peaks) == pytest.approx(1.0)
+        assert min(peaks) < max(peaks)
+        assert all(0 <= p <= 1 and p == round(p, 3) for p in peaks)
+    async with full_api_client(database, user) as client:
+        response = await client.get("/api/v1/catalog/sfx", params={"domain": "interface", "query": entry["slug"]})
+        assert response.status_code == 200
+        match = next(row for row in response.json()["items"] if row["id"] == entry["slug"])
+        assert match["engine_kind"] == "sample" and match["waveform_peaks"] == peaks
 
 
 async def test_ensure_builtin_catalog_backfills_sounds_when_visual_catalog_exists(database):

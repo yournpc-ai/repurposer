@@ -690,6 +690,7 @@ class SoundEffect(Base):
     sync_cue = Column(String(24), nullable=False, default="onset", server_default="onset")
 
     lufs = Column(Float, nullable=True)
+    waveform_peaks = Column(JSONB, nullable=False, default=list, server_default="[]")
     mix_hint = Column(String(280), nullable=True)
 
     storage_key = Column(String(512), nullable=True)

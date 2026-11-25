@@ -6,10 +6,9 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import case, func, or_, select
 
+from app.catalog import Energy
 from app.editing.catalog import SOUND_ACOUSTICS, TUNE_SCHEMA
 from app.models.tables import SoundEffect, VisualPreset
-
-Energy = Literal["subtle", "medium", "high", "explosive"]
 
 
 class SearchArgs(BaseModel):
@@ -103,7 +102,7 @@ async def search_catalog(db, owner_id, kind, args, *, offset=0, gallery=False):
             + case((exact, 4.0), else_=0.0)
         )
     if gallery and kind == "sfx":
-        stmt = stmt.add_columns(model.name_zh, model.engine_kind, model.recipe_id, model.storage_key)
+        stmt = stmt.add_columns(model.name_zh, model.engine_kind, model.recipe_id, model.storage_key, model.waveform_peaks)
     rows = await db.execute(
         stmt.order_by(score.desc(), model.id.asc()).offset(offset).limit(args.limit)
     )
@@ -114,7 +113,8 @@ async def search_catalog(db, owner_id, kind, args, *, offset=0, gallery=False):
         for item in items:
             key = item.pop("storage_key")
             item["audio_url"] = stream_url(key) if key else None
-            item["waveform_peaks"] = SOUND_ACOUSTICS.get(item["recipe_id"], {}).get("waveform_peaks", [])
+            if item["engine_kind"] == "dsp_recipe":
+                item["waveform_peaks"] = SOUND_ACOUSTICS.get(item["recipe_id"], {}).get("waveform_peaks", [])
     return {"items": items}
 
 
