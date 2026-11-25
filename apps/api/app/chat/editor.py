@@ -1530,10 +1530,15 @@ async def edit_clip(
             raise ValueError("The target text already has these exact values.")
         extra["text_summary"] = summary
     elif isinstance(args, UpdateMotionBlockArgs):
+        from app.editing.revisions import coerce_motion_block_props
+
         target = clips.get(args.clip_id)
         if target is None or not isinstance(target.object, MotionBlockObject):
             raise ValueError("Select an existing motion_block clip to update.")
-        merged_props = {**target.object.props, **args.props_patch}
+        merged_props = coerce_motion_block_props(
+            target.object.block_id,
+            {**target.object.props, **args.props_patch},
+        )
         updated_obj = MotionBlockObject.model_validate({
             **target.object.model_dump(mode="json"),
             "props": merged_props,

@@ -671,7 +671,7 @@ MOTION_BLOCK_CATALOG: dict[str, dict[str, Any]] = {
         "domain": "product",
         "category": "interfaces",
         "name": "Product Showcase",
-        "desc": "Precision light/dark studio frame presenting a captured web UI screenshot with flat, tilt_left, tilt_right, dolly_zoom or scroll_reveal camera presets. Bind a cursor and up to four timed callout_steps to the chosen capture.",
+        "desc": "Precision light/dark studio frame presenting a captured web UI screenshot. camera_motion must be subtle_push|settle_tilt|drift_focus|static; camera_preset must be flat|tilt_left|tilt_right|dolly_zoom|scroll_reveal. Bind optional cursor {x,y,click_at_s} and up to 4 non-overlapping callout_steps [{start_s,end_s,label,x,y,width,height}] using normalized 0..1 coordinates (or element_id from capture).",
         "use_for": [
             "real website view reveal from capture_web",
             "zoomed UI workflow showcase with callout spotlight on a key feature region",
@@ -948,6 +948,7 @@ def catalog_prompt_index() -> dict[str, Any]:
                 "supports_alpha": b["supports_alpha"],
                 "suggested_duration_s": b["suggested_duration_s"],
                 "required_slots": b["required_slots"],
+                "optional_slots": b["optional_slots"],
             }
             for b in MOTION_BLOCK_CATALOG.values()
         ],

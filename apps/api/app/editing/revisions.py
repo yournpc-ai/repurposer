@@ -491,6 +491,81 @@ def _add_audio_effect(
     )
 
 
+_MOTION_FLOAT_KEYS = frozenset({
+    "start_s",
+    "end_s",
+    "at_s",
+    "reveal_at_s",
+    "click_at_s",
+    "highlight_at_s",
+    "x",
+    "y",
+    "width",
+    "height",
+    "start_x",
+    "start_y",
+    "zoom_scale",
+    "focus_x",
+    "focus_y",
+    "entrance_duration_s",
+    "exit_duration_s",
+    "stagger_s",
+    "scroll_from_y",
+    "scroll_to_y",
+})
+_MOTION_INT_KEYS = frozenset({"active_step", "highlight_index", "columns"})
+_MOTION_STR_KEYS = frozenset({"step_label", "badge", "tag", "number"})
+
+
+def _coerce_motion_value(block_id: str, key: str, value: Any) -> Any:
+    if isinstance(value, dict):
+        return {k: _coerce_motion_value(block_id, k, v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [
+            {k: _coerce_motion_value(block_id, k, v) for k, v in item.items()}
+            if isinstance(item, dict)
+            else item
+            for item in value
+        ]
+    if key in _MOTION_FLOAT_KEYS and isinstance(value, str):
+        try:
+            num = float(value.strip())
+            if num == num and abs(num) != float("inf"):
+                return num
+        except ValueError:
+            pass
+    if key == "value" and block_id == "data_chart" and isinstance(value, str):
+        try:
+            num = float(value.strip())
+            if num == num and abs(num) != float("inf"):
+                return num
+        except ValueError:
+            pass
+    if key == "value" and block_id == "metric_grid" and isinstance(value, (int, float)) and not isinstance(value, bool):
+        return str(value)
+    if key in _MOTION_INT_KEYS and isinstance(value, str):
+        try:
+            return int(value.strip())
+        except ValueError:
+            pass
+    if key in _MOTION_STR_KEYS and isinstance(value, int) and not isinstance(value, bool):
+        return str(value)
+    if key in {"dim_left", "count_up", "show_backdrop"} and isinstance(value, str):
+        low = value.strip().lower()
+        if low == "true":
+            return True
+        if low == "false":
+            return False
+    return value
+
+
+def coerce_motion_block_props(block_id: str, props: dict[str, Any]) -> dict[str, Any]:
+    """Coerce benign LLM JSON-typing artifacts (e.g. '1.5' -> 1.5, step_label=1 -> '1') inside untyped props dicts."""
+    if not isinstance(props, dict):
+        return props
+    return {k: _coerce_motion_value(block_id, k, v) for k, v in props.items()}
+
+
 def motion_block_ops(
     content: CompositionContent,
     *,
@@ -506,6 +581,8 @@ def motion_block_ops(
     """Place a native MotionBlockObject on a non-colliding visual track below captions."""
     from app.editing.edits import SetTrackOrder
     from app.editing.schemas import LayoutBox, MotionBlockObject, RemotionResource
+
+    props = coerce_motion_block_props(block_id, props)
 
     role = "title" if block_id == "kinetic_title" else "main"
     prefix = f"trk_mg_{role}"
