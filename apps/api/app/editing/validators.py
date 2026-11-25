@@ -22,6 +22,7 @@ from app.editing.schemas import (
     ImageObject,
     MotionBlockObject,
     ShapeObject,
+    CaptionDerivation,
     SourceCaptionDerivation,
     SpeechObject,
     TextObject,
@@ -393,7 +394,7 @@ def _validate_animation(
         anchor = anim.narration_anchor
         caption = obj.caption if isinstance(obj, TextObject) else None
         if (
-            caption is None
+            not isinstance(caption, CaptionDerivation)
             or caption.state != "derived"
             or caption.narration_alignment_id != anchor.alignment_id
             or caption.narration_content_digest != anchor.content_digest
@@ -641,9 +642,11 @@ def validate_content(content: CompositionContent, snapshots: SnapshotFacts) -> N
             )
             if clip.range != TimeRange(start=expected_start, end=expected_end):
                 _fail(problems, f"clip {clip.clip_id}: ASR caption output time differs from its source window")
-            if derivation.state == "derived" and derivation.source_text_digest != speech_text_digest(clip.object.text):
+            if derivation.state == "derived" and derivation.source_text_digest not in {
+                speech_text_digest(clip.object.text), speech_text_digest(clip.object.text.split("\n", 1)[0]),
+            }:
                 _fail(problems, f"clip {clip.clip_id}: derived source caption has stale text identity")
-            if fact.get("kind") == "audio" and derivation.alignment != "faster-whisper-source-v1" and (
+            if derivation.alignment == "faster-whisper-script-v1" and (
                 derivation.narration_alignment_id is None or derivation.narration_content_digest is None
             ):
                 _fail(problems, f"clip {clip.clip_id}: narration caption lacks alignment provenance")

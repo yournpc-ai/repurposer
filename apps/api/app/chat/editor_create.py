@@ -11,6 +11,7 @@ from app.agents.tool_progress import current_call_id
 from app.editing.catalog import MotionBlockId
 from app.editing.edits import AddClip, AddScene, AddTrack, BindSource, SetTransition, apply_ops
 from app.editing.revisions import motion_block_ops, text_safe_layout
+from app.editing.caption_timing import build_motion_block_caption_phrases, detect_text_language
 from app.editing.schemas import (
     AudioObject,
     CaptionDerivation,
@@ -19,6 +20,7 @@ from app.editing.schemas import (
     CompositionContent,
     ProductShowcaseProps,
     Scene,
+    SourceCaptionDerivation,
     SpeechObject,
     TextObject,
     TimeRange,
@@ -278,14 +280,6 @@ class CreateVideoArgs(BaseModel):
         if not self.shots and not self.motion_blocks:
             raise ValueError("Provide at least one entry in shots or motion_blocks.")
         return self
-
-
-def _infer_narration_language(text: str, explicit: str | None) -> str:
-    if explicit and explicit.strip():
-        return explicit.strip().lower()
-    if any(0x4E00 <= ord(ch) <= 0x9FFF or 0x3400 <= ord(ch) <= 0x4DBF for ch in text):
-        return "zh"
-    return "en"
 
 
 def _resolve_create_caption_style(
@@ -570,7 +564,8 @@ async def create_video(db, turn, args: CreateVideoArgs):
                     db, voice_ref=raw_voice_ref, owner_id=owner, increment_use=True
                 )
 
-            deferred_captions: list[tuple[str, int, int, str, Any, Any]] = []
+            narration_language = (args.narration_language or "").strip().lower()
+            deferred_captions: list[tuple[str, int, int, str, Any, CaptionDerivation | SourceCaptionDerivation]] = []
             for idx, mb in enumerate(args.motion_blocks):
                 resolved_props, resolved_resources = await resolve_motion_block_resources(
                     db,
@@ -589,7 +584,7 @@ async def create_video(db, turn, args: CreateVideoArgs):
                 eff_duration_s = mb.duration_seconds
                 narr_prep: dict[str, Any] | None = None
                 eff_lang = (
-                    _infer_narration_language(mb.narration, args.narration_language)
+                    (narration_language or detect_text_language(mb.narration))
                     if mb.narration is not None
                     else None
                 )
@@ -659,11 +654,6 @@ async def create_video(db, turn, args: CreateVideoArgs):
                         )
                         extra_audio_ops.append(AddTrack(op="add_track", track=dialogue_track))
 
-                    from app.editing.caption_timing import (
-                        build_motion_block_caption_phrases,
-                        detect_text_language,
-                    )
-
                     if narr_prep["mode"] == "prepared":
                         snap: SourceSnapshot = narr_prep["snapshot"]
                         bound_digests[snap.id] = snap.digest
@@ -721,7 +711,7 @@ async def create_video(db, turn, args: CreateVideoArgs):
                             is_bilingual=is_bilingual,
                         )
                         prev_end = speech_start
-                        for phrase in timed_phrases:
+                        for phrase_index, phrase in enumerate(timed_phrases, 1):
                             cs = max(
                                 prev_end,
                                 speech_start + seconds_to_ticks(phrase.time_begin_ms / 1000.0, rate),
@@ -730,10 +720,20 @@ async def create_video(db, turn, args: CreateVideoArgs):
                                 speech_end,
                                 speech_start + seconds_to_ticks(phrase.time_end_ms / 1000.0, rate),
                             )
+                            src_s = min(used_src_ticks, output_ticks_to_source_ticks(cs - speech_start, rate))
+                            src_e = min(used_src_ticks, output_ticks_to_source_ticks(ce - speech_start, rate))
+                            cs = speech_start + source_ticks_to_output_ticks(src_s, rate)
+                            ce = speech_start + source_ticks_to_output_ticks(src_e, rate)
                             if ce <= cs:
                                 continue
                             deferred_captions.append(
-                                (scene_id, cs, ce, phrase.text, caption_style, None)
+                                (scene_id, cs, ce, phrase.text, caption_style, SourceCaptionDerivation(
+                                    snapshot_id=snap.id, snapshot_digest=snap.digest,
+                                    sentence_id=f"{scene_id}_p{phrase_index}",
+                                    source_range=TimeRange(start=src_s, end=src_e),
+                                    source_text_digest=speech_text_digest(phrase.text.split("\n", 1)[0]),
+                                    alignment="minimax-t2a-v2-sentence-v1",
+                                ))
                             )
                             prev_end = ce
                     else:

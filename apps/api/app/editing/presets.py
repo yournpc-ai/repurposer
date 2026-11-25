@@ -20,6 +20,7 @@ from app.editing.alignment import (
     NarrationSentence,
     find_word,
     narration_anchor_part_kind,
+    narration_words,
     resolve_narration_word,
 )
 from app.editing.animation import derive_text_parts
@@ -47,7 +48,9 @@ from app.editing.schemas import (
     WebObject,
     speech_text_digest,
 )
+from app.editing.caption_timing import chunk_timed_words
 from app.editing.timing import (
+    seconds_to_ticks,
     frames_to_ticks,
     output_ticks_to_source_ticks,
     source_ticks_to_output_ticks,
@@ -432,7 +435,7 @@ def _caption_for_word(
             if clip_id is not None and clip.clip_id != clip_id:
                 continue
             obj = clip.object
-            if not isinstance(obj, TextObject) or obj.caption is None:
+            if not isinstance(obj, TextObject) or not isinstance(obj.caption, CaptionDerivation):
                 continue
             caption = obj.caption
             if (
@@ -442,7 +445,7 @@ def _caption_for_word(
                 or (caption.sentence_id is not None and caption.sentence_id != sentence.sentence_id)
             ):
                 continue
-            text_start = sentence.text_start if caption.text_start is None else caption.text_start
+            text_start = sentence.text_start + (caption.text_start or 0)
             text_end = text_start + len(obj.text)
             if (
                 text_start >= sentence.text_start
@@ -511,47 +514,6 @@ def _word_anchor(clip: Clip, narration: NarrationWordInput) -> NarrationAnchor:
     )
 
 
-def _phrase_spans(sentence: NarrationSentence, params: CaptionPhrasesParams) -> list[_CaptionSpan]:
-    if params.cue == "sentence":
-        return [_CaptionSpan(
-            sentence.text_start, sentence.text_end, sentence.start_tick, sentence.end_tick
-        )]
-    spans: list[_CaptionSpan] = []
-    group: list[int] = []
-    words = sentence.words
-
-    def flush(next_index: int) -> None:
-        nonlocal group
-        if not group:
-            return
-        first = words[group[0]]
-        text_end = words[next_index].text_start if next_index < len(words) else sentence.text_end
-        while text_end > first.text_start and sentence.text[
-            text_end - 1 - sentence.text_start
-        ].isspace():
-            text_end -= 1
-        end_tick = words[next_index].start_tick if next_index < len(words) else sentence.end_tick
-        spans.append(_CaptionSpan(first.text_start, text_end, first.start_tick, end_tick))
-        group = []
-
-    for index, word in enumerate(words):
-        group.append(index)
-        first = words[group[0]]
-        next_word = words[index + 1] if index + 1 < len(words) else None
-        trailing_end = next_word.text_start if next_word is not None else sentence.text_end
-        trailing = sentence.text[
-            word.text_end - sentence.text_start:trailing_end - sentence.text_start
-        ]
-        if (
-            any(mark in trailing for mark in "，,、；;：:。！？!?")
-            or word.text_end - first.text_start >= params.max_characters
-            or len(group) >= params.max_words
-        ):
-            flush(index + 1)
-    flush(len(words))
-    return spans
-
-
 def _expand_caption_phrases(
     content: CompositionContent, params: CaptionPhrasesParams
 ) -> list[Op]:
@@ -559,7 +521,9 @@ def _expand_caption_phrases(
     if track.kind != "visual" or track.role != "caption":
         raise PresetError("caption-phrases needs a visual caption track")
     width, height = content.settings.width, content.settings.height
-    layout = params.layout or LayoutBox(x=160.0, y=float(height - 170), width=float(width - 320), height=120.0)
+    from app.editing.revisions import text_safe_layout
+
+    layout = params.layout or text_safe_layout(width, height, "bottom", role="caption")
     from app.editing.text_presets import default_caption_text_style
 
     style = params.style or default_caption_text_style(
@@ -580,9 +544,24 @@ def _expand_caption_phrases(
             for clip in track.clips
         ):
             raise PresetError(f"sentence {sentence.sentence_id!r} already has linked captions")
-        for ordinal, span in enumerate(_phrase_spans(sentence, params), start=1):
-            start = source_ticks_to_output_ticks(span.start_tick, content.settings.timebase)
-            end = source_ticks_to_output_ticks(span.end_tick, content.settings.timebase)
+        spans = []
+        if params.cue == "sentence":
+            spans.append(_CaptionSpan(sentence.text_start, sentence.text_end, sentence.start_tick, sentence.end_tick))
+        else:
+            offset = 0
+            for phrase in chunk_timed_words(
+                narration_words(sentence), verbatim=True, max_chars=min(46, params.max_characters),
+                max_words=min(8, params.max_words),
+            ):
+                begin = sentence.text.index(phrase.text, offset)
+                offset = begin + len(phrase.text)
+                spans.append(_CaptionSpan(
+                    sentence.text_start + begin, sentence.text_start + offset,
+                    seconds_to_ticks(phrase.time_begin_ms / 1000), seconds_to_ticks(phrase.time_end_ms / 1000),
+                ))
+        for ordinal, span in enumerate(spans, start=1):
+            start = speech.range.start + source_ticks_to_output_ticks(span.start_tick - sentence.start_tick, content.settings.timebase)
+            end = speech.range.start + source_ticks_to_output_ticks(span.end_tick - sentence.start_tick, content.settings.timebase)
             if end <= start:
                 raise PresetError(f"sentence {sentence.sentence_id!r} has an empty caption cue")
             suffix = "" if params.cue == "sentence" else f"_p{ordinal}"
@@ -609,8 +588,8 @@ def _expand_caption_phrases(
                         narration_alignment_id=params.alignment.alignment_id,
                         narration_content_digest=params.alignment.content_digest,
                         sentence_id=sentence.sentence_id,
-                        text_start=span.text_start if params.cue == "phrase" else None,
-                        text_end=span.text_end if params.cue == "phrase" else None,
+                        text_start=span.text_start - sentence.text_start if params.cue == "phrase" else None,
+                        text_end=span.text_end - sentence.text_start if params.cue == "phrase" else None,
                     ),
                 ),
             )

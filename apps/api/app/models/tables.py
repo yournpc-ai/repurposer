@@ -784,9 +784,8 @@ class VideoNarration(Base):
 class NarrationAlignment(Base):
     """One deterministic alignment of an immutable audio snapshot and exact script.
 
-    READY rows are immutable facts referenced by CompositionVersions. Only the
-    PENDING preparation state enters the worker; semantic annotation is a
-    separate ALIGNED → READY write through the Chat tool.
+    The worker freezes the word axis as READY when all sentences align.
+    ALIGNED payloads retain sentence-level review flags.
     """
 
     __tablename__ = "narration_alignments"

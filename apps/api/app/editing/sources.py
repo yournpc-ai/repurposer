@@ -30,14 +30,11 @@ async def register_snapshot(
     identity: UUID | None = None,
     origin_project_id: UUID | None = None,
 ) -> SourceSnapshot:
-    """Register one immutable snapshot. ``asset`` is the provenance anchor
-    for user assets; platform-owned sources (the default music catalog)
-    carry ``asset=None`` and a stable ``identity`` for id derivation
-    instead (the catalog piece's own id)."""
+    """Pin source bytes and metadata. An explicit identity distinguishes derived captures of one asset."""
     if asset is not None and asset.user_id != owner_id:
         raise PermissionError("snapshot source belongs to another user")
     project_id = origin_project_id or (asset.project_id if asset is not None else None)
-    anchor = asset.id if asset is not None else identity
+    anchor = identity or (asset.id if asset is not None else None)
     if anchor is None:
         raise ValueError("an asset-less snapshot requires a stable identity")
     snapshot_id = source_snapshot_id(owner_id, anchor, kind, digest)

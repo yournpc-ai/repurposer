@@ -72,7 +72,7 @@ def _native_creation_tools(tools, *, facts):
             for _, r in resources
         )
     )
-    aligned_voice = any((r.get("alignment") or {}).get("status") == "READY" for _, r in resources)
+    aligned_voice = any((r.get("alignment") or {}).get("status") in {"ALIGNED", "READY"} for _, r in resources)
     projected = []
     for tool in tools:
         if tool.name == "create_video":
@@ -260,7 +260,7 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
             context["observed_preview"] = last_preview
         names = set(EDITOR_NAMES) | {
             "update_focus", "update_steps", "read_conversation_context", "answer", "ask_user", "list_project_media",
-            "review_video", "align_recording", "get_narration_alignment", "annotate_narration",
+            "review_video", "align_recording",
             "search_music", "search_voices", "show_music_candidates", "select_music",
             "show_voice_candidates", "select_voice",
         }

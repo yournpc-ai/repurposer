@@ -292,24 +292,6 @@ def test_selection_rejects_disconnected_and_unknown_sentences():
         )
 
 
-def test_narration_annotation_accepts_item_wrapped_needs():
-    from app.models.schemas import AnnotateNarrationArgs
-
-    args = AnnotateNarrationArgs(
-        alignment_id=uuid4(),
-        expected_timing_digest="a" * 64,
-        sentences=[{
-            "sentence_id": "s0001",
-            "role": "evidence",
-            "weight": "main",
-            "entities": ["annual plan"],
-            "needs": {"item": "native_text"},
-            "emphasis_word_ids": [],
-        }],
-    )
-    assert args.sentences[0].needs == ["native_text"]
-
-
 def test_word_axis_preserves_zero_duration_token_text_with_real_sentence_bounds():
     sentences = source_sentences([
         word("Annual", 10, 11),
@@ -524,7 +506,7 @@ async def test_generated_narration_reuses_owned_source_without_mention(database,
         return {"alignment_id": str(alignment_id)}
 
     async def fake_wait(*, owner_id, alignment_id):
-        return {"alignment_id": str(alignment_id), "status": "ALIGNED"}
+        return {"alignment_id": str(alignment_id), "status": "READY"}
 
     monkeypatch.setattr("app.tools.video.preparation.snapshot_audio_asset", fake_snapshot)
     monkeypatch.setattr("app.tools.video.alignment_store.request_alignment", fake_request)
@@ -540,7 +522,7 @@ async def test_generated_narration_reuses_owned_source_without_mention(database,
     )
     assert read.ok
     facts = json.loads(read.text)
-    assert facts["alignment_id"] == str(alignment_id) and facts["status"] == "ALIGNED"
+    assert facts["alignment_id"] == str(alignment_id) and facts["status"] == "READY"
 
 
 @pytest.mark.asyncio

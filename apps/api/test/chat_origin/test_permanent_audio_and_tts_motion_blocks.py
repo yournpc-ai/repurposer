@@ -438,17 +438,62 @@ async def test_chat_origin_permanent_audio_flywheel_and_tts_motion_blocks(
         assert len(dialogue_tracks[0].clips) == 2
         assert all(voice_id == "vd_chat_editorial_01" for _, voice_id in tts_calls)
 
-        # Caption track has 2 tight-pill bilingual_cinema clips (NEVER full-width box!)
+        # Both acts carry editable captions with the chosen bilingual style.
         caption_tracks = [t for t in content.timeline.tracks if t.kind == "visual" and t.role == "caption"]
         assert len(caption_tracks) == 1
-        assert len(caption_tracks[0].clips) == 2
+        assert len(caption_tracks[0].clips) == 3
         for cap in caption_tracks[0].clips:
             assert cap.object.style.background_mode == "pill"
             assert cap.object.style.background == "#111318"
             assert cap.object.style.background_padding == (20.0, 10.0)
             assert cap.object.style.background_radius == 10.0
             assert cap.object.style.secondary_line_scale == 0.74
-        assert "\n" in caption_tracks[0].clips[0].object.text
+        from app.chat.editor import EditTextArgs, SetCompositionStyleArgs, edit_clip
+        from app.editing.schemas import SourceCaptionDerivation, speech_text_digest
+        from app.editing.timing import source_ticks_to_output_ticks
+
+        caps = caption_tracks[0].clips
+        assert [len(c.object.text.splitlines()) for c in caps] == [2, 2, 1]
+        assert " ".join(c.object.text.splitlines()[0] for c in caps[:2]) == "Cut flagship product videos in seconds by chatting."
+        for cap in caps:
+            derivation = cap.object.caption
+            assert isinstance(derivation, SourceCaptionDerivation) and derivation.state == "derived"
+            assert derivation.alignment == "minimax-t2a-v2-sentence-v1"
+            assert derivation.source_text_digest == speech_text_digest(cap.object.text.splitlines()[0])
+            source = next(c for c in dialogue_tracks[0].clips if c.scene_id == cap.scene_id)
+            assert (derivation.snapshot_id, derivation.snapshot_digest) == (source.source.snapshot_id, source.source.snapshot_digest)
+            for edge in ("start", "end"):
+                assert getattr(cap.range, edge) == source.range.start + source_ticks_to_output_ticks(
+                    getattr(derivation.source_range, edge) - source.source.source_range.start, tb
+                )
+
+        chat = await db.scalar(select(Conversation).where(Conversation.project_id == project_id))
+        opening = await _create_message(db, chat.id, "user", "Restyle the captions and edit the opening line")
+        opening.turn_state = "in_flight"
+        await db.commit()
+        project = await db.get(Project, project_id)
+
+        async def edit(name, call_id, args):
+            nonlocal version
+            result = await edit_clip(
+                db, name=name, project=project, opening_id=opening.id, conversation_id=chat.id,
+                call_id=call_id, args=args, base={
+                    "composition_id": str(comp.id), "composition_version_id": str(version.id),
+                    "content_digest": version.content_digest,
+                },
+            )
+            version = await db.get(CompositionVersion, UUID(result["version_id"]))
+            return result
+
+        style = await edit("set_composition_style", "restyle", SetCompositionStyleArgs(preset_id="swiss_paper"))
+        assert style["style_summary"]["captions_updated"] == len(caps)
+        batch = await edit("edit_text", "preset", EditTextArgs(scope="all_derived_captions", preset_id="bilingual_cinema"))
+        assert set(batch["text_summary"]["updated_clip_ids"]) == {c.clip_id for c in caps}
+        await edit("edit_text", "review", EditTextArgs(scope="clip", clip_id=caps[0].clip_id, text="Reviewed wording"))
+        final = await edit("edit_text", "resize", EditTextArgs(scope="all_derived_captions", font_size=47))
+        assert set(final["text_summary"]["updated_clip_ids"]) == {c.clip_id for c in caps[1:]}
+        reviewed = next(c for t in content_of(version).timeline.tracks for c in t.clips if c.clip_id == caps[0].clip_id)
+        assert reviewed.object.text == "Reviewed wording" and reviewed.object.caption.state == "independent"
 
         # Music track has full-length BGM clips automatically ducked to -22 dB with fades!
         music_tracks = [t for t in content.timeline.tracks if t.kind == "audio" and t.role == "music"]
@@ -493,7 +538,8 @@ async def test_create_video_motion_block_pending_speech_and_voice_forbidden_guar
                     "block_id": "statement_hook",
                     "duration_seconds": 5.0,
                     "props": {"headline": "Fast Cuts"},
-                    "narration": "Build product stories in seconds.",
+                    "narration": "过去剪一支产品宣传片，你要在时间线上反复对齐音频和画面。",
+                    "caption_translations": ["Editing a product film took hours, aligning audio with each frame."],
                 },
                 {
                     "block_id": "closing_cta",
@@ -520,6 +566,24 @@ async def test_create_video_motion_block_pending_speech_and_voice_forbidden_guar
         assert len(caption_clips) == 2
         assert all(c.object.caption is not None and c.object.caption.state == "derived" for c in caption_clips)
         assert all(c.object.style.background_mode == "pill" for c in caption_clips)
+        from app.editing.video_spec import _compile_derived_caption
+
+        cap = caption_clips[0]
+        primary, secondary = cap.object.text.split("\n")
+        prepared = {
+            "request": {"speech_object_id": cap.object.caption.speech_object_id,
+                        "text_digest": cap.object.caption.source_text_digest},
+            "normalized_text": primary,
+            "cues": [{"text": primary, "text_begin": 0, "text_end": len(primary), "time_begin": 100, "time_end": 4000}],
+        }
+        compiled = _compile_derived_caption(cap, content, {cap.object.caption.speech_object_id: prepared})
+        assert len(compiled) == 2
+        lines = [c["object"]["text"].split("\n") for c in compiled]
+        assert "".join(line[0] for line in lines) == primary
+        assert " ".join(line[1] for line in lines) == secondary
+        assert compiled[0]["start_frame"] == 3
+        assert compiled[0]["end_frame"] == compiled[1]["start_frame"]
+        assert compiled[1]["end_frame"] == 120
 
     # Voice-forbidden guardrail check on a fresh project
     project_id_2 = await _project(database, owner_id)
@@ -540,3 +604,122 @@ async def test_create_video_motion_block_pending_speech_and_voice_forbidden_guar
         with bind_progress("create-no-vo-1", None):
             with pytest.raises(ValueError, match="disallowed narration generation"):
                 await create_video(db, turn_2, args)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("needs_review", [False, True])
+async def test_align_recording_word_axis_drives_narration_and_insert_text(database, tmp_path, monkeypatch, needs_review):
+    from app.chat.editor import InsertTextArgs, edit_clip
+    from app.chat.video_turn_seats import align_recording_seat
+    from app.editing.edits import apply_ops
+    from app.editing.narration_audio import narration_audio_ops
+    from app.editing.revisions import text_safe_layout
+    from app.editing.schemas import CompositionContent, Scene, TimeRange
+    from app.editing.store import apply_composition_edits
+    from app.models.schemas import AlignRecordingArgs
+    from app.models.tables import Asset, AssetType, NarrationAlignment
+    from app.tools.video import alignment_store
+
+    monkeypatch.setattr(database_module, "AsyncSessionLocal", database)
+    monkeypatch.setattr(settings, "s3_endpoint_url", f"local://{tmp_path}")
+    script = "Keep every word on its measured beat, and give each phrase its own readable line."
+    axis = [{"word": w, "start": i / 5, "end": i / 5 + 0.1} for i, w in enumerate(script.split())]
+    sentences = [script]
+    if needs_review:
+        sentences.append("Unknown syllables.")
+        script = " ".join(sentences)
+    monkeypatch.setattr("app.providers.asr.transcribe", lambda path: {"words": axis})
+    wait = alignment_store.wait_for_alignment
+
+    async def run_worker(**request):
+        async with database() as session:
+            claim = await alignment_store.claim_pending_alignment(session)
+        assert claim and claim[0] == request["alignment_id"]
+        await alignment_store.process_narration_alignment(*claim)
+        return await wait(**request)
+
+    monkeypatch.setattr(alignment_store, "wait_for_alignment", run_worker)
+    owner = await _user(database)
+    project_id = await _project(database, owner)
+    await storage.save("audio/recording.wav", _wav_bytes(duration_s=4), content_type="audio/wav")
+    async with database() as db:
+        project = await db.get(Project, project_id)
+        asset = Asset(user_id=owner, project_id=project_id, type=AssetType.AUDIO, file_url="audio/recording.wav")
+        chat = Conversation(user_id=owner, project_id=project_id)
+        db.add_all([asset, chat])
+        await db.commit()
+        read = await align_recording_seat(
+            project=project, args=AlignRecordingArgs(audio_asset_id=asset.id, text=script),
+            mentions=[SimpleNamespace(type="asset", id=asset.id)],
+        )
+        facts = json.loads(read.text)
+        assert facts["status"] == ("ALIGNED" if needs_review else "READY")
+        assert facts["actual_duration_seconds"] == 4
+        assert [cue["text"] for cue in facts["cues"]] == sentences
+        row = await db.get(NarrationAlignment, UUID(facts["alignment_id"]))
+        assert row.payload["sentences"][0]["semantics"] is None
+        assert row.payload["sentences"][-1]["status"] == ("review_required" if needs_review else "aligned")
+        await alignment_store.ready_alignment(db, owner_id=owner, alignment_id=row.id)
+        content = CompositionContent(settings={"width": 1280, "height": 720}, scenes=[
+            Scene(scene_id="intro", range=TimeRange(start=0, end=360000))
+        ])
+        ops = narration_audio_ops(
+            content, scene_id="intro", snapshot_id=row.audio_snapshot_id, snapshot_digest=row.audio_digest, alignment=row,
+        )
+        content = apply_ops(content, ops, {row.audio_snapshot_id: row.audio_digest})
+        captions = next(t.clips for t in content.timeline.tracks if t.role == "caption")
+        assert len(captions) > 1
+        assert " ".join(c.object.text for c in captions) == script
+        for c in captions:
+            assert c.object.layout == text_safe_layout(1280, 720, "bottom", role="caption")
+            assert c.object.caption.narration_alignment_id == row.id
+            assert c.range == c.object.caption.source_range
+        comp, version, _ = await apply_composition_edits(db, owner_id=owner, origin_project_id=project_id, content=content)
+        opening = await _create_message(db, chat.id, "user", "Caption the recording")
+        opening.turn_state = "in_flight"
+        await db.commit()
+        result = await edit_clip(
+            db, name="insert_text", project=project, opening_id=opening.id, conversation_id=chat.id,
+            call_id="measured_captions", base={"composition_id": str(comp.id), "composition_version_id": str(version.id),
+                                             "content_digest": version.content_digest},
+            args=InsertTextArgs(from_audio_clip_id="clp_dialogue_intro", preset_id="karaoke_focus"),
+        )
+        assert result["text_summary"]["karaoke_clips"] == len(captions)
+        updated = content_of(await db.get(CompositionVersion, UUID(result["version_id"])))
+        inserted = [c for t in updated.timeline.tracks for c in t.clips if c.clip_id in result["text_summary"]["clip_ids"]]
+        assert [(c.range, c.object.text) for c in inserted] == [(c.range, c.object.text) for c in captions]
+
+
+@pytest.mark.asyncio
+async def test_uploaded_audio_freezes_asr_words_for_caption_insertion(database, tmp_path, monkeypatch):
+    from app.chat.editor import _resolve_aligned_caption_cues
+    from app.editing.schemas import AudioObject, Clip, CompositionContent, TimeRange
+    from app.models.tables import Asset, AssetType
+    from app.tools.video.preparation import snapshot_audio_asset
+
+    monkeypatch.setattr(settings, "s3_endpoint_url", f"local://{tmp_path}")
+    owner = await _user(database)
+    project_id = await _project(database, owner)
+    script = "One measured phrase ends here, then the next one follows the silence."
+    axis = [{"word": " " + w, "start": i * 0.25, "end": i * 0.25 + 0.125} for i, w in enumerate(script.split())]
+    await storage.save("audio/upload.wav", _wav_bytes(duration_s=4), content_type="audio/wav")
+    async with database() as db:
+        asset = Asset(user_id=owner, project_id=project_id, type=AssetType.AUDIO, file_url="audio/upload.wav")
+        db.add(asset)
+        await db.flush()
+        original = await snapshot_audio_asset(db, asset, owner_id=owner)
+        asset.meta = {"words": axis}
+        measured = await snapshot_audio_asset(db, asset, owner_id=owner)
+        assert measured.id != original.id and measured.digest == original.digest
+        assert "words" not in original.meta and measured.meta["words"] == axis
+        assert (await snapshot_audio_asset(db, asset, owner_id=owner)).id == measured.id
+        content = CompositionContent(settings={"width": 1280, "height": 720})
+        window = TimeRange(start=0, end=measured.duration_ticks)
+        clip = Clip(clip_id="recording", range=window, object=AudioObject(kind="audio", object_id="vo"),
+                    source={"snapshot_id": measured.id, "snapshot_digest": measured.digest, "source_range": window})
+        cues = await _resolve_aligned_caption_cues(db, await db.get(Project, project_id), content, clip)
+        assert len(cues) >= 2 and " ".join(c["text"] for c in cues) == script
+        for cue in cues:
+            assert cue["caption"].alignment == "faster-whisper-source-v1"
+            assert cue["caption"].snapshot_id == measured.id
+            assert cue["word_timings"][-1]["end_s"] == (cue["output_end"] - cue["output_start"]) / 90000

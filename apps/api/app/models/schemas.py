@@ -1351,56 +1351,6 @@ class AlignRecordingArgs(BaseModel):
     audio_asset_id: UUID
 
 
-class GetNarrationAlignmentArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    alignment_id: UUID
-    pending_disposition: Literal["answer", "skip", "none"] = "none"
-
-    @model_validator(mode="before")
-    @classmethod
-    def _read_tolerance(cls, data: Any) -> Any:
-        return tolerate_null_keys(data, "pending_disposition")
-
-
-class NarrationSentenceSemanticsArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    sentence_id: str = Field(min_length=1, max_length=64)
-    role: Literal["definition", "process", "comparison", "evidence", "example", "summary", "transition"]
-    weight: Literal["main", "sub"]
-    entities: list[str] = Field(default=[], max_length=12)
-    needs: list[Literal["native_text", "diagram", "real_media", "data", "generator"]] = Field(
-        default=[], max_length=5,
-        description="媒体或能力字符串构成的 JSON 数组，如 [\"native_text\"]。",
-    )
-
-    @field_validator("needs", mode="before")
-    @classmethod
-    def _needs_list(cls, value):
-        from app.editing.schemas import _list_wire
-
-        return _list_wire(value)
-
-    emphasis_word_ids: list[str] = Field(default=[], max_length=24)
-
-
-class AnnotateNarrationArgs(BaseModel):
-    """只补全逐句语义。不提供用于修改文本或时间刻度的工具字段。"""
-
-    model_config = ConfigDict(extra="forbid")
-
-    alignment_id: UUID
-    expected_timing_digest: str = Field(min_length=64, max_length=64)
-    sentences: list[NarrationSentenceSemanticsArgs] = Field(min_length=1)
-    pending_disposition: Literal["answer", "skip", "none"] = "none"
-
-    @model_validator(mode="before")
-    @classmethod
-    def _read_tolerance(cls, data: Any) -> Any:
-        return tolerate_null_keys(data, "pending_disposition")
-
-
 class GetVideoVersionParams(BaseModel):
     """get_video_version 的参数，用来读取明确指定的版本（§2.2）。"""
 

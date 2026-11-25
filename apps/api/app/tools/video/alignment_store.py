@@ -154,8 +154,8 @@ async def ready_alignment(
     from app.models.tables import SourceSnapshot
 
     row = await get_alignment(db, owner_id=owner_id, alignment_id=alignment_id)
-    if row.status != "READY" or not row.content_digest:
-        raise AlignmentStoreError("a CompositionVersion can reference only READY narration alignment")
+    if row.status not in {"ALIGNED", "READY"} or not row.content_digest:
+        raise AlignmentStoreError("a CompositionVersion can reference only a fixed narration alignment")
     payload = NarrationPayload.model_validate(row.payload)
     timing_digest, content_digest = _digests(row, payload)
     if timing_digest != row.timing_digest or content_digest != row.content_digest:
@@ -169,72 +169,9 @@ async def ready_alignment(
         or snapshot.duration_ticks != payload.duration_ticks
     ):
         raise AlignmentStoreError("READY narration audio snapshot does not match its frozen facts")
-    if any(sentence.status != "aligned" or sentence.semantics is None for sentence in payload.sentences):
-        raise AlignmentStoreError("READY narration has an unreviewed or unannotated sentence")
+    if row.status == "READY" and any(sentence.status != "aligned" for sentence in payload.sentences):
+        raise AlignmentStoreError("READY narration has an unreviewed sentence")
     return row, snapshot, payload
-
-
-async def annotate_alignment(
-    *,
-    owner_id: UUID,
-    alignment_id: UUID,
-    payload: NarrationPayload,
-    expected_timing_digest: str,
-) -> dict[str, Any]:
-    from app.models.tables import NarrationAlignment
-
-    if any(sentence.status != "aligned" for sentence in payload.sentences):
-        raise AlignmentStoreError("review_required sentences cannot become READY")
-    if any(sentence.semantics is None for sentence in payload.sentences):
-        raise AlignmentStoreError("every sentence needs complete semantics before READY")
-    for sentence in payload.sentences:
-        semantics = sentence.semantics
-        assert semantics is not None
-        if any(not entity.strip() for entity in semantics.entities):
-            raise AlignmentStoreError("semantic entities must be nonblank")
-        if len(set(semantics.needs)) != len(semantics.needs):
-            raise AlignmentStoreError("semantic needs must not repeat")
-        if len(set(semantics.emphasis_word_ids)) != len(semantics.emphasis_word_ids):
-            raise AlignmentStoreError("emphasis_word_ids must not repeat")
-
-    async with _session() as db:
-        row = await db.scalar(
-            select(NarrationAlignment)
-            .where(NarrationAlignment.id == alignment_id, NarrationAlignment.owner_id == owner_id)
-            .with_for_update()
-        )
-        if row is None:
-            raise AlignmentStoreError("narration alignment is not accessible to this owner")
-        if row.status != "ALIGNED":
-            raise AlignmentStoreError("semantic annotation is accepted only while ALIGNED")
-        current = NarrationPayload.model_validate(row.payload)
-        current_timing, _ = _digests(row, current)
-        new_timing, new_content = _digests(row, payload)
-        if current_timing != row.timing_digest or new_timing != expected_timing_digest:
-            raise AlignmentStoreError("semantic annotation cannot change text or timing")
-        if new_timing != current_timing:
-            raise AlignmentStoreError("semantic annotation changed the alignment timing digest")
-        result = await db.execute(
-            update(NarrationAlignment)
-            .where(
-                NarrationAlignment.id == row.id,
-                NarrationAlignment.status == "ALIGNED",
-                NarrationAlignment.content_digest == row.content_digest,
-            )
-            .values(
-                payload=payload.model_dump(mode="json"),
-                content_digest=new_content,
-                status="READY",
-                claim_token=None,
-                lease_expires_at=None,
-                error=None,
-            )
-        )
-        if (result.rowcount or 0) != 1:
-            raise AlignmentStoreError("narration alignment changed before annotation committed")
-        await db.commit()
-        await db.refresh(row)
-        return alignment_read(row)
 
 
 async def claim_pending_alignment(db: AsyncSession) -> tuple[UUID, UUID] | None:
@@ -358,7 +295,7 @@ async def process_narration_alignment(alignment_id: UUID, claim_token: UUID) -> 
                     payload=payload.model_dump(mode="json"),
                     timing_digest=timing_digest,
                     content_digest=content_digest,
-                    status="ALIGNED",
+                    status="READY" if all(s.status == "aligned" for s in payload.sentences) else "ALIGNED",
                     claim_token=None,
                     lease_expires_at=None,
                     error=None,

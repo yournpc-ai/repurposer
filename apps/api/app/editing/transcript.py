@@ -13,6 +13,7 @@ retrieval core, ``words_in_range`` / ``speaker_at`` feed the evidence
 validation and the segment reads.
 """
 
+from collections.abc import Iterator
 from typing import Any, TypedDict
 
 # Cue-break triggers, whichever fires first: sentence-ending punctuation,
@@ -79,59 +80,36 @@ def _timed_words(words: list[dict[str, Any]], max_words: int) -> list[dict[str, 
     return [w for w in words[:max_words] if str(w.get("word") or "").strip()]
 
 
+def word_groups(words: list[dict[str, Any]]) -> Iterator[list[dict[str, Any]]]:
+    """Group the validated word stream into transcript sentences."""
+    group = []
+    end = 0.0
+    for word in words:
+        start = float(word.get("start") or 0)
+        if group and start - end > _PAUSE_BREAK_S:
+            yield group
+            group = []
+        group.append(word)
+        end = max(end, float(word.get("end") or start))
+        if len(group) >= _LINE_WORD_CAP or str(word["word"]).strip()[-1] in _SENTENCE_END:
+            yield group
+            group = []
+    if group:
+        yield group
+
+
 def group_cues(
     words: list[dict[str, Any]], max_words: int = 12000, *, raw_words: bool = False
 ) -> tuple[list[Cue], bool]:
-    """Group word-level timestamps into cues (the ONE grouping law).
-
-    Args:
-        words: ASR output as ``{"word", "start", "end"}`` dicts (seconds).
-        max_words: Hard cap on covered words (~90 min of speech).
-        raw_words: Cue text joins the RAW word tokens (ASR tokens carry
-            their script's own spacing — Latin tokens lead with a space,
-            CJK concatenate bare) instead of the stripped, space-joined
-            prompt form. The transcript card's display face reads this way;
-            the prompt surface keeps the default (byte-stable).
-
-    Returns:
-        ``(cues, truncated)`` — cues in timeline order; ``truncated`` says
-        words beyond the cap exist (the caller renders the honest marker —
-        never a silent window).
-    """
-    timed = _timed_words(words, max_words)
-    cues: list[Cue] = []
-    line_words: list[str] = []
-    line_start = 0.0
-    line_end = 0.0
-
-    def _flush() -> None:
-        if line_words:
-            joined = (
-                "".join(line_words).strip()
-                if raw_words
-                else " ".join(line_words)
-            )
-            cues.append(Cue(start=line_start, end=line_end, text=joined))
-
-    for i, w in enumerate(timed):
-        text = str(w.get("word") or "").strip()
-        if not line_words:
-            line_start = float(w.get("start") or 0.0)
-        line_words.append(str(w.get("word") or "") if raw_words else text)
-        line_end = max(line_end, float(w.get("end") or line_start))
-        nxt = timed[i + 1] if i + 1 < len(timed) else None
-        if (
-            len(line_words) >= _LINE_WORD_CAP
-            or text[-1] in _SENTENCE_END
-            or (
-                nxt is not None
-                and float(nxt.get("start") or 0.0) - line_end > _PAUSE_BREAK_S
-            )
-        ):
-            _flush()
-            line_words = []
-    _flush()
-
+    """Return transcript sentences and whether the word budget truncated the input."""
+    cues = []
+    for group in word_groups(_timed_words(words, max_words)):
+        tokens = [str(w["word"]) for w in group]
+        cues.append(Cue(
+            start=float(group[0].get("start") or 0),
+            end=max(float(w.get("end") or w.get("start") or 0) for w in group),
+            text="".join(tokens).strip() if raw_words else " ".join(t.strip() for t in tokens),
+        ))
     return cues, len(words) > max_words
 
 

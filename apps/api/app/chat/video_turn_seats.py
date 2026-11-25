@@ -20,10 +20,8 @@ from app.chat.activity_receipts import (
     voice_selection_receipt,
 )
 from app.models.schemas import (
-    AnnotateNarrationArgs,
     BuiltInSkillReference,
     ExternalSkillReference,
-    GetNarrationAlignmentArgs,
     ImportSfxArgs,
     ProjectBrief,
     AlignRecordingArgs,
@@ -1027,69 +1025,6 @@ async def align_recording_seat(
         "scope": "结果仅含原速音频及其实际对齐，未创建 CompositionVersion 或视频 Output。",
     })
     return ToolObservation(json.dumps(read, ensure_ascii=False), fold_after_delivery=True)
-
-
-async def get_narration_alignment_seat(
-    *, project: Project | None, args: GetNarrationAlignmentArgs
-) -> str | ToolObservation:
-    if project is None:
-        return "narration alignment reads need a project context"
-    from app.models.database import AsyncSessionLocal
-    from app.tools.video.alignment_store import alignment_read, get_alignment
-
-    try:
-        async with AsyncSessionLocal() as db:
-            row = await get_alignment(db, owner_id=project.user_id, alignment_id=args.alignment_id)
-            read = alignment_read(row)
-    except ValueError as exc:
-        return f"get_narration_alignment rejected: {exc}"
-    return ToolObservation(json.dumps(read, ensure_ascii=False))
-
-
-async def annotate_narration_seat(
-    *, project: Project | None, args: AnnotateNarrationArgs
-) -> str | ToolObservation:
-    if project is None:
-        return "narration annotation needs a project context"
-    from app.editing.alignment import NarrationPayload, NarrationSemantics
-    from app.models.database import AsyncSessionLocal
-    from app.tools.video.alignment_store import annotate_alignment, get_alignment
-
-    try:
-        async with AsyncSessionLocal() as db:
-            row = await get_alignment(db, owner_id=project.user_id, alignment_id=args.alignment_id)
-            if row.status != "ALIGNED":
-                return "annotate_narration accepts only an ALIGNED row; READY is immutable"
-            payload = NarrationPayload.model_validate(row.payload)
-        expected_ids = [sentence.sentence_id for sentence in payload.sentences]
-        supplied_ids = [sentence.sentence_id for sentence in args.sentences]
-        if supplied_ids != expected_ids:
-            return (
-                "annotate_narration needs every current sentence exactly once and in order: "
-                + ", ".join(expected_ids)
-            )
-        semantics_by_id = {
-            item.sentence_id: NarrationSemantics(
-                role=item.role,
-                weight=item.weight,
-                entities=item.entities,
-                needs=item.needs,
-                emphasis_word_ids=item.emphasis_word_ids,
-            )
-            for item in args.sentences
-        }
-        for sentence in payload.sentences:
-            sentence.semantics = semantics_by_id[sentence.sentence_id]
-        payload = NarrationPayload.model_validate(payload.model_dump(mode="json"))
-        read = await annotate_alignment(
-            owner_id=project.user_id,
-            alignment_id=args.alignment_id,
-            payload=payload,
-            expected_timing_digest=args.expected_timing_digest,
-        )
-    except ValueError as exc:
-        return f"annotate_narration rejected: {exc}"
-    return ToolObservation(json.dumps(read, ensure_ascii=False))
 
 
 def stamp_video_presentation(

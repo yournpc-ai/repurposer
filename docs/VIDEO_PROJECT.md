@@ -464,13 +464,13 @@ TextObject
 旁白有两种合法时序来源，最后都进入同一 CompositionVersion、ExportJob、video-spec 与交付链：
 
 - **固定切点 MG**：保留当前设计先审阅 Scene/Clip 切点、制作时 TTS 在显式政策的 1.0–1.35× 有界语速内适配的方式；每条 SpeechClip 至多两次付费合成、`fit_margin=1.08`，`max_tts_characters` 按剩余需求报价并绑定本次授权。原速原件可跨 Chat 复用，加速适配只属原请求；已提交但结果未确认的供应商请求不自动重放，已固定音频的字幕下载可单独恢复。不得借用其他 Scene 帧数、移动切点、改旁白原文、静默截断或交付缺失旁白的成片。
-- **源对齐知识讲解**：先确定最终讲稿与最终音频，再完成完整句/词对齐和 Agent 语义标注，最后生成依赖这些事实的 Scene、Clip 与 Animation。已有录音直接使用其固定 AUDIO SourceSnapshot；TTS 先经现有报价、制作意图、守卫线和 VideoNarration 未知结果保护准备原速音频，再冻结为音频快照。最终分镜保存后，produce 不重新合成、不重新对齐，也不靠限速改变已审阅的词锚。
+- **源对齐知识讲解**：先确定最终讲稿与最终音频，再完成完整句/词对齐，最后生成依赖这些事实的 Scene、Clip 与 Animation。已有录音直接使用其固定 AUDIO SourceSnapshot；TTS 先经现有报价、制作意图、守卫线和 VideoNarration 未知结果保护准备原速音频，再冻结为音频快照。最终分镜保存后，produce 不重新合成、不重新对齐，也不靠限速改变已审阅的词锚。
 
 字幕可由旁白派生，记录源 SpeechObject、文本版本与对齐 provenance；用户手改后标记独立编辑，不再被旁白重生成静默覆盖。字幕同步刷新是显式编辑。视频与其原声分离到视觉/音频 Clip 时记录关联；split/trim/move 明确同步范围，不能只移动画面留下旧音轨，也不能强制连带用户已解除关联的声音。
 
 #### 6.4.1 NarrationAlignment：完整句/词对齐、语义与词锚
 
-`NarrationAlignment` 是最终音频与精确讲稿的派生事实，不是作品根，也不是可独立修改的 timestamps 文件。每行属于一个 owner，引用固定 `audio_snapshot_id`，保存 `text_digest`、`audio_digest`、`algorithm`、`normalization_version`、`provider/model`、`source_timebase`、`timing_digest`、`content_digest`、lease/error 与状态。状态使用 String 列：`PENDING → PROCESSING → ALIGNED → READY`，确定性失败进入 `FAILED`；worker 只认领 PENDING，Agent 只能在 ALIGNED 填语义，CompositionVersion 只能引用 READY 的 `alignment_id + content_digest`。
+`NarrationAlignment` 是最终音频与精确讲稿的派生事实，不是作品根，也不是可独立修改的 timestamps 文件。每行属于一个 owner，引用固定 `audio_snapshot_id`，保存 `text_digest`、`audio_digest`、`algorithm`、`normalization_version`、`provider/model`、`source_timebase`、`timing_digest`、`content_digest`、lease/error 与状态。Worker 认领 PENDING 并写入 PROCESSING。全部句子对齐后直接进入 READY，含 review_required 的结果保留为 ALIGNED，失败进入 FAILED。字幕固定对齐 ID 和内容摘要。
 
 完整 payload 至少保留以下结构；字段使用整数源时间 ticks，文本范围是对原始讲稿的半开 Unicode scalar offsets，禁止裸 float 秒成为下游真相：
 
@@ -491,7 +491,7 @@ NarrationAlignment.payload
     │   ├── text_start / text_end
     │   ├── start_tick / end_tick
     │   └── timing                 anchored | interpolated
-    └── semantics                  Agent 在 ALIGNED 状态填写
+    └── semantics                  可选的逐句信息
         ├── role                   definition | process | comparison | evidence | example | summary | transition
         ├── weight                 main | sub
         ├── entities[]
@@ -501,7 +501,7 @@ NarrationAlignment.payload
 
 CJK 可以逐字成 token，连续 Latin/digit run 可以整词成 token；标点与空白仍由原始句子和 text ranges 完整保留，任何文本位置都必须能确定性映射到相邻发声 token 或明确的零时长边界。归一化只用于匹配，永不覆盖原始讲稿。插值必须显式可见；低覆盖、零全局锚点、文本/audio digest 漂移、非单调时间或越出真实音频时长必须进入 review_required 或 FAILED，不能静默折叠成零时长后继续制作。
 
-语义由 Agent 填写并由服务端整批校验，LLM 不直接写数据库。`emphasis_word_ids` 只指出值得视觉强调的 token，不预先决定具体动画；main/sub 表达“允许引入新视觉主角/优先改变已有元素”的编辑意图。语义修订不得改写文本或时间；任一句仍为 review_required 就不得 READY，不能用用户确认或语义标注补造缺失时间。READY 后整行不可变，后续文本、音频或算法变化必须创建新行。
+句词时间轴可直接生成字幕。所有句子均为 aligned 才能进入 READY；讲稿、音频或算法变化需要创建新行。
 
 `SpeechObject` 增加可空 `alignment={alignment_id, content_digest}`；源对齐 SpeechClip 同时绑定真实音频 SourceSnapshot/source_range。`Animation` 增加可空 `NarrationAnchor`，保存 alignment 引用及 sentence/word/text_range 来源。设计时由服务端把锚点解算成 Clip-local 整数 keyframes，video-spec 只携带最终帧值；renderer 不读取 NarrationAlignment。锚点解算必须支持指定 sentence、word_id 或 text_range + occurrence，缺失、歧义、跨句或超窗明确报错，禁止“找不到就返回 0”。
 

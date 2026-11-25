@@ -17,7 +17,7 @@ metadata:
 
 从用户的文稿中讲清知识，也可使用已明确标明为演示而模拟的知识文稿。从核心概念出发，按能支撑它的要点安排连贯的画面。用受控 Generator 解释概念，避免无关装饰。重要的独立标签、字幕、旁白和声音保留为可编辑的原生对象。模拟文稿仅供创作演示，不能当作访谈、研究引文或事实来源。
 
-若已有最终录音及其确切原稿，使用状态为 READY 的 NarrationAlignment。从中选择真实的句子 ID 和 emphasis_word_ids，由系统解析不可变的音频范围和词锚点。原生 caption-phrases 及 text-impact 效果可直接使用这些事实。不得估算词级时间、编造词 ID，也不要把 PENDING、PROCESSING 或 review_required 当作 READY。当原生对象不足以说明概念时，可选择一个受控 Generator。服务端确定输出时间窗并保存源码供审阅，执行须等待制作授权。
+若已有最终录音及其确切原稿，使用状态为 READY 的 NarrationAlignment。从中选择真实的 sentence_id 和 word_id，由系统解析不可变的音频范围和词锚点。原生 caption-phrases 及 text-impact 效果可直接使用这些事实。不得估算词级时间、编造词 ID，也不要把 PENDING、PROCESSING 或 review_required 当作 READY。当原生对象不足以说明概念时，可选择一个受控 Generator。服务端确定输出时间窗并保存源码供审阅，执行须等待制作授权。
 
 四种基础图元能清楚表达的关系用 draw-2d。有可用且已隔离的组件运行环境时，可用 remotion-project 实现精确布局、多阶段变换或需要受控 TSX 的复杂运动。图形关系本身必需的标签可画入画面，此时不能作为独立的原生文字编辑。
 

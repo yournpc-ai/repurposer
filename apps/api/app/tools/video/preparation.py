@@ -25,7 +25,7 @@ from app.editing.fonts import FONT_FILES, font_storage_key
 from app.editing.schemas import captured_element_box
 from app.editing.sources import register_snapshot
 from app.editing.timing import SOURCE_TIMEBASE
-from app.models.schemas import AssetStatus, AssetType
+from app.models.schemas import AssetStatus, AssetType, canonical_json_hash
 from app.models.tables import Asset, Output, Project, SourceSnapshot, now_utc
 from app.pipeline.music import AUDIO_EXT, music_file_path
 from app.providers import storage
@@ -561,13 +561,16 @@ async def _snapshot_audio_bytes(
         container.close()
 
     meta: dict[str, Any] = {"media": media}
+    if asset is not None and (words := (asset.meta or {}).get("words")):
+        meta["words"] = words
+        identity = uuid5(asset.id, canonical_json_hash({"words": words}))
     if origin is not None:
         meta["origin"] = origin
     if analyze:
         from app.models.ids import source_snapshot_id
         from app.tools.video.media_analysis import analyze_audio_bytes, store_media_analysis
 
-        anchor = asset.id if asset is not None else identity
+        anchor = identity or (asset.id if asset is not None else None)
         if anchor is None:
             raise ValueError("analyzed audio needs a stable snapshot identity")
         snapshot_id = source_snapshot_id(owner_id, anchor, "audio", digest)

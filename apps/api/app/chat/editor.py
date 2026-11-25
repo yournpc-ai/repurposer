@@ -814,7 +814,8 @@ def _composition_style_summary(content) -> dict[str, Any] | None:
 
 async def _resolve_aligned_caption_cues(db, project, content, audio_clip) -> list[dict[str, Any]]:
     """Resolve aligned sentence/word cues for insert_text(from_audio_clip_id=...)."""
-    from app.editing.alignment import NarrationPayload
+    from app.editing.alignment import NarrationPayload, narration_words
+    from app.editing.caption_timing import chunk_timed_words, words_in_window
     from app.editing.source_selection import source_sentences
     from app.editing.timing import seconds_to_ticks, source_ticks_to_output_ticks
     from app.models.tables import NarrationAlignment, SourceSnapshot
@@ -833,97 +834,68 @@ async def _resolve_aligned_caption_cues(db, project, content, audio_clip) -> lis
     sr = src.source_range
     timebase = content.settings.timebase
 
-    def _cues_from_narration_payload(
-        payload: NarrationPayload,
-        *,
-        alignment_row,
-        is_speech: bool,
-    ) -> list[dict[str, Any]]:
-        cues: list[dict[str, Any]] = []
-        for sentence in payload.sentences:
-            s_start = max(sr.start, sentence.start_tick)
-            s_end = min(sr.end, sentence.end_tick)
-            if s_end <= s_start:
-                continue
-            out_start = audio_clip.range.start + source_ticks_to_output_ticks(
-                s_start - sr.start, timebase
-            )
-            out_end = audio_clip.range.start + source_ticks_to_output_ticks(
-                s_end - sr.start, timebase
-            )
+    def sentence_cues(sentence_id, words, *, alignment=None, script_offset=0):
+        start_s, end_s = sr.start / SOURCE_TIMEBASE, sr.end / SOURCE_TIMEBASE
+        script_offset += sum(len(w["text"]) for w in words if w["end_s"] <= start_s and w["start_s"] < start_s)
+        visible = words_in_window(words, start_s, end_s)
+        cues = []
+        index = 0
+        for phrase in chunk_timed_words(visible, verbatim=True):
+            assert phrase.word_timings is not None
+            tokens = visible[index:index + len(phrase.word_timings)]
+            raw_text = "".join(w["text"] for w in tokens)
+            leading = len(raw_text) - len(raw_text.lstrip())
+            text_start = script_offset + leading
+            source_start = seconds_to_ticks(phrase.time_begin_ms / 1000)
+            source_end = seconds_to_ticks(phrase.time_end_ms / 1000)
+            out_start = audio_clip.range.start + source_ticks_to_output_ticks(source_start - sr.start, timebase)
+            out_end = audio_clip.range.start + source_ticks_to_output_ticks(source_end - sr.start, timebase)
+            script_offset += len(raw_text)
+            index += len(tokens)
             if out_end <= out_start:
                 continue
-            text = sentence.text.strip()
-            if not text:
-                continue
-            word_timings: list[dict[str, Any]] = []
-            for w in sentence.words:
-                ws = max(s_start, w.start_tick)
-                we = min(s_end, w.end_tick)
-                if we > ws:
-                    word_timings.append(
-                        {
-                            "start_s": (ws - s_start) / SOURCE_TIMEBASE,
-                            "end_s": (we - s_start) / SOURCE_TIMEBASE,
-                            "text_start": w.text_start - sentence.text_start,
-                            "text_end": w.text_end - sentence.text_start,
-                        }
-                    )
-            if is_speech and isinstance(obj, SpeechObject) and obj.alignment is not None:
-                if text == obj.text and out_start == audio_clip.range.start and out_end == audio_clip.range.end:
-                    caption = CaptionDerivation(
-                        speech_object_id=obj.object_id,
-                        source_text_digest=speech_text_digest(obj.text),
-                        alignment="faster-whisper-script-v1",
-                        state="derived",
-                        narration_alignment_id=obj.alignment.alignment_id,
-                        narration_content_digest=obj.alignment.content_digest,
-                        sentence_id=sentence.sentence_id,
-                    )
-                else:
-                    caption = CaptionDerivation(
-                        speech_object_id=obj.object_id,
-                        source_text_digest=speech_text_digest(obj.text),
-                        alignment="faster-whisper-script-v1",
-                        state="derived",
-                        narration_alignment_id=obj.alignment.alignment_id,
-                        narration_content_digest=obj.alignment.content_digest,
-                        sentence_id=sentence.sentence_id,
-                        text_start=sentence.text_start,
-                        text_end=sentence.text_end,
-                    )
+            if isinstance(obj, SpeechObject):
+                whole = phrase.text == obj.text and (out_start, out_end) == (audio_clip.range.start, audio_clip.range.end)
+                caption = CaptionDerivation(
+                    speech_object_id=obj.object_id, source_text_digest=speech_text_digest(obj.text),
+                    alignment=alignment.algorithm, narration_alignment_id=alignment.id,
+                    narration_content_digest=alignment.content_digest, sentence_id=sentence_id,
+                    text_start=None if whole else text_start, text_end=None if whole else text_start + len(phrase.text),
+                )
             else:
-                has_ready_provenance = (
-                    alignment_row.status == "READY" and bool(alignment_row.content_digest)
-                )
                 caption = SourceCaptionDerivation(
-                    snapshot_id=src.snapshot_id,
-                    snapshot_digest=src.snapshot_digest,
-                    sentence_id=sentence.sentence_id,
-                    source_range=TimeRange(start=s_start, end=s_end),
-                    source_text_digest=speech_text_digest(text),
-                    alignment=(
-                        alignment_row.algorithm
-                        if has_ready_provenance
-                        else "faster-whisper-source-v1"
-                    ),
-                    state="derived",
-                    narration_alignment_id=alignment_row.id if has_ready_provenance else None,
-                    narration_content_digest=(
-                        alignment_row.content_digest if has_ready_provenance else None
-                    ),
+                    snapshot_id=src.snapshot_id, snapshot_digest=src.snapshot_digest, sentence_id=sentence_id,
+                    source_range=TimeRange(start=source_start, end=source_end),
+                    source_text_digest=speech_text_digest(phrase.text),
+                    alignment=alignment.algorithm if alignment else "faster-whisper-source-v1",
+                    narration_alignment_id=alignment.id if alignment else None,
+                    narration_content_digest=alignment.content_digest if alignment else None,
                 )
-            cues.append(
-                {
-                    "sentence_id": sentence.sentence_id,
-                    "text": text,
-                    "output_start": out_start,
-                    "output_end": out_end,
-                    "caption": caption,
-                    "word_timings": word_timings or None,
-                }
-            )
+            timings = []
+            offset = -leading
+            for word, (begin, end) in zip(tokens, phrase.word_timings, strict=True):
+                token = word["text"]
+                timings.append({
+                    "start_s": begin, "end_s": end,
+                    "text_start": offset + len(token) - len(token.lstrip()),
+                    "text_end": offset + len(token.rstrip()),
+                })
+                offset += len(token)
+            cues.append({
+                "sentence_id": sentence_id, "text": phrase.text, "output_start": out_start,
+                "output_end": out_end, "caption": caption, "word_timings": timings,
+            })
         return cues
+
+    def narration_cues(row):
+        payload = NarrationPayload.model_validate(row.payload)
+        return [
+            cue for sentence in payload.sentences
+            for cue in sentence_cues(
+                sentence.sentence_id, narration_words(sentence), alignment=row,
+                script_offset=0 if isinstance(obj, SpeechObject) and obj.text == sentence.text else sentence.text_start,
+            )
+        ]
 
     # 1. SpeechObject with explicit NarrationAlignmentRef
     if isinstance(obj, SpeechObject):
@@ -943,8 +915,7 @@ async def _resolve_aligned_caption_cues(db, project, content, audio_clip) -> lis
             raise ValueError(
                 f"Narration alignment for speech clip {audio_clip.clip_id!r} is not READY/ALIGNED yet."
             )
-        payload = NarrationPayload.model_validate(alignment_row.payload)
-        return _cues_from_narration_payload(payload, alignment_row=alignment_row, is_speech=True)
+        return narration_cues(alignment_row)
 
     # 2. Audio/Video clip with a READY or ALIGNED NarrationAlignment row for its snapshot
     alignment_rows = list(
@@ -963,8 +934,7 @@ async def _resolve_aligned_caption_cues(db, project, content, audio_clip) -> lis
         alignment_rows[0] if alignment_rows else None,
     )
     if alignment_row is not None and alignment_row.payload:
-        payload = NarrationPayload.model_validate(alignment_row.payload)
-        cues = _cues_from_narration_payload(payload, alignment_row=alignment_row, is_speech=False)
+        cues = narration_cues(alignment_row)
         if cues:
             return cues
 
@@ -978,54 +948,7 @@ async def _resolve_aligned_caption_cues(db, project, content, audio_clip) -> lis
     raw_words = ((snapshot.meta or {}).get("words") if snapshot is not None else None) or []
     if snapshot is not None and raw_words and snapshot.duration_ticks:
         sentences = source_sentences(raw_words, duration_ticks=int(snapshot.duration_ticks))
-        cues = []
-        for sentence in sentences:
-            s_start = max(sr.start, seconds_to_ticks(sentence.start))
-            s_end = min(sr.end, seconds_to_ticks(sentence.end))
-            if s_end <= s_start:
-                continue
-            out_start = audio_clip.range.start + source_ticks_to_output_ticks(
-                s_start - sr.start, timebase
-            )
-            out_end = audio_clip.range.start + source_ticks_to_output_ticks(
-                s_end - sr.start, timebase
-            )
-            if out_end <= out_start:
-                continue
-            text = sentence.text.strip()
-            if not text:
-                continue
-            s_start_s = s_start / SOURCE_TIMEBASE
-            s_end_s = s_end / SOURCE_TIMEBASE
-            word_timings = [
-                (
-                    max(0.0, float(w["start"]) - s_start_s),
-                    max(0.01, min(s_end_s, float(w["end"])) - s_start_s),
-                )
-                for w in raw_words
-                if isinstance(w, dict)
-                and float(w.get("end", 0)) > s_start_s
-                and float(w.get("start", 0)) < s_end_s
-                and str(w.get("word") or "").strip()
-            ]
-            cues.append(
-                {
-                    "sentence_id": sentence.sentence_id,
-                    "text": text,
-                    "output_start": out_start,
-                    "output_end": out_end,
-                    "caption": SourceCaptionDerivation(
-                        snapshot_id=src.snapshot_id,
-                        snapshot_digest=src.snapshot_digest,
-                        sentence_id=sentence.sentence_id,
-                        source_range=TimeRange(start=s_start, end=s_end),
-                        source_text_digest=speech_text_digest(text),
-                        alignment="faster-whisper-source-v1",
-                        state="derived",
-                    ),
-                    "word_timings": word_timings or None,
-                }
-            )
+        cues = [cue for sentence in sentences for cue in sentence_cues(sentence.sentence_id, sentence.words)]
         if cues:
             return cues
 

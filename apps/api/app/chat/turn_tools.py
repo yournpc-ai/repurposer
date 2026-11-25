@@ -10,8 +10,6 @@ from app.chat.editor import EDITOR_TOOLS
 from app.chat.perception import perception_chat_tools
 from app.models.schemas import (
     AnalyzeBrandArgs,
-    AnnotateNarrationArgs,
-    GetNarrationAlignmentArgs,
     ImportSfxArgs,
     PlanAnswerArgs,
     PlanAskArgs,
@@ -171,32 +169,6 @@ _ALIGN_RECORDING_TOOL = ChatTool(
 )
 
 
-_GET_NARRATION_ALIGNMENT_TOOL = ChatTool(
-    name="get_narration_alignment",
-    terminal=False,
-    description=(
-        "读取归属当前用户的 NarrationAlignment 的实际状态及完整数据，包括句词范围、整数刻度、插值、审阅状态和语义。不要估算缺失时间。"
-    ),
-    params_model=GetNarrationAlignmentArgs,
-    presentation=ToolPresentation(
-        kind="read", active_key="chat.activity.narrationRead",
-        done_key="chat.activity.narrationReadDone",
-    ),
-)
-_ANNOTATE_NARRATION_TOOL = ChatTool(
-    name="annotate_narration",
-    terminal=False,
-    description=(
-        "为 ALIGNED 旁白逐句标注 role、weight、entities、needs 和 emphasis_word_ids，词 ID 取自本句实际单词。原样带回本次读取的 expected_timing_digest。文本和刻度不可变。全部句子对齐并标注后才能达到 READY。"
-    ),
-    params_model=AnnotateNarrationArgs,
-    presentation=ToolPresentation(
-        kind="read", active_key="chat.activity.narrationAnnotate",
-        done_key="chat.activity.narrationAnnotateDone",
-    ),
-)
-
-
 def _skill_authoring_read_tools() -> list[ChatTool]:
     from app.skills.package_session import (
         GetSkillPreviewArgs,
@@ -352,8 +324,6 @@ def _video_project_tools() -> list[ChatTool]:
         _SHOW_VOICE_CANDIDATES_TOOL,
         _SELECT_VOICE_TOOL,
         _ALIGN_RECORDING_TOOL,
-        _GET_NARRATION_ALIGNMENT_TOOL,
-        _ANNOTATE_NARRATION_TOOL,
         *perception_chat_tools("get_video_version"),
     ]
 

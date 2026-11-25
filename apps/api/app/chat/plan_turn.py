@@ -42,7 +42,6 @@ from app.chat.service import (
     resolve_suggestion_note,
 )
 from app.models.schemas import (
-    AnnotateNarrationArgs,
     AnswerPayload,
     AssetStatus,
     AssetType,
@@ -51,7 +50,6 @@ from app.models.schemas import (
     BriefSlotSource,
     ChatRequest,
     CreativeState,
-    GetNarrationAlignmentArgs,
     ImportSfxArgs,
     MaterialUnderstanding,
     ProjectBrief,
@@ -698,14 +696,6 @@ class PlanTurn:
             return await align_recording_seat(
                 project=self.project, args=params, mentions=self.request.mentions
             )
-        if name == "get_narration_alignment":
-            assert isinstance(params, GetNarrationAlignmentArgs)
-            from app.chat.video_turn_seats import get_narration_alignment_seat
-            return await get_narration_alignment_seat(project=self.project, args=params)
-        if name == "annotate_narration":
-            assert isinstance(params, AnnotateNarrationArgs)
-            from app.chat.video_turn_seats import annotate_narration_seat
-            return await annotate_narration_seat(project=self.project, args=params)
         if name == "ask_user":
             assert isinstance(params, PlanAskArgs)
             return await self._ask_user(params, prose)

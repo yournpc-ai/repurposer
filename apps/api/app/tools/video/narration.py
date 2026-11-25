@@ -1,17 +1,10 @@
-"""Fixed-window narration preparation for CompositionVersion production.
-
-The immutable version owns reviewed text and voice. This module owns actual
-TTS calls, measured-duration fit decisions and execution-local media facts.
-Only speed-1.0 originals are shared through ``narration_store``; a faster
-adaptation is a separate, explicitly bounded provider call fixed to one Run.
-"""
+"""Original narration synthesis, measured timing and character quotes."""
 from __future__ import annotations
 
 import asyncio
 import hashlib
 import io
 import json
-from collections.abc import Callable
 from typing import Any
 from uuid import UUID
 
@@ -19,7 +12,6 @@ from app.editing.schemas import (
     Clip,
     CompositionContent,
     SpeechObject,
-    speech_text_digest,
 )
 from app.tools.video.params import NARRATION_FIT_MARGIN, NarrationPolicy
 
@@ -112,17 +104,6 @@ def narration_alignment_digest(text: str, cues: list[dict]) -> str:
     ).hexdigest()
 
 
-def adaptation_speed(
-    *, duration_s: float, window_s: float, speed_max: float, fit_margin: float = NARRATION_FIT_MARGIN
-) -> float | None:
-    """Return None when the original fits; otherwise its bounded second-pass speed."""
-    if duration_s <= window_s:
-        return None
-    # Leave room for measured provider duration variation, without trimming audio.
-    needed = duration_s / max(window_s, 1 / 30) * fit_margin
-    return min(needed, speed_max)
-
-
 def decode_duration_s(data: bytes) -> float:
     """MP3 bytes → seconds by decoding and counting samples, not container metadata."""
     import av
@@ -138,10 +119,6 @@ def decode_duration_s(data: bytes) -> float:
 
 class NarrationError(ValueError):
     """A safe, bounded narration preparation failure."""
-
-
-class NarrationFitError(NarrationError):
-    user_key = "narration_window_conflict"
 
 
 class NarrationBudgetError(NarrationError):
@@ -160,84 +137,6 @@ def _speech_clips(content: CompositionContent) -> list[Clip]:
     )
 
 
-def _request(clip: Clip, policy: NarrationPolicy) -> dict[str, Any]:
-    speech = clip.object
-    assert isinstance(speech, SpeechObject)
-    return {
-        "speech_object_id": speech.object_id,
-        "text_digest": speech_text_digest(speech.text),
-        "provider": speech.provider,
-        "model": speech.model,
-        "voice_id": speech.voice_id,
-        "language": speech.language,
-        "gain_db": speech.gain_db,
-        "window_ticks": clip.range.duration,
-        "min_speed": policy.min_speed,
-        "max_speed": policy.max_speed,
-        "max_attempts": policy.max_attempts,
-        "fit_margin": policy.fit_margin,
-    }
-
-
-def _manifest_key(execution_id: str, clip_id: str) -> str:
-    return f"video-narrations/executions/{UUID(execution_id)}/{clip_id}.json"
-
-
-async def _save_manifest(key: str, value: dict[str, Any]) -> None:
-    from app.providers import storage
-
-    await storage.save(
-        key,
-        json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8"),
-        content_type="application/json",
-    )
-
-
-async def _read_manifest(
-    key: str, *, clip: Clip, execution_id: str, policy: NarrationPolicy
-) -> dict[str, Any] | None:
-    from app.providers import storage
-    from app.tools.video.narration_store import NarrationOutcomeUnknown
-
-    if not await storage.exists(key):
-        return None
-    value = json.loads(await storage.read(key))
-    if not isinstance(value, dict) or value.get("execution_id") != execution_id:
-        raise NarrationError("narration execution manifest identity mismatch")
-    if value.get("request") != _request(clip, policy):
-        raise NarrationError("narration execution manifest does not match the reviewed SpeechClip")
-    state = value.get("state")
-    if state == "submitted":
-        raise NarrationOutcomeUnknown(
-            f"clip {clip.clip_id}: an adapted narration request has no confirmed result; "
-            "automatic recovery will not submit it again"
-        )
-    if state == "conflict":
-        raise NarrationFitError(str(value.get("error") or "narration does not fit its fixed window"))
-    if state == "done":
-        media = value.get("media") or {}
-        data = await storage.read(media["storage_key"])
-        if hashlib.sha256(data).hexdigest() != media.get("digest"):
-            raise NarrationError("prepared narration bytes do not match their manifest digest")
-        if narration_alignment_digest(value["normalized_text"], value["cues"]) != value.get(
-            "alignment_digest"
-        ):
-            raise NarrationError("prepared narration alignment does not match its digest")
-    return value
-
-
-def _fit_conflict(clip: Clip, content: CompositionContent, duration: float, policy: NarrationPolicy) -> NarrationFitError:
-    window = clip.range.duration / content.settings.timebase
-    required = duration / max(window, 1 / 30) * policy.fit_margin
-    return NarrationFitError(
-        f"clip {clip.clip_id} in scene {clip.scene_id}: measured narration is {duration:.3f}s "
-        f"for its fixed {window:.3f}s window; fitting needs {required:.3f}× speed "
-        f"(allowed {policy.min_speed:.2f}–{policy.max_speed:.2f}×, at most "
-        f"{policy.max_attempts} paid attempts). The reviewed text and cut are unchanged; "
-        "shorten this scene's narration or revise its window before producing again."
-    )
-
-
 async def _cues(subtitle_file: str | None, normalized_text: str, duration_s: float) -> list[dict]:
     from app.providers.voice import fetch_subtitle_cues
 
@@ -247,10 +146,6 @@ async def _cues(subtitle_file: str | None, normalized_text: str, duration_s: flo
     if cues[-1]["time_end"] > duration_s * 1000 + 150:
         raise NarrationError("T2A sentence timings exceed the decoded narration duration")
     return cues
-
-
-def _usage(manifest: dict[str, Any]) -> int:
-    return int((manifest.get("usage") or {}).get("tts_chars") or 0)
 
 
 def narration_billable_upper_bound(text: str) -> int:
@@ -380,194 +275,3 @@ async def prepare_original_narration(
         )
         original = {**original, "cache_hit": not generated and not run_usage, "run_usage": run_usage}
     return original, generated
-
-
-async def prepare_speech_media(
-    content: CompositionContent,
-    *,
-    user_id: UUID,
-    execution_id: str | None,
-    policy: NarrationPolicy,
-    on_reuse: Callable[[bool], None] | None = None,
-) -> dict[str, dict[str, Any]]:
-    """Prepare every SpeechClip inside its fixed window, with no blind paid replay."""
-    from app.metering import record_media_usage
-    from app.providers.voice import synthesize_detailed
-    from app.tools.video.narration_store import NarrationOutcomeUnknown
-    from app.tools.video.preparation import store_source_bytes
-
-    clips = _speech_clips(content)
-    if not clips:
-        return {}
-    if execution_id is None:
-        raise NarrationError("narrated video requires an authorized Run execution identity")
-    prepared: dict[str, dict[str, Any]] = {}
-    spent = 0
-    for clip in clips:
-        generated = False
-        speech = clip.object
-        assert isinstance(speech, SpeechObject)
-        key = _manifest_key(execution_id, clip.clip_id)
-        manifest = await _read_manifest(key, clip=clip, execution_id=execution_id, policy=policy)
-        if manifest is not None and manifest.get("state") == "done":
-            prepared[speech.object_id] = manifest
-            spent += _usage(manifest)
-            if on_reuse is not None:
-                on_reuse(True)
-            continue
-
-        if manifest is not None and manifest.get("state") == "aligning":
-            # Adapted audio and usage are fixed; only its subtitle download resumes.
-            cues = await _cues(
-                (manifest.get("adapted") or {}).get("subtitle_file"),
-                manifest["normalized_text"],
-                float(manifest["duration_s"]),
-            )
-            manifest = {
-                **manifest,
-                "state": "done",
-                "cues": cues,
-                "alignment_digest": narration_alignment_digest(manifest["normalized_text"], cues),
-            }
-            await _save_manifest(key, manifest)
-            prepared[speech.object_id] = manifest
-            spent += _usage(manifest)
-            if on_reuse is not None:
-                on_reuse(True)
-            continue
-
-        if manifest is None:
-            original, generated = await prepare_original_narration(
-                speech, user_id=user_id, execution_id=execution_id, policy=policy, spent=spent
-            )
-            manifest = {
-                "schema_version": 1,
-                "state": "original_ready",
-                "execution_id": execution_id,
-                "request": _request(clip, policy),
-                "original": original,
-                "usage": {"tts_chars": int(original.get("run_usage") or 0)},
-            }
-            await _save_manifest(key, manifest)
-
-        original = manifest["original"]
-        spent += _usage(manifest)
-        window = clip.range.duration / content.settings.timebase
-        speed = adaptation_speed(
-            duration_s=float(original["duration_s"]),
-            window_s=window,
-            speed_max=policy.max_speed,
-            fit_margin=policy.fit_margin,
-        )
-        base = {
-            "schema_version": 1,
-            "execution_id": execution_id,
-            "request": _request(clip, policy),
-            "original": original,
-            "normalized_text": original["normalized_text"],
-            "alignment": original["alignment"],
-            "usage": manifest.get("usage") or {"tts_chars": 0},
-        }
-        if speed is None:
-            manifest = {
-                **base,
-                "state": "done",
-                "media": original["media"],
-                "duration_s": original["duration_s"],
-                "cues": original["cues"],
-                "alignment_digest": original["alignment_digest"],
-                "speed": 1.0,
-                "cache_hit": bool(original.get("cache_hit")),
-                "attempts": [{
-                    "speed": 1.0,
-                    "duration_s": original["duration_s"],
-                    "tts_chars": int(original.get("run_usage") or 0),
-                    "trace_id": original.get("trace_id"),
-                }],
-            }
-            await _save_manifest(key, manifest)
-            prepared[speech.object_id] = manifest
-            if on_reuse is not None:
-                on_reuse(not generated)
-            continue
-
-        required = float(original["duration_s"]) / max(window, 1 / 30) * policy.fit_margin
-        if policy.max_attempts < 2 or required > policy.max_speed:
-            error = _fit_conflict(clip, content, float(original["duration_s"]), policy)
-            await _save_manifest(key, {**base, "state": "conflict", "error": str(error)})
-            raise error
-
-        normalized = original["normalized_text"]
-        _check_budget(policy, spent, normalized)
-        submitted = {
-            **base,
-            "state": "submitted",
-            "speed": speed,
-            "cache_hit": False,
-        }
-        await _save_manifest(key, submitted)
-        try:
-            result = await asyncio.to_thread(
-                synthesize_detailed, normalized, speech.voice_id, speech.language, speed
-            )
-            generated = True
-        except Exception as exc:
-            raise NarrationOutcomeUnknown(
-                f"clip {clip.clip_id}: adapted narration outcome is unconfirmed: {exc}"
-            ) from exc
-        duration = decode_duration_s(result.audio)
-        media_key, media_digest = await store_source_bytes(result.audio, ".mp3", "audio/mpeg")
-        await record_media_usage({"tts_chars": float(result.usage_characters)})
-        usage = {"tts_chars": _usage(manifest) + result.usage_characters}
-        adapted = {
-            "media": {"storage_key": media_key, "digest": media_digest, "mime_type": "audio/mpeg"},
-            "duration_s": duration,
-            "subtitle_file": result.subtitle_file,
-            "trace_id": result.trace_id,
-            "usage_characters": result.usage_characters,
-        }
-        if duration > window:
-            error = _fit_conflict(clip, content, duration, policy)
-            await _save_manifest(key, {
-                **base, "state": "conflict", "error": str(error), "speed": speed,
-                "adapted": adapted, "usage": usage, "cache_hit": False,
-            })
-            raise error
-        manifest = {
-            **base,
-            "state": "aligning",
-            "media": adapted["media"],
-            "duration_s": duration,
-            "speed": speed,
-            "cache_hit": False,
-            "adapted": adapted,
-            "usage": usage,
-            "attempts": [
-                {
-                    "speed": 1.0,
-                    "duration_s": original["duration_s"],
-                    "tts_chars": int(original.get("run_usage") or 0),
-                    "trace_id": original.get("trace_id"),
-                },
-                {
-                    "speed": speed,
-                    "duration_s": duration,
-                    "tts_chars": result.usage_characters,
-                    "trace_id": result.trace_id,
-                },
-            ],
-        }
-        await _save_manifest(key, manifest)
-        cues = await _cues(result.subtitle_file, normalized, duration)
-        manifest = {
-            **manifest,
-            "state": "done",
-            "cues": cues,
-            "alignment_digest": narration_alignment_digest(normalized, cues),
-        }
-        await _save_manifest(key, manifest)
-        prepared[speech.object_id] = manifest
-        if on_reuse is not None:
-            on_reuse(not generated)
-        spent += result.usage_characters
-    return prepared
