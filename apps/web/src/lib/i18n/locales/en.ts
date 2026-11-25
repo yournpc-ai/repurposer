@@ -488,82 +488,99 @@ const en = {
     // registry. Empty video applications stay visible with an honest empty
     // state. Sample prompts live at recipes.shelf.demos.<demoId>.prompt.
     shelf: {
+      tabs: {
+        "discover": "Discover",
+        "templates": "Templates",
+        "product-promo": "Product Promo",
+        "text-animation": "Text Animation",
+        "knowledge-explainer": "Knowledge Explainer",
+        "talking-head": "Talking Head",
+      },
       subs: {
-        "website-product": "Websites & products",
-        "course-service": "Courses & services",
-        "opinion-talking-head": "Opinion talking head",
-        "course-lecture-teaser": "Course & lecture teasers",
-        "opinion-text": "Opinion text videos",
-        "quote-announcement": "Quotes & announcements",
-        "concept-explainer": "Concept explainers",
+        "product-launch": "Product launches",
+        "website": "Website promos",
+        "walkthrough": "Walkthroughs",
+        "announcements": "Manifestos & announcements",
+        "opinions": "Ideas & quotes",
+        "concepts": "Concepts & principles",
         "research-report": "Research & reports",
+        "opinion-talking-head": "Perspectives",
+        "interviews": "Interviews & lectures",
       },
       nextPage: "More",
       previousPage: "Previous",
-      upgrading: "Content is being upgraded",
-      usePrompt: "Use prompt",
+      template: "Template",
+      useTemplate: "Use template",
+      makeSimilar: "Make one like this",
       playSound: "Play sound",
       mute: "Mute",
-      emptyDemo: "No sample for this application yet.",
-      // MG shelf prefill blank: a VISIBLE placeholder, inserted selected so
-      // paste replaces it in one gesture; it never becomes a hidden field or
-      // a second input surface.
-      urlPlaceholder: "[your website URL]",
-      urlRequired: "Add your website link first",
-      // MG shelf demo prefill copy (D3 — one key per ShelfDemo id in
-      // components/home/recipeFamilies.ts). The prompt IS the card's entire
-      // launch payload (composer 预填, 配方 = 提示词); {{placeholder}} is the
-      // visible website blank the user replaces before send.
+      emptyDemo: "No samples in this section yet.",
+      emptyTemplates: "No templates available yet.",
+      requiredSlot: "Add the highlighted detail to continue.",
       demos: {
+        "product-promo": {
+          prompt:
+            "Product launch: [Product name and what’s new]\nOpening shot (optional): [optional:A detail to show first]",
+        },
+        "talking-head": {
+          prompt:
+            "Talking point: [The idea your speaker wants to share]\nOn-screen title (optional): [optional:A phrase to highlight]",
+        },
+        "text-animation": {
+          prompt:
+            "Announcement: [Paste the words to animate]\nFormat & pacing (15s · 16:9): [optional:Describe any changes]",
+        },
+        "knowledge-explainer": {
+          prompt:
+            "Explain: [The question the video should answer]\nVisual example (optional): [optional:A familiar comparison]",
+        },
         "text-short-gentle-close": {
           prompt:
-            "Use this Skill to help me animate this line:\n\nSlow down. Go further.",
+            "Closing line: [Paste your final sentence]\nLast beat (optional): [optional:Where the text should linger]",
         },
         "text-short-genesis": {
           prompt:
-            "Use this Skill to help me animate this line:\n\nEvery great idea starts with a small step.",
+            "Opening line: [Paste the text for the first frame]\nEmphasis (optional): [optional:The word that should appear last]",
         },
         "product-demo-zymix": {
           prompt:
-            "Use this Skill to help me make a demo showing how this product works: {{placeholder}}",
+            "Product website: [Your website URL]\nWalkthrough (optional): [optional:The task to demonstrate]",
         },
-        // Website-source demos use the capture flow; video-source entries keep
-        // upload-based prompts.
         "product-demo-walkthrough": {
           prompt:
-            "Use this Skill to help me turn my screen recording into a walkthrough that makes the key steps easy to follow.",
+            "Walkthrough: [What the viewer will learn to do]\nKey step (optional): [optional:Where the recording should slow down]",
         },
         "product-demo-highlights": {
           prompt:
-            "Use this Skill to help me make a short video highlighting this product’s most useful features: {{placeholder}}",
+            "Product website: [Your website URL]\nFeature to highlight (optional): [optional:The feature viewers should remember]",
         },
         "product-demo-captioned": {
           prompt:
-            "Use this Skill to help me add text explanations that make my video easier to understand.",
+            "Demo topic: [The feature shown in the footage]\nCaption (optional): [optional:Exact wording to show on screen]",
         },
         "product-promo-agentveil-the-next-move": {
           prompt:
-            "Use this Skill to make a short promotional video from this website, showing viewers the product’s value: {{placeholder}}",
+            "Website promo: [Your website URL]\nAudience (optional): [optional:Who the product is for]",
         },
         "product-promo-oxvalue-product-evidence": {
           title: "Product evidence",
           prompt:
-            "Use this Skill to make a short promotional video from this website, showing viewers the product’s value: {{placeholder}}",
+            "Website promo: [Your website URL]\nSelling point (optional): [optional:A benefit the footage can demonstrate]",
         },
         "product-promo-oxvalue-energy-arc": {
           title: "Energy arc",
           prompt:
-            "Use this Skill to make a short promotional video from this website, showing viewers the product’s value: {{placeholder}}",
+            "Website promo: [Your website URL]\nOpening beat (optional): [optional:The product detail to lead with]",
         },
         "text-short-clear-rhythm": {
           title: "Clear rhythm",
           prompt:
-            "Animate this copy:\n\nWe often assume that the more we say, the more people understand.\nSo we add context, pile on details, and try to cover every point.\nBut as the information grows, the idea we wanted to share can get lost.\n\nClear communication starts with a clear question.\nExplain the problem, then use a concrete example to show why it matters.\nGive each idea room to breathe, and your audience time to understand.\n\nMaking complex ideas clear takes more than cutting words.\nIt takes a thread people want to follow—and can follow.\nHelp great content move from being seen to being understood.",
+            "Text to animate: [Paste your quote or passage]\nRhythm (optional): [optional:Where to pause or add emphasis]",
         },
         "knowledge-explainer-clear-expression": {
           title: "Clear expression",
           prompt:
-            "Use this Skill to help me make an animation explaining why focusing on one point at a time makes an idea easier to understand, for someone new to the topic.",
+            "Concept to explain: [Your main idea]\nAudience (optional): [optional:Who will watch and what they already know]",
         },
       },
     },

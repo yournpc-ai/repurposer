@@ -6,7 +6,6 @@ import { ChevronLeft, ChevronRight, Volume2, VolumeX } from "lucide-react"
 import { IconButton } from "@/components/ui/icon-button-clean"
 import { SegmentedControl } from "@/components/ui/segmented-control-clean"
 
-import { LANDING_GALLERY } from "@/components/landing/content"
 import type { SkillReference } from "@/lib/skills"
 
 interface Demo {
@@ -14,72 +13,73 @@ interface Demo {
   poster?: string
   title: string
   prompt: string
-  styleLabel?: string
+  section: string
+  aspect?: "16:9" | "9:16" | "1:1" | "4:5"
   templateReference?: SkillReference
 }
 
-function showcase(id: string): Demo {
+function showcase(id: string, section: string, aspect?: Demo["aspect"]): Demo {
   return {
+    section,
+    aspect,
     src: `/gallery/showcase/${id}.mp4`,
     poster: `/gallery/showcase/${id}.webp`,
     title: `landing.gallery.items.${id}.title`,
-    prompt: `landing.showcase.requests.${id}`,
+    prompt: `recipes.shelf.demos.${id}.prompt`,
   }
 }
 
-function archivedDemo(id: string, hash: string): Demo {
+function archivedDemo(id: string, hash: string, section: string): Demo {
   return {
+    section,
     src: `https://repurposer.tos-ap-southeast-1.volces.com/demo/outputs/${id}-${hash}.mp4`,
     title: `recipes.shelf.demos.${id}.title`,
     prompt: `recipes.shelf.demos.${id}.prompt`,
   }
 }
 
-const families = [
-  {
-    id: "product-promo",
-    sections: [
-      {
-        id: "website-product",
-        demos: [
-          showcase("product-promo"),
-          archivedDemo("product-promo-oxvalue-product-evidence", "e1e78348"),
-          archivedDemo("product-promo-oxvalue-energy-arc", "6f210db6"),
-        ],
-      },
-    ],
-  },
-  {
-    id: "talking-head",
-    sections: [
-      { id: "opinion-talking-head", demos: [showcase("talking-head")] },
-    ],
-  },
-  {
-    id: "text-animation",
-    sections: [
-      { id: "opinion-text", demos: [archivedDemo("text-short-clear-rhythm", "2d594025")] },
-      { id: "quote-announcement", demos: [showcase("text-animation")] },
-    ],
-  },
-  {
-    id: "knowledge-explainer",
-    sections: [
-      {
-        id: "concept-explainer",
-        demos: [
-          showcase("knowledge-explainer"),
-          archivedDemo("knowledge-explainer-clear-expression", "73f4a743"),
-        ],
-      },
-    ],
-  },
+const demos = [
+  showcase("product-promo", "product-launch"),
+  showcase("talking-head", "opinion-talking-head", "9:16"),
+  showcase("text-animation", "announcements"),
+  showcase("knowledge-explainer", "concepts"),
+  archivedDemo("product-promo-oxvalue-product-evidence", "e1e78348", "website"),
+  archivedDemo("product-promo-oxvalue-energy-arc", "6f210db6", "website"),
+  archivedDemo("text-short-clear-rhythm", "2d594025", "opinions"),
+  archivedDemo("knowledge-explainer-clear-expression", "73f4a743", "concepts"),
 ]
 
-function DemoCard({ demo, onPrefill }: { demo: Demo; onPrefill: (demo: Demo) => void }) {
+function family(id: string, sections: string[]) {
+  return {
+    id,
+    sections: sections.map((section) => ({
+      id: section,
+      demos: demos.filter((demo) => demo.section === section),
+    })),
+  }
+}
+
+const families = [
+  { id: "discover", sections: [{ id: "discover", demos }] },
+  { id: "templates", sections: [{ id: "templates", demos: demos.filter((demo) => demo.templateReference) }] },
+  family("product-promo", ["product-launch", "website", "walkthrough"]),
+  family("text-animation", ["announcements", "opinions"]),
+  family("knowledge-explainer", ["concepts", "research-report"]),
+  family("talking-head", ["opinion-talking-head", "interviews"]),
+]
+
+const aspectClasses = {
+  "16:9": "aspect-video",
+  "9:16": "aspect-[9/16]",
+  "1:1": "aspect-square",
+  "4:5": "aspect-[4/5]",
+}
+
+export function DemoCard({ demo, onPrefill }: { demo: Demo; onPrefill: (demo: Demo) => void }) {
   const { t } = useTranslation()
   const video = useRef<HTMLVideoElement>(null)
 
+  const action = t(demo.templateReference ? "recipes.shelf.useTemplate" : "recipes.shelf.makeSimilar")
   const [muted, setMuted] = useState(true)
 
   function previewWithSound() {
@@ -116,7 +116,7 @@ function DemoCard({ demo, onPrefill }: { demo: Demo; onPrefill: (demo: Demo) => 
 
   return (
     <article
-      className="demo-preview group relative aspect-video w-[min(82%,26.67rem)] shrink-0 overflow-hidden rounded-lg bg-media-scrim sm:w-[26.67rem]"
+      className={`demo-preview group relative h-[13.5rem] shrink-0 overflow-hidden rounded-lg bg-media-scrim sm:h-[15rem] ${aspectClasses[demo.aspect ?? "16:9"]}`}
       onPointerEnter={(event) => {
         if (event.pointerType === "mouse" && !matchMedia("(prefers-reduced-motion: reduce)").matches)
           previewWithSound()
@@ -133,16 +133,21 @@ function DemoCard({ demo, onPrefill }: { demo: Demo; onPrefill: (demo: Demo) => 
         src={demo.src}
         poster={demo.poster}
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 h-full w-full object-contain"
+        className="pointer-events-none absolute inset-0 h-full w-full object-cover"
         playsInline
         muted
         loop
         preload="metadata"
         onVolumeChange={(event) => setMuted(event.currentTarget.muted)}
       />
+      {demo.templateReference && (
+        <span className="pointer-events-none absolute top-2 right-2 rounded bg-black/55 px-2 py-0.5 text-xs text-white">
+          {t("recipes.shelf.template")}
+        </span>
+      )}
       <button
         type="button"
-        aria-label={`${t("recipes.shelf.usePrompt")} · ${t(demo.title)}`}
+        aria-label={`${action} · ${t(demo.title)}`}
         className="absolute inset-0 cursor-pointer rounded-[inherit] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-white"
         onClick={() => {
           if (video.current) video.current.muted = true
@@ -150,8 +155,8 @@ function DemoCard({ demo, onPrefill }: { demo: Demo; onPrefill: (demo: Demo) => 
         }}
       >
         <span className="demo-preview__overlay absolute inset-0 grid place-items-center bg-black/35">
-          <span className="rounded-md bg-background px-4 py-2 text-sm font-medium text-foreground">
-            {t("recipes.shelf.usePrompt")}
+          <span className="rounded-md bg-white px-4 py-2 text-sm font-medium text-black">
+            {action}
           </span>
         </span>
       </button>
@@ -351,7 +356,7 @@ export function DemoGallery({
           className="home-gallery-categories"
           value={family.id}
           aria-label={t("landing.showcase.types")}
-          options={families.map(({ id }) => ({ value: id, label: t(`landing.gallery.items.${id}.title`) }))}
+          options={families.map(({ id }) => ({ value: id, label: t(`recipes.shelf.tabs.${id}`) }))}
           onChange={(id) => {
             const next = families.find((f) => f.id === id)
             if (!next || next === family) return
@@ -365,7 +370,7 @@ export function DemoGallery({
         />
         {showSubnav && (
           <nav
-            aria-label={t(`landing.gallery.items.${family.id}.title`)}
+            aria-label={t(`recipes.shelf.tabs.${family.id}`)}
             className="flex max-w-full gap-1 overflow-x-auto"
           >
             {family.sections.map(({ id }) => (
@@ -396,13 +401,13 @@ export function DemoGallery({
               {t(`recipes.shelf.subs.${id}`)}
             </h2>
           )}
-          <DemoShelf
-            demos={demos}
-            onPrefill={(demo) => {
-              const entry = LANDING_GALLERY.find((item) => item.id === family.id)
-              onPrefill(demo.prompt, demo.templateReference ?? entry?.skill ?? null)
-            }}
-          />
+          {demos.length ? (
+            <DemoShelf demos={demos} onPrefill={(demo) => onPrefill(demo.prompt, demo.templateReference ?? null)} />
+          ) : (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              {t(id === "templates" ? "recipes.shelf.emptyTemplates" : "recipes.shelf.emptyDemo")}
+            </p>
+          )}
         </section>
       ))}
     </section>

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react"
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
+import { toast } from "sonner"
 import { Plus } from "lucide-react"
 import { createRef } from "react"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -25,15 +26,16 @@ vi.mock("react-i18next", () => ({
 }))
 
 vi.mock("sonner", () => ({
-  toast: { error: vi.fn(), success: vi.fn() },
+  toast: { error: vi.fn(), success: vi.fn(), message: vi.fn() },
 }))
 
 vi.mock("@/lib/auth-context", () => ({
   useAuth: () => ({ isAuthenticated: false, loginOpen: false }),
 }))
 
+const launch = vi.hoisted(() => vi.fn())
 vi.mock("@/lib/useProjectLaunch", () => ({
-  useProjectLaunch: () => ({ launching: false, launch: vi.fn() }),
+  useProjectLaunch: () => ({ launching: false, launch }),
 }))
 
 vi.mock("@/lib/stagingUploads", () => ({
@@ -48,10 +50,6 @@ vi.mock("@/lib/stagingUploads", () => ({
 
 vi.mock("@/components/settings/settings-dialog-context", () => ({
   useSettingsDialog: () => ({ modalOpen: false }),
-}))
-
-vi.mock("@/components/mentions/MentionEditor", () => ({
-  MentionEditor: () => <div data-testid="mention-editor" contentEditable />,
 }))
 
 afterEach(() => {
@@ -120,6 +118,30 @@ describe("Full-radius composer and scroll-to-bottom controls", () => {
       expect(sendBtn.className).toContain("rounded-full")
     } finally {
       window.matchMedia = originalMatchMedia
+    }
+  })
+
+  it("focuses the missing required field on send, then launches with only the completed text", () => {
+    vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, removeEventListener() {} }))
+    try {
+      const editorRef = createRef<MentionEditorHandle>()
+      render(<HomeComposer prompt="Draft" onPromptChange={() => {}} mentions={[]} onMentionsChange={() => {}}
+        selectedSkill={null} onSkillChange={() => {}} editorRef={editorRef} />)
+      act(() => { editorRef.current!.insertBrief("Animate: [Copy]\\nPacing: [optional:Any changes]") })
+      const send = screen.getByRole("button", { name: "chat.send" })
+      fireEvent.click(screen.getByText("[Any changes]"))
+      fireEvent.click(send)
+      expect(launch).not.toHaveBeenCalled()
+      expect(toast.message).toHaveBeenCalledWith("recipes.shelf.requiredSlot")
+      expect(window.getSelection()?.toString()).toBe("[Copy]")
+      const range = window.getSelection()!.getRangeAt(0)
+      range.deleteContents()
+      range.insertNode(document.createTextNode("Moonrise"))
+      fireEvent.input(screen.getByRole("textbox"))
+      fireEvent.click(send)
+      expect(launch).toHaveBeenCalledWith(expect.objectContaining({ prompt: "Animate: Moonrise\\nPacing: " }))
+    } finally {
+      vi.unstubAllGlobals()
     }
   })
 

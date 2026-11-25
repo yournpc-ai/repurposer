@@ -33,23 +33,23 @@ function Home() {
 
   const lastPrefillRef = useRef<string | null>(null)
   const handlePrefill = useCallback(
-    (prefillKey: string, skill: SkillOption | null, { replaceDraft = false } = {}) => {
-      const placeholder = t("recipes.shelf.urlPlaceholder")
-      const text = t(prefillKey, { placeholder })
+    (prefillKey: string, skill: SkillOption | null, brief = false) => {
+      const editor = editorRef.current
+      if (!editor) return
+      const text = t(prefillKey)
       const draft = prompt.trim()
-      const replaceable =
-        replaceDraft || (mentions.length === 0 && (draft === "" || draft === lastPrefillRef.current))
-      if (replaceable) {
-        editorRef.current?.clear({ preserveSkill: true })
-        editorRef.current?.insertText(text)
+      const replaceable = mentions.length === 0 && (draft === "" || draft === lastPrefillRef.current)
+      if (replaceable) editor.clear({ preserveSkill: true })
+      const insertion = replaceable ? text : `\n\n${text}`
+      if (brief) {
+        const result = editor.insertBrief(insertion)
+        lastPrefillRef.current = replaceable ? result.trim() : null
       } else {
-        editorRef.current?.insertText(`\n\n${text}`)
+        editor.insertText(insertion)
+        lastPrefillRef.current = replaceable ? text.trim() : null
+        editor.focus()
       }
-      lastPrefillRef.current = text.trim()
       setSelectedSkill(skill)
-      if (!text.includes(placeholder) || !editorRef.current?.selectText(placeholder, "last")) {
-        editorRef.current?.focus()
-      }
     },
     [t, prompt, mentions],
   )
@@ -85,7 +85,7 @@ function Home() {
       <DemoGallery
         scrollRef={scrollRef}
         onPrefill={(key, reference) => {
-          handlePrefill(key, reference ? skillOptionForReference(reference, skillOptions) : null)
+          handlePrefill(key, reference ? skillOptionForReference(reference, skillOptions) : null, true)
           scrollRef.current?.scrollTo({ top: 0, behavior: "instant" })
         }}
       />

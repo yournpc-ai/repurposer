@@ -68,6 +68,10 @@ export interface MentionEditorHandle {
   insertMention: (mention: ChatMention) => void
   /** Insert plain text at the end ("\n" becomes a line break). */
   insertText: (text: string) => void
+  /** Append a brief ([label] is required, [optional:label] is optional). Return the visible draft. */
+  insertBrief: (template: string) => string
+  selectFirstRequired: () => boolean
+  getSubmitText: () => string
   /** Select an occurrence of plain text (recipe prefill placeholders).
    * Returns whether the text was found. */
   selectText: (text: string, occurrence?: "first" | "last") => boolean
@@ -134,10 +138,10 @@ function readMentionRegion(raw: string | undefined): MediaRegionSelection | unde
  * as `@label` (a quoted chip — 选区引用 — carries its pinned passage inline
  * as `@label "passage"`, so the sentence and the history both keep what the
  * user pointed at), block boundaries as newlines. */
-function serializeNode(node: Node): string {
+function serializeNode(node: Node, forSubmit: boolean): string {
   if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? ""
   if (!(node instanceof HTMLElement)) return ""
-  if (node.hasAttribute(SKILL_ATTR)) return ""
+  if (node.hasAttribute(SKILL_ATTR) || (forSubmit && node.hasAttribute("data-brief-slot"))) return ""
   if (node.dataset.mentionType) {
     const base = `@${node.dataset.mentionLabel ?? ""}`
     const quote = node.dataset.mentionQuote
@@ -154,9 +158,23 @@ function serializeNode(node: Node): string {
     return `${base}${quote ? ` "${quote}"` : ""}${regionText}`
   }
   if (node.tagName === "BR") return "\n"
-  const inner = Array.from(node.childNodes).map(serializeNode).join("")
+  const inner = Array.from(node.childNodes).map((child) => serializeNode(child, forSubmit)).join("")
   // Block elements (Enter/shift-Enter lines) are newline-separated.
   return node.tagName === "DIV" ? `\n${inner}` : inner
+}
+
+function readEditorText(el: HTMLElement | null, forSubmit = false): string {
+  return Array.from(el?.childNodes ?? [], (node) => serializeNode(node, forSubmit)).join("").replace(/^\n/, "")
+}
+
+function selectSlot(editor: HTMLElement, slot: Element) {
+  editor.focus()
+  const range = document.createRange()
+  // Native composition needs an editable selection inside the capsule.
+  range.selectNodeContents(slot)
+  const selection = window.getSelection()
+  selection?.removeAllRanges()
+  selection?.addRange(range)
 }
 
 export function MentionEditor({
@@ -183,6 +201,13 @@ export function MentionEditor({
   const syncNow = useCallback(() => {
     const el = editorRef.current
     if (!el) return
+    // Leave the browser's text nodes and caret in place when a slot becomes prose.
+    for (const slot of el.querySelectorAll<HTMLElement>("[data-brief-slot]")) {
+      if (slot.textContent === slot.dataset.placeholderText) continue
+      slot.removeAttribute("data-brief-slot")
+      slot.removeAttribute("data-placeholder-text")
+      slot.removeAttribute("class")
+    }
     // A deleted-to-empty editable keeps a ghost residue (a lone <br> or an
     // empty text node — the browser's editing-line scaffolding): invisible,
     // but it defeats the CSS :empty placeholder for the rest of the
@@ -193,10 +218,7 @@ export function MentionEditor({
     if (!el.textContent && !el.querySelector(`[${MENTION_ATTR}],[${SKILL_ATTR}]`)) {
       el.innerHTML = ""
     }
-    const text = Array.from(el.childNodes)
-      .map(serializeNode)
-      .join("")
-      .replace(/^\n/, "") // leading block boundary is not a real newline
+    const text = readEditorText(el)
     const mentions: ChatMention[] = Array.from(
       el.querySelectorAll<HTMLElement>(`[${MENTION_ATTR}]`),
     ).map((node) => {
@@ -215,6 +237,7 @@ export function MentionEditor({
     if (selectedSkill && !el.querySelector(`[${SKILL_ATTR}]`)) {
       onSkillChange?.(null)
     }
+    return text
   }, [onChange, onSkillChange, selectedSkill])
 
   const [adoptedInitialDraft, setAdoptedInitialDraft] = useState(false)
@@ -435,6 +458,40 @@ export function MentionEditor({
     [syncNow],
   )
 
+  const insertBrief = useCallback((template: string) => {
+    const el = editorRef.current
+    if (!el) return ""
+    normalizeEmpty(el)
+    const fragment = document.createDocumentFragment()
+    let firstRequired: HTMLElement | undefined
+    let offset = 0
+    for (const match of template.matchAll(/\[(optional:)?([^\[\]\n]+)\]/g)) {
+      fragment.append(template.slice(offset, match.index))
+      const slot = document.createElement("span")
+      slot.dataset.briefSlot = match[1] ? "optional" : "required"
+      slot.className = "rounded bg-muted px-1.5 py-0.5 text-muted-foreground selection:bg-foreground selection:text-background"
+      slot.textContent = `[${match[2]}]`
+      slot.dataset.placeholderText = slot.textContent
+      fragment.append(slot)
+      if (!match[1]) firstRequired ??= slot
+      offset = match.index + match[0].length
+    }
+    fragment.append(template.slice(offset))
+    el.append(fragment)
+    setPicker(null)
+    if (firstRequired) selectSlot(el, firstRequired)
+    else el.focus()
+    return syncNow() ?? ""
+  }, [syncNow])
+
+  const selectFirstRequired = useCallback(() => {
+    const el = editorRef.current
+    const slot = el?.querySelector('[data-brief-slot="required"]')
+    if (!el || !slot) return false
+    selectSlot(el, slot)
+    return true
+  }, [])
+
   const selectSkill = useCallback(
     (option: SkillOption) => {
       const el = editorRef.current
@@ -530,16 +587,36 @@ export function MentionEditor({
     () => ({
       insertMention,
       insertText,
+      insertBrief,
+      selectFirstRequired,
+      getSubmitText: () => readEditorText(editorRef.current, true),
       selectText,
       clear,
       focus,
       getContentHeight: () => editorRef.current?.scrollHeight ?? 0,
     }),
-    [insertMention, insertText, selectText, clear, focus],
+    [insertMention, insertText, insertBrief, selectFirstRequired, selectText, clear, focus],
   )
 
   const handleKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+    if (picker || e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return
+    if (e.key === "Tab" && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      const el = e.currentTarget
+      const selection = window.getSelection()
+      if (!selection?.rangeCount) return
+      const caret = selection.getRangeAt(0).cloneRange()
+      caret.collapse(false)
+      for (const slot of el.querySelectorAll("[data-brief-slot]")) {
+        const next = document.createRange()
+        next.selectNode(slot)
+        if (next.compareBoundaryPoints(Range.START_TO_START, caret) >= 0) {
+          e.preventDefault()
+          selectSlot(el, slot)
+          break
+        }
+      }
+    }
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
       onSubmit()
     }
@@ -650,7 +727,12 @@ export function MentionEditor({
         data-slot="input-group-control"
         data-placeholder={placeholder}
         data-tour={dataTour}
-        onInput={() => {
+        onCompositionEnd={() => {
+          syncNow()
+          updatePicker()
+        }}
+        onInput={(event) => {
+          if ((event.nativeEvent as InputEvent).isComposing) return
           syncNow()
           updatePicker()
         }}
@@ -659,6 +741,10 @@ export function MentionEditor({
           if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) updatePicker()
         }}
         onBlur={() => setPicker(null)}
+        onClick={(event) => {
+          const slot = (event.target as HTMLElement).closest("[data-brief-slot]")
+          if (slot) selectSlot(event.currentTarget, slot)
+        }}
         onMouseUp={updatePicker}
         onPaste={handlePaste}
         className={cn(

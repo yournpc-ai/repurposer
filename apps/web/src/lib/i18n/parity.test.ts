@@ -56,6 +56,20 @@ describe("i18n EN <-> ZH dictionary parity", () => {
     expect(mismatches).toEqual([])
   })
 
+  it("keeps every gallery brief between two and four lines with matching required and optional slots", () => {
+    const slots = (line: string) =>
+      Array.from(line.matchAll(/\[(optional:)?[^\[\]\n]+\]/g), match => match[1] ? "optional" : "required")
+    for (const [key, english] of Object.entries(enLeaves)) {
+      if (!key.startsWith("recipes.shelf.demos.") || !key.endsWith(".prompt")) continue
+      const lines = english.split("\n")
+      const translated = zhLeaves[key].split("\n")
+      expect(lines.length, key).toBeGreaterThanOrEqual(2)
+      expect(lines.length, key).toBeLessThanOrEqual(4)
+      expect(lines.map(slots), key).toEqual(translated.map(slots))
+      expect(slots(english), key).toContain("required")
+    }
+  })
+
   it("contains no unexpected empty translation strings in either locale", () => {
     const emptyEn = Object.entries(enLeaves)
       .filter(([, v]) => v.trim().length === 0)
