@@ -2,6 +2,7 @@
 // imports React/Remotion — renderer adapters consume it from the outside.
 export {
   transitionKinds,
+  motionBlockIds,
   stylePresetIds,
   backdropStyles,
   cardTreatments,
@@ -15,6 +16,7 @@ export type {
   VideoStyle,
   VideoSpec,
   VideoClip,
+  InteractiveBlockProps,
   VideoAnimation,
   VideoKeyframe,
   VideoTextObject,

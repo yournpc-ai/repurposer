@@ -1,6 +1,6 @@
 """Deterministic numbered Slot Promo compiler & wireframe placeholder renderer.
 
-Given any ``SkillBlueprintV1`` (all 15 native MotionBlock types), compiles a
+Given any ``SkillBlueprintV1``, compiles a
 ready-to-preview and ready-to-render ``CompositionContent`` + sequential
 ``[01]..[N]`` ``SlotManifestItem`` list + copyable checklist, preserving 100%
 of act durations, transitions, 3D camera settings, reveal timings, overlays,
@@ -489,6 +489,24 @@ def _plan_act_slots(
                 {"text": copy_slot(f"items[{i}].text", "关键词", "Keyword"), "icon": icons[i % len(icons)]}
                 for i in range(count)
             ]
+    elif bid in {"cursor_magnetic_click", "zoom_follows_click", "browser_url_load"}:
+        if bid != "cursor_magnetic_click":
+            add_image_slot("image_resource", "产品截图", "Product screen",
+                           width=1280, height=720, aspect_ratio="16:9", res_index=0)
+        if bid == "cursor_magnetic_click":
+            replacement["headline"] = copy_slot("headline", "主张", "Headline")
+            replacement["cta_label"] = copy_slot("cta_label", "按钮文案", "Action")
+        elif bid == "zoom_follows_click":
+            replacement.update(target_x=0.5, target_y=0.5)
+        else:
+            replacement["url_text"] = copy_slot("url_text", "网址", "Web address")
+        for key, zh, en in (
+            ("eyebrow", "眉题", "Eyebrow"), ("subcopy", "说明", "Supporting copy"),
+            ("headline", "标题", "Headline"), ("badge", "徽标", "Badge"),
+            ("callout_label", "焦点标注", "Focus label"),
+        ):
+            if key in act.optional_slots and key not in replacement:
+                replacement[key] = copy_slot(key, zh, en)
     elif bid == "ui_montage":
         for i in range(act.resource_count or 3):
             add_image_slot(f"resources[{i}]", "产品界面", "Product screen",
@@ -1154,7 +1172,7 @@ def _plan_act_slots(
         replacement["cta_label"] = "立即体验" if is_zh else "Start Now"
         replacement["url_text"] = _truncate(s_cta.example_value, 80)
 
-    else:  # pragma: no cover - exhaustive over all 15 MotionBlockIds
+    else:  # pragma: no cover - exhaustive over native MotionBlockIds
         raise ValueError(f"Unsupported motion block: {bid}")
 
     # Guarantee opaque canvas backdrop on main acts so blueprint transitions validate cleanly

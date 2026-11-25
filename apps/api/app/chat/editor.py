@@ -11,9 +11,9 @@ from sqlalchemy import func, select
 
 from app.agents.tool_loop import ChatTool, ToolObservation, ToolPresentation
 from app.agents.tool_progress import current_call_id, current_group_id
-from app.chat.editor_create import CreateVideoArgs
+from app.chat.editor_create import CreateVideoArgs, SelectedMotionBlock
 from app.skills.blueprint import InstantiateSkillBlueprintArgs, music_clips_for_window
-from app.editing.catalog import MotionBlockId, SoundRecipeId, SoundTuneArgs, VoiceId
+from app.editing.catalog import SoundRecipeId, SoundTuneArgs, VoiceId
 from app.editing.edits import AddClip, AddTrack, BindSource, SetTransition, SplitClip, TemporalEdit, UpdateClip, UpdateScene
 from app.editing.revisions import TextPosition
 from app.editing.schemas import (
@@ -248,26 +248,12 @@ class SetTransitionArgs(BaseModel):
     )
 
 
-class InsertMotionBlockArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    block_id: Annotated[MotionBlockId, WithJsonSchema({"type": "string"})] = Field(
-        description="Block ID selected with search_blocks and get_blocks.",
-    )
+class InsertMotionBlockArgs(SelectedMotionBlock):
     start_seconds: float = Field(ge=0, allow_inf_nan=False, description="Inclusive start time on timeline.")
     end_seconds: float = Field(gt=0, allow_inf_nan=False, description="Exclusive end time on timeline.")
-    props: dict[str, Any] = Field(description=(
-        "Declarative props for the chosen motion block. Stage options include backdrop_style "
-        "('ambient_mesh' | 'architectural_grid' | 'editorial_paper' | 'kinetic_diagonal' | 'clean'), highlight_at_s, "
-        "and per-item items[].reveal_at_s in scene-local seconds. For metric_grid, items[].value must include "
-        "its unit or symbol (e.g. '3s', '85%', '4.2×', '$1.8M'), keeping items[].label strictly as the metric name. "
-        "For product_showcase, set camera_preset ('flat' | 'tilt_left' | 'tilt_right' | 'dolly_zoom' | 'scroll_reveal'), "
-        "scroll_from_y/scroll_to_y (0..1), real view target element_id for cursor (click_at_s) "
-        "and up to 4 sequential callout_steps (start_s, end_s, label, target), or callout "
-        "{element_id, label?} / {x, y, width, height, label?}."
-    ))
     resources: list[UUID] | None = Field(
         default=None, max_length=16,
-        description="Pinned image or captured webpage snapshot IDs (one or two ordered captures for device_mockup, required capture for product_showcase, optional chat result or CTA logo).",
+        description="Ordered image or captured webpage snapshot IDs matching the slots returned by get_blocks.",
     )
     view_id: str | None = Field(
         default=None, max_length=120,
@@ -286,7 +272,7 @@ class UpdateMotionBlockArgs(BaseModel):
     clip_id: str = Field(min_length=1, max_length=64)
     props_patch: dict[str, Any] = Field(
         min_length=1,
-        description="Partial props to merge into this motion block only (e.g. entrance_duration_s, backdrop_style, camera_preset, callout_steps, cursor, highlight_at_s, items, theme); unrelated clips stay untouched.",
+        description="Partial props for the existing block. Inspect its schema with get_blocks.",
     )
 
 

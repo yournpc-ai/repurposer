@@ -111,6 +111,9 @@ def test_python_and_ts_style_presets_and_contrast_algorithm_zero_drift():
         {"preset_id": "swiss_paper"},
         {"preset_id": "vox_editorial"},
         {"preset_id": "kinetic_anime"},
+        {"preset_id": "institutional_dark", "backdrop_style": "studio_spotlight"},
+        {"preset_id": "institutional_dark", "backdrop_style": "warm_obsidian"},
+        {"preset_id": "swiss_paper", "backdrop_style": "editorial_studio"},
         # Custom accent colors including bright yellow, neon green, deep navy, royal blue
         {"preset_id": "vox_editorial", "accent_color": "#facc15"},
         {"preset_id": "swiss_paper", "accent_color": "#00FF00"},

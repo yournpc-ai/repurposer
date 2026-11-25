@@ -18,6 +18,7 @@ import { KineticBeatBlock } from "./blocks/KineticBeatBlock";
 import { UiMontageBlock } from "./blocks/UiMontageBlock";
 import { ChatDemoBlock } from "./blocks/ChatDemoBlock";
 import { CodeTerminalBlock } from "./blocks/CodeTerminalBlock";
+import { CursorMagneticClick, ZoomFollowsClick, BrowserUrlLoad } from "./blocks/InteractiveBlocks";
 import { LogoWallBlock } from "./blocks/LogoWallBlock";
 import { DeviceMockupBlock } from "./blocks/DeviceMockupBlock";
 import { FlowDiagramBlock } from "./blocks/FlowDiagramBlock";
@@ -1874,7 +1875,13 @@ function narrative<P>(Block: React.ComponentType<{ props: P; frame: Frame }>) {
   return (props: VideoMotionBlockObject["props"], frame: Frame) => <Block props={props as P} frame={frame} />;
 }
 
+type LegacyBlockId = "kinetic_title" | "product_showcase" | "statement_hook" | "metric_grid" | "closing_cta";
+type NarrativeBlockId = Exclude<VideoMotionBlockObject["block_id"], LegacyBlockId>;
+
 const narratives = {
+  cursor_magnetic_click: narrative(CursorMagneticClick),
+  zoom_follows_click: narrative(ZoomFollowsClick),
+  browser_url_load: narrative(BrowserUrlLoad),
   kinetic_beat: narrative(KineticBeatBlock),
   ui_montage: narrative(UiMontageBlock),
   chat_demo: narrative(ChatDemoBlock),
@@ -1887,7 +1894,7 @@ const narratives = {
   bento_features: narrative(BentoFeaturesBlock),
   data_chart: narrative(DataChartBlock),
   quote_proof: narrative(QuoteProofBlock),
-} as const;
+} satisfies Record<NarrativeBlockId, (props: VideoMotionBlockObject["props"], frame: Frame) => React.ReactNode>;
 
 export const MotionBlockView: React.FC<{
   clip: VideoClip & { object: VideoMotionBlockObject };

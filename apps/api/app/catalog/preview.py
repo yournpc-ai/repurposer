@@ -107,6 +107,10 @@ def preview_spec(kind, key, props, needs_media=False):
         version_id=uuid5(NAMESPACE_URL, digest),
         content_digest=digest,
     )
+    if kind == "block" and needs_media:
+        # The renderer stages object.resources directly. Mirroring the same inline
+        # capture onto clip.source would serialize its full PNG a second time.
+        spec["tracks"][0]["clips"][0]["source"] = None
     font = dict(_preview_font())
     if kind == "text_preset":
         import base64
