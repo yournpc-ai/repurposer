@@ -1,4 +1,4 @@
-"""Layer 0 pure contracts: 22 sound-engine v2 recipes & 13 Motion Blocks Py<->TS parity, z-order, transitions, envelopes."""
+"""Layer 0 pure contracts: sound-engine recipes & 13 Motion Blocks Py<->TS parity, z-order, transitions, envelopes."""
 
 from __future__ import annotations
 import pytest
@@ -27,6 +27,8 @@ import app.models.schemas  # noqa: F401 - rebuilds CompositionContent forward re
 from app.editing.catalog import (
     MOTION_BLOCK_CATALOG,
     SOUND_RECIPE_CATALOG,
+    SOUND_ACOUSTICS,
+    TUNE_SCHEMA,
     VERIFIED_VOICE_IDS,
     SoundRecipeId,
     build_sound_spec,
@@ -75,17 +77,19 @@ def test_sound_catalog_and_cache_keys_match_typescript():
     engine = Path(__file__).resolve().parents[4] / "packages" / "sound-engine"
     script = """
         import { createHash } from 'node:crypto';
-        import { SOUND_RECIPES, buildSoundSpec, canonicalSoundSpecJson } from './src/index.ts';
+        import { SOUND_RECIPES, TUNE_SCHEMA, synthesizeSound, buildSoundSpec, canonicalSoundSpecJson } from './src/index.ts';
         const rows = SOUND_RECIPES.map(recipe => {
           const variants = [{}, ...['min', 'max'].map(bound =>
             Object.fromEntries(Object.entries(recipe.params).map(([k,p]) => [k,p[bound]]))),
-            {pitch: recipe.params.pitch.min + 0.5, length: recipe.params.length.max + 10}];
+            recipe.params.pitch ? {pitch: recipe.params.pitch.min + 0.5, length: recipe.params.length.max + 10} : {}];
           const cases = variants.map((params, i) => {
             const seed = [undefined, 0, 0xffffffff, 17][i];
-            const canonical = canonicalSoundSpecJson(buildSoundSpec({recipeId: recipe.id, params, seed}));
-            return {params, seed, canonical, sha: createHash('sha256').update(canonical).digest('hex')};
+            const tune = [undefined, {}, Object.fromEntries(Object.entries(TUNE_SCHEMA).map(([k,v])=>[k,v.max])),
+              {length_scale: 0.67123901, pitch_st: -3.25, volume_db: -80, punch_pct: 19.5}][i];
+            const canonical = canonicalSoundSpecJson(buildSoundSpec({recipeId: recipe.id, params, seed, tune}));
+            return {params, seed, tune, canonical, sha: createHash('sha256').update(canonical).digest('hex')};
           });
-          return {recipe, cases};
+          return {recipe, cases, schema: TUNE_SCHEMA, acoustics: synthesizeSound({recipeId:recipe.id}).acoustics};
         });
         console.log(JSON.stringify(rows));
     """
@@ -94,15 +98,17 @@ def test_sound_catalog_and_cache_keys_match_typescript():
         cwd=engine, check=True, capture_output=True, text=True,
     )
     rows = json.loads(result.stdout)
-    assert len(rows) == len(SOUND_RECIPE_CATALOG) == 22
+    assert len(rows) == len(SOUND_RECIPE_CATALOG) == 80
     assert {row["recipe"]["id"] for row in rows} == set(get_args(SoundRecipeId)) == set(SOUND_RECIPE_CATALOG)
     for row in rows:
         recipe = row["recipe"]
         recipe_id = recipe["id"]
         assert recipe == SOUND_RECIPE_CATALOG[recipe_id]
+        assert TUNE_SCHEMA == row["schema"]
+        assert SOUND_ACOUSTICS[recipe_id] == row["acoustics"]
         for case in row["cases"]:
-            spec = build_sound_spec(recipe_id, case["params"], case.get("seed"))
-            assert spec["engine_version"] == 2
+            spec = build_sound_spec(recipe_id, case["params"], case.get("seed"), case.get("tune"))
+            assert spec["engine_version"] == 3
             assert json.dumps(spec, sort_keys=True, separators=(",", ":")).encode() == case["canonical"].encode()
             assert sound_spec_digest(spec) == case["sha"]
 

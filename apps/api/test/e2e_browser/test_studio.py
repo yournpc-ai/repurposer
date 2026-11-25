@@ -1,5 +1,7 @@
 """Live Studio turns and their durable browser and PostgreSQL projections."""
 import re
+import subprocess
+from pathlib import Path
 
 from playwright.async_api import expect
 import pytest
@@ -127,3 +129,52 @@ async def test_template_slot_preview(studio):
     response = await pending.value
     assert response.status == 200 and "[01]" in (await response.json())["copyable_checklist"]
     await studio.capture("04-slot-preview", page.get_by_role("dialog"))
+
+
+async def test_sound_lab_preview_and_citation(studio):
+    page = studio.page
+    sounds = page.get_by_role("tab", name="Sounds")
+    if not await sounds.is_visible():
+        await page.get_by_role("button", name="Open workbench", exact=True).click()
+    await sounds.click()
+    search = page.get_by_role("searchbox", name="Search sounds")
+    await page.evaluate("""() => {
+        const start = AudioBufferSourceNode.prototype.start;
+        AudioBufferSourceNode.prototype.start = function (...args) {
+            window.previewBuffer = this.buffer;
+            return start.apply(this, args);
+        };
+    }""")
+    await search.fill("glass")
+    await page.get_by_text("Tap Glass", exact=True).first.click()
+    await page.wait_for_function("window.previewBuffer?.numberOfChannels === 2")
+    browser_hash = await page.evaluate("""async () => {
+        const buf = window.previewBuffer;
+        const pcm = new DataView(new ArrayBuffer(buf.length * 4));
+        for (let ch = 0; ch < 2; ch++) {
+            buf.getChannelData(ch).forEach((x, i) => pcm.setInt16(4*i + 2*ch, Math.round(32767*x), true));
+        }
+        const bytes = new Uint8Array(await crypto.subtle.digest("SHA-256", pcm.buffer));
+        return Array.from(bytes, x => x.toString(16).padStart(2, "0")).join("");
+    }""")
+    node_hash = subprocess.check_output(
+        ["node", "--import", "tsx", "--input-type=module", "-e",
+         """import {synthesizeWav} from './src/index.ts'; import {createHash} from 'node:crypto';
+         const {wav} = synthesizeWav({recipeId:'tap_glass'});
+         console.log(createHash('sha256').update(wav.subarray(44)).digest('hex'));"""],
+        cwd=Path(__file__).resolve().parents[4] / "packages/sound-engine", text=True,
+    ).strip()
+    assert browser_hash == node_hash
+    await expect(page.get_by_role("slider")).to_have_count(7)
+    pitch = page.get_by_role("slider", name="Pitch", exact=True)
+    await search.fill("")
+    await page.get_by_role("combobox", name="Category").click()
+    await page.get_by_role("option", name="Tap", exact=True).click()
+    await expect(page.get_by_text("Tap Glass", exact=True).first).to_be_visible()
+    await page.get_by_text("Tap Glass", exact=True).first.click()
+    await pitch.focus()
+    await pitch.press("ArrowRight")
+    await pitch.blur()
+    await studio.capture("05-sound-lab", page)
+    await page.get_by_role("button", name="Cite in chat").click()
+    await expect(page.get_by_role("textbox")).to_contain_text('"pitch_st":0.5')

@@ -6,20 +6,23 @@ import { SAMPLE_RATE, type SoundGraph } from "./types.js";
 
 import {
   SOUND_RECIPES,
+  synthesizeSound,
   canonicalSoundSpecJson,
   synthesizeWav,
 } from "./index.js";
 
 describe("@repurposer/sound-engine core contract", () => {
-  it("renders all 22 recipes deterministically with zero clipping and valid acoustic cues", () => {
+  it("renders all recipes deterministically with zero clipping and valid acoustic cues", () => {
     assert.deepEqual(
-      SOUND_RECIPES.map((r) => r.id),
+      SOUND_RECIPES.slice(0, 22).map((r) => r.id),
       ["whoosh", "impact", "click", "riser", "stinger", "swoosh_cut",
         "sub_swell", "shimmer_lift", "deep_hit", "sub_drop", "kinetic_thud",
         "velvet_pass", "page_turn", "title_bloom", "metric_chime", "callout_ping",
         "studio_air", "pulse_bed", "soft_pop", "toggle_on", "select_tick", "confirm_chime"],
     );
 
+    assert.equal(SOUND_RECIPES.length, 80);
+    const categories = new Map<string, ReturnType<typeof synthesizeSound>["acoustics"][]>();
     for (const recipe of SOUND_RECIPES) {
       const a = synthesizeWav({ recipeId: recipe.id });
       const b = synthesizeWav({ recipeId: recipe.id });
@@ -45,6 +48,16 @@ describe("@repurposer/sound-engine core contract", () => {
         assert.ok(Math.abs(channel.reduce((sum, x) => sum + x, 0) / channel.length) < 0.000001, recipe.id);
       }
 
+      const siblings = categories.get(recipe.category) ?? [];
+      for (const sibling of siblings) {
+        const m = a.acoustics;
+        const relative = (x: number, y: number) => Math.abs(Math.log(x / y));
+        assert.ok(relative(m.duration_ms, sibling.duration_ms) > 0.18 ||
+          relative(m.spectral_centroid_hz, sibling.spectral_centroid_hz) > 0.22 ||
+          Math.abs(m.lufs - sibling.lufs) > 2.2 || Math.abs(m.peak_offset_ms - sibling.peak_offset_ms) > 45,
+          recipe.id + " lacks an acoustic distinction within " + recipe.category);
+      }
+      categories.set(recipe.category, [...siblings, a.acoustics]);
       let energy = 0;
       let moment = 0;
       for (let i = 0; i < a.left.length; i++) {
@@ -59,6 +72,30 @@ describe("@repurposer/sound-engine core contract", () => {
         assert.ok(ratio > window[0] && ratio < window[1], `${recipe.id}: ${ratio} outside ${window}`);
       }
     }
+    assert.equal(categories.size, 24);
+    for (const siblings of categories.values()) assert.ok([3, 4].includes(siblings.length));
+  });
+
+  it("stretches envelopes, transposes resonances and adjusts all seven tune axes", () => {
+    const render = (tune: Parameters<typeof synthesizeSound>[0]["tune"], seed = 1) =>
+      synthesizeSound({ recipeId: "tap_glass", tune, seed });
+    const stretch = (length_scale: number) => synthesizeSound({ recipeId: "metric_chime", tune: { length_scale } }).acoustics;
+    const short = stretch(0.5);
+    const long = stretch(2);
+    assert.equal(long.duration_ms, short.duration_ms * 4);
+    assert.ok(Math.abs(long.spectral_centroid_hz / short.spectral_centroid_hz - 1) < 0.15);
+    for (const [key, magnitude] of [["pitch_st", 7], ["tone_pct", 60]] as const) {
+      assert.ok(render({ [key]: magnitude }).acoustics.spectral_centroid_hz >
+        render({ [key]: -magnitude }).acoustics.spectral_centroid_hz);
+    }
+    const power = (x: Float32Array) => x.reduce((sum, sample) => sum + sample * sample, 0);
+    assert.ok(power(render({ space_pct: 80 }).left.slice(-2200)) > 2 * power(render({ space_pct: -80 }).left.slice(-2200)));
+    assert.ok(power(render({ punch_pct: 70 }).left.slice(0, 96)) > 2 * power(render({ punch_pct: -70 }).left.slice(0, 96)));
+    const variant = render({ variation_pct: 60 }).left;
+    assert.deepEqual(variant, render({ variation_pct: 60 }).left);
+    assert.notDeepEqual(variant, render({ variation_pct: 60 }, 2).left);
+    assert.ok(Math.abs(render({ volume_db: -12 }).acoustics.peak_dbfs - render({}).acoustics.peak_dbfs + 12) < 0.02);
+    assert.ok(render({ volume_db: 6 }).acoustics.peak_dbfs < -0.5);
   });
 
   it("reflects parameter edits acoustically and excludes discovery metadata from canonical spec", () => {

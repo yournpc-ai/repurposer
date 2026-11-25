@@ -369,6 +369,7 @@ export interface AudioPlaybackBlock {
     sound_recipe?: {
       recipe_id: string
       recipe_version: number
+      tune?: import("@repurposer/sound-engine").SoundTune
       params: Record<string, number>
       seed: number
     }

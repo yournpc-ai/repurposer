@@ -88,6 +88,7 @@ def _playback_item(measured: dict, report: dict, role: str, result: dict, reques
         item["sound_recipe"] = {
             "recipe_id": sr.get("recipe_id"),
             "recipe_version": sr.get("recipe_version"),
+            **({"tune": sr["tune"]} if "tune" in sr else {}),
             "params": sr.get("params") or {},
             "seed": sr.get("seed"),
         }

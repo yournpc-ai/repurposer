@@ -1,0 +1,6329 @@
+{
+  "engine_version": 3,
+  "tune_schema": {
+    "pitch_st": {
+      "unit": "st",
+      "min": -12,
+      "max": 12,
+      "step": 0.5,
+      "default": 0,
+      "description": "Transpose resonances in semitones."
+    },
+    "tone_pct": {
+      "unit": "%",
+      "min": -100,
+      "max": 100,
+      "step": 1,
+      "default": 0,
+      "description": "Darken or brighten the spectrum."
+    },
+    "length_scale": {
+      "unit": "×",
+      "min": 0.25,
+      "max": 3,
+      "step": 0.05,
+      "default": 1,
+      "description": "Stretch the envelope while preserving pitch."
+    },
+    "space_pct": {
+      "unit": "%",
+      "min": -100,
+      "max": 100,
+      "step": 1,
+      "default": 0,
+      "description": "Adjust room send and stereo width."
+    },
+    "punch_pct": {
+      "unit": "%",
+      "min": -100,
+      "max": 100,
+      "step": 1,
+      "default": 0,
+      "description": "Soften or sharpen the attack."
+    },
+    "variation_pct": {
+      "unit": "%",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "default": 0,
+      "description": "Introduce seeded performance variation."
+    },
+    "volume_db": {
+      "unit": "dB",
+      "min": -24,
+      "max": 6,
+      "step": 0.5,
+      "default": 0,
+      "description": "Trim the mastered output."
+    }
+  },
+  "recipes": {
+    "whoosh": {
+      "id": "whoosh",
+      "name_zh": "空气掠过",
+      "moods": [
+        "fluid"
+      ],
+      "energy": "medium",
+      "version": 2,
+      "domain": "video",
+      "category": "whooshes",
+      "name": "Air Whoosh",
+      "desc": "Clean directional air sweep that swells across the stereo field and dissipates softly.",
+      "use_for": [
+        "kinetic title entrance",
+        "product card slide-in",
+        "scene motion cue"
+      ],
+      "avoid": [
+        "static text hold",
+        "realistic outdoor wind"
+      ],
+      "suggested_duration_ms": [
+        320,
+        700
+      ],
+      "sync_cue": "energy_peak",
+      "mix_hint": "Align peak_offset_ms with fastest visual velocity; lower tone over sibilant narration.",
+      "params": {
+        "length": {
+          "unit": "ms",
+          "default": 540,
+          "min": 180,
+          "max": 1100,
+          "step": 1,
+          "description": "Total air sweep duration."
+        },
+        "pitch": {
+          "unit": "Hz",
+          "default": 410,
+          "min": 180,
+          "max": 760,
+          "step": 1,
+          "description": "Center resonance of body airflow and subtle tonal glide."
+        },
+        "tone": {
+          "unit": "%",
+          "default": 54,
+          "min": 10,
+          "max": 90,
+          "step": 1,
+          "description": "High-frequency air sheen; lower to sit cleanly under speech."
+        },
+        "punch": {
+          "unit": "%",
+          "default": 46,
+          "min": 15,
+          "max": 90,
+          "step": 1,
+          "description": "Tightness of the central swell crest."
+        },
+        "space": {
+          "unit": "%",
+          "default": 64,
+          "min": 0,
+          "max": 100,
+          "step": 1,
+          "description": "Stereo travel width and subtle spatial spread."
+        }
+      }
+    },
+    "impact": {
+      "id": "impact",
+      "name_zh": "柔和撞击",
+      "moods": [
+        "tactile"
+      ],
+      "energy": "medium",
+      "version": 2,
+      "domain": "video",
+      "category": "impacts",
+      "name": "Soft Impact",
+      "desc": "Restrained tactile settle with warm low-end body and clean studio reflections.",
+      "use_for": [
+        "title lock-in",
+        "product card landing",
+        "headline emphasis"
+      ],
+      "avoid": [
+        "rapid UI clicks",
+        "cinematic explosion"
+      ],
+      "suggested_duration_ms": [
+        220,
+        560
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Align clip start (onset) with visual settle frame; lower pitch for deeper weight.",
+      "params": {
+        "pitch": {
+          "unit": "Hz",
+          "default": 112,
+          "min": 48,
+          "max": 185,
+          "step": 1,
+          "description": "Fundamental body resonance; lower values sound deeper and heavier."
+        },
+        "punch": {
+          "unit": "%",
+          "default": 48,
+          "min": 5,
+          "max": 95,
+          "step": 1,
+          "description": "Initial transient attack sharpness and upper harmonic click."
+        },
+        "tone": {
+          "unit": "%",
+          "default": 44,
+          "min": 10,
+          "max": 90,
+          "step": 1,
+          "description": "Brightness of the overtone and filtered thump."
+        },
+        "length": {
+          "unit": "ms",
+          "default": 380,
+          "min": 140,
+          "max": 820,
+          "step": 1,
+          "description": "Low-end decay tail length."
+        },
+        "space": {
+          "unit": "%",
+          "default": 26,
+          "min": 0,
+          "max": 85,
+          "step": 1,
+          "description": "Stereo early-reflection ambience."
+        }
+      }
+    },
+    "click": {
+      "id": "click",
+      "name_zh": "机械点击",
+      "moods": [
+        "crisp"
+      ],
+      "energy": "subtle",
+      "version": 2,
+      "domain": "interface",
+      "category": "tap",
+      "name": "Tactile Click",
+      "desc": "Crisp micro interface tap with subtle cavity resonance and zero harshness.",
+      "use_for": [
+        "button tap",
+        "cursor selection",
+        "metric highlight"
+      ],
+      "avoid": [
+        "scene transitions",
+        "dramatic landings"
+      ],
+      "suggested_duration_ms": [
+        45,
+        95
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Keep gain restrained (-12 to -8 dB) so rapid interactions never distract from speech.",
+      "params": {
+        "pitch": {
+          "unit": "Hz",
+          "default": 840,
+          "min": 380,
+          "max": 1500,
+          "step": 1,
+          "description": "Primary cavity resonance pitch."
+        },
+        "punch": {
+          "unit": "%",
+          "default": 54,
+          "min": 5,
+          "max": 95,
+          "step": 1,
+          "description": "Attack crispness and short harmonic snap."
+        },
+        "tone": {
+          "unit": "%",
+          "default": 50,
+          "min": 10,
+          "max": 90,
+          "step": 1,
+          "description": "Upper overtone brightness."
+        },
+        "length": {
+          "unit": "ms",
+          "default": 65,
+          "min": 32,
+          "max": 130,
+          "step": 1,
+          "description": "Decay window of the tap."
+        },
+        "space": {
+          "unit": "%",
+          "default": 10,
+          "min": 0,
+          "max": 60,
+          "step": 1,
+          "description": "Subtle room reflection amount."
+        }
+      }
+    },
+    "riser": {
+      "id": "riser",
+      "name_zh": "渐强上升",
+      "moods": [
+        "tense"
+      ],
+      "energy": "high",
+      "version": 2,
+      "domain": "video",
+      "category": "risers",
+      "name": "Tension Riser",
+      "desc": "Smooth upward shimmer and harmonic swell building cleanly into a reveal cut.",
+      "use_for": [
+        "pre-reveal build",
+        "interface zoom anticipation",
+        "transition lead-in"
+      ],
+      "avoid": [
+        "after reveal",
+        "background bed"
+      ],
+      "suggested_duration_ms": [
+        600,
+        1600
+      ],
+      "sync_cue": "end_peak",
+      "mix_hint": "End clip right at the reveal frame so peak_offset_ms hands off into the impact or cut.",
+      "params": {
+        "length": {
+          "unit": "ms",
+          "default": 1050,
+          "min": 400,
+          "max": 2400,
+          "step": 1,
+          "description": "Build duration leading into the reveal."
+        },
+        "pitch": {
+          "unit": "Hz",
+          "default": 260,
+          "min": 140,
+          "max": 540,
+          "step": 1,
+          "description": "Starting harmonic center of the upward sweep."
+        },
+        "tone": {
+          "unit": "%",
+          "default": 58,
+          "min": 15,
+          "max": 90,
+          "step": 1,
+          "description": "Upper shimmer brightness at the climax."
+        },
+        "punch": {
+          "unit": "%",
+          "default": 55,
+          "min": 15,
+          "max": 90,
+          "step": 1,
+          "description": "Steepness of the crescendo curve."
+        },
+        "space": {
+          "unit": "%",
+          "default": 42,
+          "min": 0,
+          "max": 90,
+          "step": 1,
+          "description": "Stereo widening and reflection tail."
+        }
+      }
+    },
+    "stinger": {
+      "id": "stinger",
+      "name_zh": "片尾重音",
+      "moods": [
+        "bold"
+      ],
+      "energy": "high",
+      "version": 2,
+      "domain": "video",
+      "category": "stingers",
+      "name": "Brand Stinger",
+      "desc": "Restrained institutional harmonic chime with crystalline overtones for logo or title lockups.",
+      "use_for": [
+        "brand mark reveal",
+        "opening statement accent",
+        "closing lockup"
+      ],
+      "avoid": [
+        "dense narration syllables",
+        "frequent UI actions"
+      ],
+      "suggested_duration_ms": [
+        480,
+        1200
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Place on open beat or title lockup; keep gain modest if BGM already has strong harmony.",
+      "params": {
+        "pitch": {
+          "unit": "Hz",
+          "default": 330,
+          "min": 196,
+          "max": 587,
+          "step": 1,
+          "description": "Root note frequency (330 Hz ≈ E4, 262 Hz ≈ C4)."
+        },
+        "tone": {
+          "unit": "%",
+          "default": 54,
+          "min": 15,
+          "max": 90,
+          "step": 1,
+          "description": "Upper harmonic sheen and bell shimmer."
+        },
+        "length": {
+          "unit": "ms",
+          "default": 760,
+          "min": 350,
+          "max": 1500,
+          "step": 1,
+          "description": "Resonant sustain tail."
+        },
+        "punch": {
+          "unit": "%",
+          "default": 46,
+          "min": 10,
+          "max": 90,
+          "step": 1,
+          "description": "Attack clarity on the initial chime."
+        },
+        "space": {
+          "unit": "%",
+          "default": 48,
+          "min": 10,
+          "max": 90,
+          "step": 1,
+          "description": "Stereo spread and early reflections."
+        }
+      }
+    },
+    "swoosh_cut": {
+      "id": "swoosh_cut",
+      "name_zh": "甩切掠风",
+      "moods": [
+        "kinetic"
+      ],
+      "energy": "high",
+      "version": 2,
+      "domain": "video",
+      "category": "whooshes",
+      "name": "Swoosh Cut",
+      "desc": "Compact symmetrical bidirectional air-and-body sweep designed specifically for crossfade scene cuts.",
+      "use_for": [
+        "scene crossfade cut",
+        "act-to-act handoff",
+        "product view switch"
+      ],
+      "avoid": [
+        "static holds",
+        "consecutive cuts less than 2s apart"
+      ],
+      "suggested_duration_ms": [
+        240,
+        420
+      ],
+      "sync_cue": "energy_peak",
+      "mix_hint": "Center peak_offset_ms right on the crossfade cut frame; keep gain -14 to -11 dB under narration.",
+      "params": {
+        "length": {
+          "unit": "ms",
+          "default": 320,
+          "min": 200,
+          "max": 520,
+          "step": 1,
+          "description": "Total symmetrical cut-sweep duration."
+        },
+        "pitch": {
+          "unit": "Hz",
+          "default": 520,
+          "min": 260,
+          "max": 920,
+          "step": 1,
+          "description": "Center filter resonance of the cut body."
+        },
+        "tone": {
+          "unit": "%",
+          "default": 48,
+          "min": 12,
+          "max": 88,
+          "step": 1,
+          "description": "Upper air sheen; reduce under sibilant speech."
+        },
+        "punch": {
+          "unit": "%",
+          "default": 56,
+          "min": 15,
+          "max": 92,
+          "step": 1,
+          "description": "Tightness of the center crossing crest."
+        },
+        "space": {
+          "unit": "%",
+          "default": 52,
+          "min": 0,
+          "max": 90,
+          "step": 1,
+          "description": "Stereo cross-panning width and subtle room tail."
+        }
+      }
+    },
+    "sub_swell": {
+      "id": "sub_swell",
+      "name_zh": "低频涌动",
+      "moods": [
+        "tense"
+      ],
+      "energy": "medium",
+      "version": 2,
+      "domain": "video",
+      "category": "risers",
+      "name": "Sub Swell",
+      "desc": "Low bowed octave rising gently into an opening frame.",
+      "use_for": [
+        "opening title reveal"
+      ],
+      "avoid": [
+        "static narration"
+      ],
+      "suggested_duration_ms": [
+        420,
+        2000
+      ],
+      "sync_cue": "end_peak",
+      "mix_hint": "Use sparingly at −14 to −10 dB under narration.",
+      "params": {
+        "length": {
+          "unit": "ms",
+          "default": 920,
+          "min": 420,
+          "max": 2000,
+          "step": 1,
+          "description": "Duration including the release."
+        },
+        "pitch": {
+          "unit": "Hz",
+          "default": 68,
+          "min": 45,
+          "max": 110,
+          "step": 1,
+          "description": "Resonant center of the instrument."
+        },
+        "space": {
+          "unit": "%",
+          "default": 29,
+          "min": 0,
+          "max": 100,
+          "step": 1,
+          "description": "Room send and stereo width."
+        }
+      }
+    },
+    "shimmer_lift": {
+      "id": "shimmer_lift",
+      "name_zh": "闪光上扬",
+      "moods": [
+        "bright"
+      ],
+      "energy": "medium",
+      "version": 2,
+      "domain": "video",
+      "category": "risers",
+      "name": "Shimmer Lift",
+      "desc": "A climbing fifth with a fine, diffuse high register.",
+      "use_for": [
+        "reveal anticipation"
+      ],
+      "avoid": [
+        "static narration"
+      ],
+      "suggested_duration_ms": [
+        510,
+        1900
+      ],
+      "sync_cue": "end_peak",
+      "mix_hint": "Use sparingly at −14 to −10 dB under narration.",
+      "params": {
+        "length": {
+          "unit": "ms",
+          "default": 1150,
+          "min": 510,
+          "max": 1900,
+          "step": 1,
+          "description": "Duration including the release."
+        },
+        "pitch": {
+          "unit": "Hz",
+          "default": 480,
+          "min": 290,
+          "max": 720,
+          "step": 1,
+          "description": "Resonant center of the instrument."
+        },
+        "space": {
+          "unit": "%",
+          "default": 64,
+          "min": 0,
+          "max": 100,
+          "step": 1,
+          "description": "Room send and stereo width."
+        }
+      }
+    },
+    "deep_hit": {
+      "id": "deep_hit",
+      "name_zh": "深沉重击",
+      "moods": [
+        "cinematic"
+      ],
+      "energy": "explosive",
+      "version": 2,
+      "domain": "video",
+      "category": "impacts",
+      "name": "Deep Hit",
+      "desc": "A felted bass strike with a brief grain of contact.",
+      "use_for": [
+        "anchor a chapter heading"
+      ],
+      "avoid": [
+        "static narration"
+      ],
+      "suggested_duration_ms": [
+        240,
+        960
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Use sparingly at −14 to −10 dB under narration.",
+      "params": {
+        "length": {
+          "unit": "ms",
+          "default": 530,
+          "min": 240,
+          "max": 960,
+          "step": 1,
+          "description": "Duration including the release."
+        },
+        "pitch": {
+          "unit": "Hz",
+          "default": 67,
+          "min": 48,
+          "max": 105,
+          "step": 1,
+          "description": "Resonant center of the instrument."
+        },
+        "space": {
+          "unit": "%",
+          "default": 38,
+          "min": 0,
+          "max": 100,
+          "step": 1,
+          "description": "Room send and stereo width."
+        }
+      }
+    },
+    "sub_drop": {
+      "id": "sub_drop",
+      "name_zh": "低音坠落",
+      "moods": [
+        "dramatic"
+      ],
+      "energy": "explosive",
+      "version": 2,
+      "domain": "video",
+      "category": "drops",
+      "name": "Sub Drop",
+      "desc": "A falling low register leaves space after a change of argument.",
+      "use_for": [
+        "pain-point pivot"
+      ],
+      "avoid": [
+        "static narration"
+      ],
+      "suggested_duration_ms": [
+        300,
+        1250
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Use sparingly at −14 to −10 dB under narration.",
+      "params": {
+        "length": {
+          "unit": "ms",
+          "default": 660,
+          "min": 300,
+          "max": 1250,
+          "step": 1,
+          "description": "Duration including the release."
+        },
+        "pitch": {
+          "unit": "Hz",
+          "default": 105,
+          "min": 74,
+          "max": 165,
+          "step": 1,
+          "description": "Resonant center of the instrument."
+        },
+        "space": {
+          "unit": "%",
+          "default": 22,
+          "min": 0,
+          "max": 100,
+          "step": 1,
+          "description": "Room send and stereo width."
+        }
+      }
+    },
+    "kinetic_thud": {
+      "id": "kinetic_thud",
+      "name_zh": "节拍顿击",
+      "moods": [
+        "punchy"
+      ],
+      "energy": "high",
+      "version": 2,
+      "domain": "video",
+      "category": "impacts",
+      "name": "Kinetic Thud",
+      "desc": "Two close contacts suggest a panel seating in its frame.",
+      "use_for": [
+        "product panel landing"
+      ],
+      "avoid": [
+        "static narration"
+      ],
+      "suggested_duration_ms": [
+        140,
+        520
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Use sparingly at −14 to −10 dB under narration.",
+      "params": {
+        "length": {
+          "unit": "ms",
+          "default": 270,
+          "min": 140,
+          "max": 520,
+          "step": 1,
+          "description": "Duration including the release."
+        },
+        "pitch": {
+          "unit": "Hz",
+          "default": 147,
+          "min": 85,
+          "max": 220,
+          "step": 1,
+          "description": "Resonant center of the instrument."
+        },
+        "space": {
+          "unit": "%",
+          "default": 23,
+          "min": 0,
+          "max": 100,
+          "step": 1,
+          "description": "Room send and stereo width."
+        }
+      }
+    },
+    "velvet_pass": {
+      "id": "velvet_pass",
+      "name_zh": "柔风划过",
+      "moods": [
+        "smooth"
+      ],
+      "energy": "subtle",
+      "version": 2,
+      "domain": "video",
+      "category": "whooshes",
+      "name": "Velvet Pass",
+      "desc": "A dark fabric-like sweep crosses the frame.",
+      "use_for": [
+        "soft lateral crossfade"
+      ],
+      "avoid": [
+        "static narration"
+      ],
+      "suggested_duration_ms": [
+        240,
+        920
+      ],
+      "sync_cue": "energy_peak",
+      "mix_hint": "Use sparingly at −14 to −10 dB under narration.",
+      "params": {
+        "length": {
+          "unit": "ms",
+          "default": 510,
+          "min": 240,
+          "max": 920,
+          "step": 1,
+          "description": "Duration including the release."
+        },
+        "pitch": {
+          "unit": "Hz",
+          "default": 340,
+          "min": 195,
+          "max": 580,
+          "step": 1,
+          "description": "Resonant center of the instrument."
+        },
+        "space": {
+          "unit": "%",
+          "default": 71,
+          "min": 0,
+          "max": 100,
+          "step": 1,
+          "description": "Room send and stereo width."
+        }
+      }
+    },
+    "page_turn": {
+      "id": "page_turn",
+      "name_zh": "纸页翻动",
+      "moods": [
+        "organic"
+      ],
+      "energy": "subtle",
+      "version": 2,
+      "domain": "video",
+      "category": "transitions",
+      "name": "Page Turn",
+      "desc": "A papery lift followed by the short brush of a settling leaf.",
+      "use_for": [
+        "document page change"
+      ],
+      "avoid": [
+        "static narration"
+      ],
+      "suggested_duration_ms": [
+        210,
+        680
+      ],
+      "sync_cue": "energy_peak",
+      "mix_hint": "Use sparingly at −14 to −10 dB under narration.",
+      "params": {
+        "length": {
+          "unit": "ms",
+          "default": 365,
+          "min": 210,
+          "max": 680,
+          "step": 1,
+          "description": "Duration including the release."
+        },
+        "pitch": {
+          "unit": "Hz",
+          "default": 1300,
+          "min": 780,
+          "max": 2300,
+          "step": 1,
+          "description": "Resonant center of the instrument."
+        },
+        "space": {
+          "unit": "%",
+          "default": 43,
+          "min": 0,
+          "max": 100,
+          "step": 1,
+          "description": "Room send and stereo width."
+        }
+      }
+    },
+    "title_bloom": {
+      "id": "title_bloom",
+      "name_zh": "标题绽放",
+      "moods": [
+        "warm"
+      ],
+      "energy": "medium",
+      "version": 2,
+      "domain": "video",
+      "category": "titles",
+      "name": "Title Bloom",
+      "desc": "A slowly voiced open fifth comes into focus under a headline.",
+      "use_for": [
+        "opening title"
+      ],
+      "avoid": [
+        "static narration"
+      ],
+      "suggested_duration_ms": [
+        400,
+        1350
+      ],
+      "sync_cue": "energy_peak",
+      "mix_hint": "Use sparingly at −14 to −10 dB under narration.",
+      "params": {
+        "length": {
+          "unit": "ms",
+          "default": 780,
+          "min": 400,
+          "max": 1350,
+          "step": 1,
+          "description": "Duration including the release."
+        },
+        "pitch": {
+          "unit": "Hz",
+          "default": 220,
+          "min": 147,
+          "max": 350,
+          "step": 1,
+          "description": "Resonant center of the instrument."
+        },
+        "space": {
+          "unit": "%",
+          "default": 56,
+          "min": 0,
+          "max": 100,
+          "step": 1,
+          "description": "Room send and stereo width."
+        }
+      }
+    },
+    "metric_chime": {
+      "id": "metric_chime",
+      "name_zh": "数据铃音",
+      "moods": [
+        "precise"
+      ],
+      "energy": "medium",
+      "version": 2,
+      "domain": "video",
+      "category": "accents",
+      "name": "Metric Chime",
+      "desc": "A measured glass strike with a short, clear upper partial.",
+      "use_for": [
+        "data-card arrival"
+      ],
+      "avoid": [
+        "static narration"
+      ],
+      "suggested_duration_ms": [
+        230,
+        800
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Use sparingly at −14 to −10 dB under narration.",
+      "params": {
+        "length": {
+          "unit": "ms",
+          "default": 460,
+          "min": 230,
+          "max": 800,
+          "step": 1,
+          "description": "Duration including the release."
+        },
+        "pitch": {
+          "unit": "Hz",
+          "default": 659,
+          "min": 370,
+          "max": 990,
+          "step": 1,
+          "description": "Resonant center of the instrument."
+        },
+        "space": {
+          "unit": "%",
+          "default": 36,
+          "min": 0,
+          "max": 100,
+          "step": 1,
+          "description": "Room send and stereo width."
+        }
+      }
+    },
+    "callout_ping": {
+      "id": "callout_ping",
+      "name_zh": "标注提示",
+      "moods": [
+        "bright"
+      ],
+      "energy": "subtle",
+      "version": 2,
+      "domain": "interface",
+      "category": "notify",
+      "name": "Callout Ping",
+      "desc": "A single narrow focus tone settles a few cents downward.",
+      "use_for": [
+        "selection box focus"
+      ],
+      "avoid": [
+        "static narration"
+      ],
+      "suggested_duration_ms": [
+        115,
+        470
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Use sparingly at −14 to −10 dB under narration.",
+      "params": {
+        "length": {
+          "unit": "ms",
+          "default": 235,
+          "min": 115,
+          "max": 470,
+          "step": 1,
+          "description": "Duration including the release."
+        },
+        "pitch": {
+          "unit": "Hz",
+          "default": 910,
+          "min": 520,
+          "max": 1400,
+          "step": 1,
+          "description": "Resonant center of the instrument."
+        },
+        "space": {
+          "unit": "%",
+          "default": 19,
+          "min": 0,
+          "max": 100,
+          "step": 1,
+          "description": "Room send and stereo width."
+        }
+      }
+    },
+    "studio_air": {
+      "id": "studio_air",
+      "name_zh": "影棚空气",
+      "moods": [
+        "calm"
+      ],
+      "energy": "subtle",
+      "version": 2,
+      "domain": "video",
+      "category": "ambience",
+      "name": "Studio Air",
+      "desc": "A brief pocket of room air with a soft center and quiet edges.",
+      "use_for": [
+        "pause before an interview reveal"
+      ],
+      "avoid": [
+        "static narration"
+      ],
+      "suggested_duration_ms": [
+        700,
+        2800
+      ],
+      "sync_cue": "energy_peak",
+      "mix_hint": "Use sparingly at −14 to −10 dB under narration.",
+      "params": {
+        "length": {
+          "unit": "ms",
+          "default": 1550,
+          "min": 700,
+          "max": 2800,
+          "step": 1,
+          "description": "Duration including the release."
+        },
+        "pitch": {
+          "unit": "Hz",
+          "default": 330,
+          "min": 190,
+          "max": 610,
+          "step": 1,
+          "description": "Resonant center of the instrument."
+        },
+        "space": {
+          "unit": "%",
+          "default": 78,
+          "min": 0,
+          "max": 100,
+          "step": 1,
+          "description": "Room send and stereo width."
+        }
+      }
+    },
+    "pulse_bed": {
+      "id": "pulse_bed",
+      "name_zh": "脉冲铺底",
+      "moods": [
+        "tense"
+      ],
+      "energy": "medium",
+      "version": 2,
+      "domain": "video",
+      "category": "tension",
+      "name": "Pulse Bed",
+      "desc": "Five muted pulses grow toward a central editorial beat.",
+      "use_for": [
+        "brief analytical pause"
+      ],
+      "avoid": [
+        "static narration"
+      ],
+      "suggested_duration_ms": [
+        720,
+        2300
+      ],
+      "sync_cue": "energy_peak",
+      "mix_hint": "Use sparingly at −14 to −10 dB under narration.",
+      "params": {
+        "length": {
+          "unit": "ms",
+          "default": 1380,
+          "min": 720,
+          "max": 2300,
+          "step": 1,
+          "description": "Duration including the release."
+        },
+        "pitch": {
+          "unit": "Hz",
+          "default": 109,
+          "min": 70,
+          "max": 172,
+          "step": 1,
+          "description": "Resonant center of the instrument."
+        },
+        "space": {
+          "unit": "%",
+          "default": 33,
+          "min": 0,
+          "max": 100,
+          "step": 1,
+          "description": "Room send and stereo width."
+        }
+      }
+    },
+    "soft_pop": {
+      "id": "soft_pop",
+      "name_zh": "轻柔弹出",
+      "moods": [
+        "playful"
+      ],
+      "energy": "subtle",
+      "version": 2,
+      "domain": "video",
+      "category": "pops",
+      "name": "Soft Pop",
+      "desc": "A rounded descending bubble for a light press.",
+      "use_for": [
+        "button press"
+      ],
+      "avoid": [
+        "continuous pointer movement"
+      ],
+      "suggested_duration_ms": [
+        55,
+        185
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Use sparingly at −14 to −10 dB under narration.",
+      "params": {
+        "length": {
+          "unit": "ms",
+          "default": 96,
+          "min": 55,
+          "max": 185,
+          "step": 1,
+          "description": "Duration including the release."
+        },
+        "pitch": {
+          "unit": "Hz",
+          "default": 425,
+          "min": 275,
+          "max": 740,
+          "step": 1,
+          "description": "Resonant center of the instrument."
+        },
+        "space": {
+          "unit": "%",
+          "default": 12,
+          "min": 0,
+          "max": 100,
+          "step": 1,
+          "description": "Room send and stereo width."
+        }
+      }
+    },
+    "toggle_on": {
+      "id": "toggle_on",
+      "name_zh": "开关触发",
+      "moods": [
+        "crisp"
+      ],
+      "energy": "subtle",
+      "version": 2,
+      "domain": "interface",
+      "category": "toggle",
+      "name": "Toggle On",
+      "desc": "A compact upward latch with a softer answering contact.",
+      "use_for": [
+        "enable a switch"
+      ],
+      "avoid": [
+        "continuous pointer movement"
+      ],
+      "suggested_duration_ms": [
+        85,
+        220
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Use sparingly at −14 to −10 dB under narration.",
+      "params": {
+        "length": {
+          "unit": "ms",
+          "default": 138,
+          "min": 85,
+          "max": 220,
+          "step": 1,
+          "description": "Duration including the release."
+        },
+        "pitch": {
+          "unit": "Hz",
+          "default": 540,
+          "min": 330,
+          "max": 820,
+          "step": 1,
+          "description": "Resonant center of the instrument."
+        },
+        "space": {
+          "unit": "%",
+          "default": 14,
+          "min": 0,
+          "max": 100,
+          "step": 1,
+          "description": "Room send and stereo width."
+        }
+      }
+    },
+    "select_tick": {
+      "id": "select_tick",
+      "name_zh": "选择轻响",
+      "moods": [
+        "crisp"
+      ],
+      "energy": "subtle",
+      "version": 2,
+      "domain": "interface",
+      "category": "select",
+      "name": "Select Tick",
+      "desc": "A dry pin-sized contact with a hollow wooden resonance.",
+      "use_for": [
+        "single item selection"
+      ],
+      "avoid": [
+        "continuous pointer movement"
+      ],
+      "suggested_duration_ms": [
+        38,
+        112
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Use sparingly at −14 to −10 dB under narration.",
+      "params": {
+        "length": {
+          "unit": "ms",
+          "default": 64,
+          "min": 38,
+          "max": 112,
+          "step": 1,
+          "description": "Duration including the release."
+        },
+        "pitch": {
+          "unit": "Hz",
+          "default": 1120,
+          "min": 630,
+          "max": 1780,
+          "step": 1,
+          "description": "Resonant center of the instrument."
+        },
+        "space": {
+          "unit": "%",
+          "default": 7,
+          "min": 0,
+          "max": 100,
+          "step": 1,
+          "description": "Room send and stereo width."
+        }
+      }
+    },
+    "confirm_chime": {
+      "id": "confirm_chime",
+      "name_zh": "确认和弦",
+      "moods": [
+        "positive"
+      ],
+      "energy": "medium",
+      "version": 2,
+      "domain": "interface",
+      "category": "feedback",
+      "name": "Confirm Chime",
+      "desc": "Two consonant notes resolve upward on completion.",
+      "use_for": [
+        "successful form submission"
+      ],
+      "avoid": [
+        "continuous pointer movement"
+      ],
+      "suggested_duration_ms": [
+        180,
+        590
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Use sparingly at −14 to −10 dB under narration.",
+      "params": {
+        "length": {
+          "unit": "ms",
+          "default": 340,
+          "min": 180,
+          "max": 590,
+          "step": 1,
+          "description": "Duration including the release."
+        },
+        "pitch": {
+          "unit": "Hz",
+          "default": 523,
+          "min": 349,
+          "max": 784,
+          "step": 1,
+          "description": "Resonant center of the instrument."
+        },
+        "space": {
+          "unit": "%",
+          "default": 32,
+          "min": 0,
+          "max": 100,
+          "step": 1,
+          "description": "Room send and stereo width."
+        }
+      }
+    },
+    "tap_glass": {
+      "id": "tap_glass",
+      "domain": "interface",
+      "category": "tap",
+      "version": 1,
+      "name": "Tap Glass",
+      "name_zh": "玻璃轻点",
+      "moods": [
+        "crystalline"
+      ],
+      "energy": "subtle",
+      "desc": "Touch a glass control",
+      "use_for": [
+        "Touch a glass control"
+      ],
+      "avoid": [
+        "continuous cursor movement"
+      ],
+      "suggested_duration_ms": [
+        121,
+        279
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Seat the attack on contact, around −14 dB under speech.",
+      "params": {}
+    },
+    "tap_soft": {
+      "id": "tap_soft",
+      "domain": "interface",
+      "category": "tap",
+      "version": 1,
+      "name": "Tap Soft",
+      "name_zh": "触屏软拍",
+      "moods": [
+        "muted"
+      ],
+      "energy": "subtle",
+      "desc": "Tap a padded touch surface",
+      "use_for": [
+        "Tap a padded touch surface"
+      ],
+      "avoid": [
+        "continuous cursor movement"
+      ],
+      "suggested_duration_ms": [
+        40,
+        93
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Seat the attack on contact, around −14 dB under speech.",
+      "params": {}
+    },
+    "tap_wood": {
+      "id": "tap_wood",
+      "domain": "interface",
+      "category": "tap",
+      "version": 1,
+      "name": "Tap Wood",
+      "name_zh": "温木轻击",
+      "moods": [
+        "organic"
+      ],
+      "energy": "subtle",
+      "desc": "Touch a wooden key",
+      "use_for": [
+        "Touch a wooden key"
+      ],
+      "avoid": [
+        "continuous cursor movement"
+      ],
+      "suggested_duration_ms": [
+        79,
+        183
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Seat the attack on contact, around −14 dB under speech.",
+      "params": {}
+    },
+    "select_lock": {
+      "id": "select_lock",
+      "domain": "interface",
+      "category": "select",
+      "version": 1,
+      "name": "Select Lock",
+      "name_zh": "卡片锁定",
+      "moods": [
+        "precise"
+      ],
+      "energy": "subtle",
+      "desc": "Seat a card in its slot",
+      "use_for": [
+        "Seat a card in its slot"
+      ],
+      "avoid": [
+        "continuous cursor movement"
+      ],
+      "suggested_duration_ms": [
+        88,
+        204
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Seat the attack on contact, around −14 dB under speech.",
+      "params": {}
+    },
+    "select_pill": {
+      "id": "select_pill",
+      "domain": "interface",
+      "category": "select",
+      "version": 1,
+      "name": "Select Pill",
+      "name_zh": "胶囊微弹",
+      "moods": [
+        "playful"
+      ],
+      "energy": "subtle",
+      "desc": "Highlight a selected chip",
+      "use_for": [
+        "Highlight a selected chip"
+      ],
+      "avoid": [
+        "continuous cursor movement"
+      ],
+      "suggested_duration_ms": [
+        133,
+        306
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Seat the attack on contact, around −14 dB under speech.",
+      "params": {}
+    },
+    "toggle_off": {
+      "id": "toggle_off",
+      "domain": "interface",
+      "category": "toggle",
+      "version": 1,
+      "name": "Toggle Off",
+      "name_zh": "拨片关闭",
+      "moods": [
+        "muted"
+      ],
+      "energy": "subtle",
+      "desc": "Disable a switch",
+      "use_for": [
+        "Disable a switch"
+      ],
+      "avoid": [
+        "continuous cursor movement"
+      ],
+      "suggested_duration_ms": [
+        57,
+        132
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Seat the attack on contact, around −14 dB under speech.",
+      "params": {}
+    },
+    "toggle_magnetic": {
+      "id": "toggle_magnetic",
+      "domain": "interface",
+      "category": "toggle",
+      "version": 1,
+      "name": "Toggle Magnetic",
+      "name_zh": "双段磁吸",
+      "moods": [
+        "tactile"
+      ],
+      "energy": "subtle",
+      "desc": "Latch a magnetic switch",
+      "use_for": [
+        "Latch a magnetic switch"
+      ],
+      "avoid": [
+        "continuous cursor movement"
+      ],
+      "suggested_duration_ms": [
+        112,
+        260
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Seat the attack on contact, around −14 dB under speech.",
+      "params": {}
+    },
+    "feedback_success": {
+      "id": "feedback_success",
+      "domain": "interface",
+      "category": "feedback",
+      "version": 1,
+      "name": "Feedback Success",
+      "name_zh": "温暖成功双音",
+      "moods": [
+        "warm"
+      ],
+      "energy": "subtle",
+      "desc": "Confirm a successful action",
+      "use_for": [
+        "Confirm a successful action"
+      ],
+      "avoid": [
+        "continuous cursor movement"
+      ],
+      "suggested_duration_ms": [
+        283,
+        653
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Seat the attack on contact, around −14 dB under speech.",
+      "params": {}
+    },
+    "feedback_complete": {
+      "id": "feedback_complete",
+      "domain": "interface",
+      "category": "feedback",
+      "version": 1,
+      "name": "Feedback Complete",
+      "name_zh": "完成和弦",
+      "moods": [
+        "bright"
+      ],
+      "energy": "subtle",
+      "desc": "Resolve a completed sequence",
+      "use_for": [
+        "Resolve a completed sequence"
+      ],
+      "avoid": [
+        "continuous cursor movement"
+      ],
+      "suggested_duration_ms": [
+        416,
+        960
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Seat the attack on contact, around −14 dB under speech.",
+      "params": {}
+    },
+    "feedback_error": {
+      "id": "feedback_error",
+      "domain": "interface",
+      "category": "feedback",
+      "version": 1,
+      "name": "Feedback Error",
+      "name_zh": "克制双低音",
+      "moods": [
+        "reserved"
+      ],
+      "energy": "subtle",
+      "desc": "Signal a rejected input",
+      "use_for": [
+        "Signal a rejected input"
+      ],
+      "avoid": [
+        "continuous cursor movement"
+      ],
+      "suggested_duration_ms": [
+        198,
+        458
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Seat the attack on contact, around −14 dB under speech.",
+      "params": {}
+    },
+    "notify_crystal": {
+      "id": "notify_crystal",
+      "domain": "interface",
+      "category": "notify",
+      "version": 1,
+      "name": "Notify Crystal",
+      "name_zh": "晶莹双响",
+      "moods": [
+        "crystalline"
+      ],
+      "energy": "subtle",
+      "desc": "Announce a new notification",
+      "use_for": [
+        "Announce a new notification"
+      ],
+      "avoid": [
+        "continuous cursor movement"
+      ],
+      "suggested_duration_ms": [
+        364,
+        840
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Seat the attack on contact, around −14 dB under speech.",
+      "params": {}
+    },
+    "notify_bubble": {
+      "id": "notify_bubble",
+      "domain": "interface",
+      "category": "notify",
+      "version": 1,
+      "name": "Notify Bubble",
+      "name_zh": "气泡到达",
+      "moods": [
+        "soft"
+      ],
+      "energy": "subtle",
+      "desc": "Surface a quiet notification",
+      "use_for": [
+        "Surface a quiet notification"
+      ],
+      "avoid": [
+        "continuous cursor movement"
+      ],
+      "suggested_duration_ms": [
+        118,
+        273
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Seat the attack on contact, around −14 dB under speech.",
+      "params": {}
+    },
+    "motion_drawer_open": {
+      "id": "motion_drawer_open",
+      "domain": "interface",
+      "category": "motion",
+      "version": 1,
+      "name": "Motion Drawer Open",
+      "name_zh": "抽屉滑开",
+      "moods": [
+        "fluid"
+      ],
+      "energy": "subtle",
+      "desc": "Slide a drawer into view",
+      "use_for": [
+        "Slide a drawer into view"
+      ],
+      "avoid": [
+        "continuous cursor movement"
+      ],
+      "suggested_duration_ms": [
+        185,
+        428
+      ],
+      "sync_cue": "energy_peak",
+      "mix_hint": "Align the measured peak with the picture cut and leave room for the tail.",
+      "params": {}
+    },
+    "motion_drawer_close": {
+      "id": "motion_drawer_close",
+      "domain": "interface",
+      "category": "motion",
+      "version": 1,
+      "name": "Motion Drawer Close",
+      "name_zh": "阻尼收起",
+      "moods": [
+        "muted"
+      ],
+      "energy": "subtle",
+      "desc": "Close a damped panel",
+      "use_for": [
+        "Close a damped panel"
+      ],
+      "avoid": [
+        "continuous cursor movement"
+      ],
+      "suggested_duration_ms": [
+        127,
+        293
+      ],
+      "sync_cue": "energy_peak",
+      "mix_hint": "Align the measured peak with the picture cut and leave room for the tail.",
+      "params": {}
+    },
+    "motion_spring": {
+      "id": "motion_spring",
+      "domain": "interface",
+      "category": "motion",
+      "version": 1,
+      "name": "Motion Spring",
+      "name_zh": "弹性归位",
+      "moods": [
+        "elastic"
+      ],
+      "energy": "subtle",
+      "desc": "Settle a spring-loaded control",
+      "use_for": [
+        "Settle a spring-loaded control"
+      ],
+      "avoid": [
+        "continuous cursor movement"
+      ],
+      "suggested_duration_ms": [
+        211,
+        486
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Seat the attack on contact, around −14 dB under speech.",
+      "params": {}
+    },
+    "type_mech_thock": {
+      "id": "type_mech_thock",
+      "domain": "interface",
+      "category": "type",
+      "version": 1,
+      "name": "Type Mech Thock",
+      "name_zh": "机械轴沉击",
+      "moods": [
+        "tactile"
+      ],
+      "energy": "subtle",
+      "desc": "Press a lubricated mechanical key",
+      "use_for": [
+        "Press a lubricated mechanical key"
+      ],
+      "avoid": [
+        "continuous cursor movement"
+      ],
+      "suggested_duration_ms": [
+        75,
+        174
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Seat the attack on contact, around −14 dB under speech.",
+      "params": {}
+    },
+    "type_soft_key": {
+      "id": "type_soft_key",
+      "domain": "interface",
+      "category": "type",
+      "version": 1,
+      "name": "Type Soft Key",
+      "name_zh": "薄键轻打",
+      "moods": [
+        "muted"
+      ],
+      "energy": "subtle",
+      "desc": "Type on a low-profile keyboard",
+      "use_for": [
+        "Type on a low-profile keyboard"
+      ],
+      "avoid": [
+        "continuous cursor movement"
+      ],
+      "suggested_duration_ms": [
+        32,
+        74
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Seat the attack on contact, around −14 dB under speech.",
+      "params": {}
+    },
+    "type_enter": {
+      "id": "type_enter",
+      "domain": "interface",
+      "category": "type",
+      "version": 1,
+      "name": "Type Enter",
+      "name_zh": "回车重键",
+      "moods": [
+        "punchy"
+      ],
+      "energy": "high",
+      "desc": "Commit a terminal command",
+      "use_for": [
+        "Commit a terminal command"
+      ],
+      "avoid": [
+        "continuous cursor movement"
+      ],
+      "suggested_duration_ms": [
+        125,
+        288
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Seat the attack on contact, around −14 dB under speech.",
+      "params": {}
+    },
+    "type_backspace": {
+      "id": "type_backspace",
+      "domain": "interface",
+      "category": "type",
+      "version": 1,
+      "name": "Type Backspace",
+      "name_zh": "退格轻敲",
+      "moods": [
+        "dry"
+      ],
+      "energy": "subtle",
+      "desc": "Remove the preceding character",
+      "use_for": [
+        "Remove the preceding character"
+      ],
+      "avoid": [
+        "continuous cursor movement"
+      ],
+      "suggested_duration_ms": [
+        51,
+        117
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Seat the attack on contact, around −14 dB under speech.",
+      "params": {}
+    },
+    "system_unlock": {
+      "id": "system_unlock",
+      "domain": "interface",
+      "category": "system",
+      "version": 1,
+      "name": "System Unlock",
+      "name_zh": "系统解锁",
+      "moods": [
+        "precise"
+      ],
+      "energy": "subtle",
+      "desc": "Release a secure lock",
+      "use_for": [
+        "Release a secure lock"
+      ],
+      "avoid": [
+        "continuous cursor movement"
+      ],
+      "suggested_duration_ms": [
+        190,
+        438
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Seat the attack on contact, around −14 dB under speech.",
+      "params": {}
+    },
+    "system_deploy": {
+      "id": "system_deploy",
+      "domain": "interface",
+      "category": "system",
+      "version": 1,
+      "name": "System Deploy",
+      "name_zh": "上线确认",
+      "moods": [
+        "confident"
+      ],
+      "energy": "subtle",
+      "desc": "Confirm a deployment",
+      "use_for": [
+        "Confirm a deployment"
+      ],
+      "avoid": [
+        "continuous cursor movement"
+      ],
+      "suggested_duration_ms": [
+        324,
+        747
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Seat the attack on contact, around −14 dB under speech.",
+      "params": {}
+    },
+    "system_connect": {
+      "id": "system_connect",
+      "domain": "interface",
+      "category": "system",
+      "version": 1,
+      "name": "System Connect",
+      "name_zh": "连接建立",
+      "moods": [
+        "fluid"
+      ],
+      "energy": "subtle",
+      "desc": "Establish a connection",
+      "use_for": [
+        "Establish a connection"
+      ],
+      "avoid": [
+        "continuous cursor movement"
+      ],
+      "suggested_duration_ms": [
+        122,
+        282
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Seat the attack on contact, around −14 dB under speech.",
+      "params": {}
+    },
+    "nav_forward": {
+      "id": "nav_forward",
+      "domain": "interface",
+      "category": "navigate",
+      "version": 1,
+      "name": "Nav Forward",
+      "name_zh": "页面前推",
+      "moods": [
+        "fluid"
+      ],
+      "energy": "subtle",
+      "desc": "Navigate to the next page",
+      "use_for": [
+        "Navigate to the next page"
+      ],
+      "avoid": [
+        "continuous cursor movement"
+      ],
+      "suggested_duration_ms": [
+        143,
+        330
+      ],
+      "sync_cue": "energy_peak",
+      "mix_hint": "Align the measured peak with the picture cut and leave room for the tail.",
+      "params": {}
+    },
+    "nav_back": {
+      "id": "nav_back",
+      "domain": "interface",
+      "category": "navigate",
+      "version": 1,
+      "name": "Nav Back",
+      "name_zh": "返回轻退",
+      "moods": [
+        "soft"
+      ],
+      "energy": "subtle",
+      "desc": "Return to the preceding page",
+      "use_for": [
+        "Return to the preceding page"
+      ],
+      "avoid": [
+        "continuous cursor movement"
+      ],
+      "suggested_duration_ms": [
+        105,
+        243
+      ],
+      "sync_cue": "energy_peak",
+      "mix_hint": "Align the measured peak with the picture cut and leave room for the tail.",
+      "params": {}
+    },
+    "nav_tab": {
+      "id": "nav_tab",
+      "domain": "interface",
+      "category": "navigate",
+      "version": 1,
+      "name": "Nav Tab",
+      "name_zh": "标签横切",
+      "moods": [
+        "crisp"
+      ],
+      "energy": "subtle",
+      "desc": "Switch the active tab",
+      "use_for": [
+        "Switch the active tab"
+      ],
+      "avoid": [
+        "continuous cursor movement"
+      ],
+      "suggested_duration_ms": [
+        49,
+        113
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Seat the attack on contact, around −14 dB under speech.",
+      "params": {}
+    },
+    "drag_pickup": {
+      "id": "drag_pickup",
+      "domain": "interface",
+      "category": "drag",
+      "version": 1,
+      "name": "Drag Pickup",
+      "name_zh": "抓起微震",
+      "moods": [
+        "elastic"
+      ],
+      "energy": "subtle",
+      "desc": "Lift an item for dragging",
+      "use_for": [
+        "Lift an item for dragging"
+      ],
+      "avoid": [
+        "continuous cursor movement"
+      ],
+      "suggested_duration_ms": [
+        103,
+        237
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Seat the attack on contact, around −14 dB under speech.",
+      "params": {}
+    },
+    "drag_snap": {
+      "id": "drag_snap",
+      "domain": "interface",
+      "category": "drag",
+      "version": 1,
+      "name": "Drag Snap",
+      "name_zh": "磁吸对准",
+      "moods": [
+        "precise"
+      ],
+      "energy": "subtle",
+      "desc": "Snap a handle onto a guide",
+      "use_for": [
+        "Snap a handle onto a guide"
+      ],
+      "avoid": [
+        "continuous cursor movement"
+      ],
+      "suggested_duration_ms": [
+        53,
+        122
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Seat the attack on contact, around −14 dB under speech.",
+      "params": {}
+    },
+    "drag_drop": {
+      "id": "drag_drop",
+      "domain": "interface",
+      "category": "drag",
+      "version": 1,
+      "name": "Drag Drop",
+      "name_zh": "柔和落位",
+      "moods": [
+        "warm"
+      ],
+      "energy": "subtle",
+      "desc": "Release a dragged item",
+      "use_for": [
+        "Release a dragged item"
+      ],
+      "avoid": [
+        "continuous cursor movement"
+      ],
+      "suggested_duration_ms": [
+        153,
+        354
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Seat the attack on contact, around −14 dB under speech.",
+      "params": {}
+    },
+    "progress_tick": {
+      "id": "progress_tick",
+      "domain": "interface",
+      "category": "progress",
+      "version": 1,
+      "name": "Progress Tick",
+      "name_zh": "步进滴答",
+      "moods": [
+        "dry"
+      ],
+      "energy": "subtle",
+      "desc": "Mark one progress increment",
+      "use_for": [
+        "Mark one progress increment"
+      ],
+      "avoid": [
+        "continuous cursor movement"
+      ],
+      "suggested_duration_ms": [
+        37,
+        86
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Seat the attack on contact, around −14 dB under speech.",
+      "params": {}
+    },
+    "progress_pulse": {
+      "id": "progress_pulse",
+      "domain": "interface",
+      "category": "progress",
+      "version": 1,
+      "name": "Progress Pulse",
+      "name_zh": "加载脉冲",
+      "moods": [
+        "soft"
+      ],
+      "energy": "subtle",
+      "desc": "Pulse a loading indicator",
+      "use_for": [
+        "Pulse a loading indicator"
+      ],
+      "avoid": [
+        "continuous cursor movement"
+      ],
+      "suggested_duration_ms": [
+        221,
+        510
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Seat the attack on contact, around −14 dB under speech.",
+      "params": {}
+    },
+    "progress_milestone": {
+      "id": "progress_milestone",
+      "domain": "interface",
+      "category": "progress",
+      "version": 1,
+      "name": "Progress Milestone",
+      "name_zh": "里程达成",
+      "moods": [
+        "bright"
+      ],
+      "energy": "subtle",
+      "desc": "Mark the final progress milestone",
+      "use_for": [
+        "Mark the final progress milestone"
+      ],
+      "avoid": [
+        "continuous cursor movement"
+      ],
+      "suggested_duration_ms": [
+        332,
+        765
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Seat the attack on contact, around −14 dB under speech.",
+      "params": {}
+    },
+    "msg_send": {
+      "id": "msg_send",
+      "domain": "interface",
+      "category": "message",
+      "version": 1,
+      "name": "Msg Send",
+      "name_zh": "消息发出",
+      "moods": [
+        "fluid"
+      ],
+      "energy": "subtle",
+      "desc": "Send an outgoing message",
+      "use_for": [
+        "Send an outgoing message"
+      ],
+      "avoid": [
+        "continuous cursor movement"
+      ],
+      "suggested_duration_ms": [
+        108,
+        249
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Seat the attack on contact, around −14 dB under speech.",
+      "params": {}
+    },
+    "msg_receive": {
+      "id": "msg_receive",
+      "domain": "interface",
+      "category": "message",
+      "version": 1,
+      "name": "Msg Receive",
+      "name_zh": "回复气泡",
+      "moods": [
+        "playful"
+      ],
+      "energy": "subtle",
+      "desc": "Receive an incoming reply",
+      "use_for": [
+        "Receive an incoming reply"
+      ],
+      "avoid": [
+        "continuous cursor movement"
+      ],
+      "suggested_duration_ms": [
+        161,
+        372
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Seat the attack on contact, around −14 dB under speech.",
+      "params": {}
+    },
+    "msg_ai_start": {
+      "id": "msg_ai_start",
+      "domain": "interface",
+      "category": "message",
+      "version": 1,
+      "name": "Msg Ai Start",
+      "name_zh": "思考晶音",
+      "moods": [
+        "crystalline"
+      ],
+      "energy": "subtle",
+      "desc": "Signal the assistant beginning to think",
+      "use_for": [
+        "Signal the assistant beginning to think"
+      ],
+      "avoid": [
+        "continuous cursor movement"
+      ],
+      "suggested_duration_ms": [
+        277,
+        639
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Seat the attack on contact, around −14 dB under speech.",
+      "params": {}
+    },
+    "riser_snap_half": {
+      "id": "riser_snap_half",
+      "domain": "video",
+      "category": "risers",
+      "version": 1,
+      "name": "Riser Snap Half",
+      "name_zh": "半秒快推",
+      "moods": [
+        "urgent"
+      ],
+      "energy": "high",
+      "desc": "Anticipate a rapid cut",
+      "use_for": [
+        "Anticipate a rapid cut"
+      ],
+      "avoid": [
+        "unaccented dialogue"
+      ],
+      "suggested_duration_ms": [
+        325,
+        750
+      ],
+      "sync_cue": "end_peak",
+      "mix_hint": "Align the measured peak with the picture cut and leave room for the tail.",
+      "params": {}
+    },
+    "impact_metal_cold": {
+      "id": "impact_metal_cold",
+      "domain": "video",
+      "category": "impacts",
+      "version": 1,
+      "name": "Impact Metal Cold",
+      "name_zh": "冷金属撞击",
+      "moods": [
+        "heavy"
+      ],
+      "energy": "high",
+      "desc": "Strike a steel surface on the cut",
+      "use_for": [
+        "Strike a steel surface on the cut"
+      ],
+      "avoid": [
+        "unaccented dialogue"
+      ],
+      "suggested_duration_ms": [
+        486,
+        1122
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Seat the attack on contact, around −14 dB under speech.",
+      "params": {}
+    },
+    "whoosh_micro": {
+      "id": "whoosh_micro",
+      "domain": "video",
+      "category": "whooshes",
+      "version": 1,
+      "name": "Whoosh Micro",
+      "name_zh": "极速短甩",
+      "moods": [
+        "kinetic"
+      ],
+      "energy": "medium",
+      "desc": "Whip a close cut across the frame",
+      "use_for": [
+        "Whip a close cut across the frame"
+      ],
+      "avoid": [
+        "unaccented dialogue"
+      ],
+      "suggested_duration_ms": [
+        143,
+        330
+      ],
+      "sync_cue": "energy_peak",
+      "mix_hint": "Align the measured peak with the picture cut and leave room for the tail.",
+      "params": {}
+    },
+    "trans_tape_stop": {
+      "id": "trans_tape_stop",
+      "domain": "video",
+      "category": "transitions",
+      "version": 1,
+      "name": "Trans Tape Stop",
+      "name_zh": "磁带急停",
+      "moods": [
+        "dramatic"
+      ],
+      "energy": "medium",
+      "desc": "Brake a tape transport into a cut",
+      "use_for": [
+        "Brake a tape transport into a cut"
+      ],
+      "avoid": [
+        "unaccented dialogue"
+      ],
+      "suggested_duration_ms": [
+        452,
+        1043
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Seat the attack on contact, around −14 dB under speech.",
+      "params": {}
+    },
+    "trans_vinyl_pull": {
+      "id": "trans_vinyl_pull",
+      "domain": "video",
+      "category": "transitions",
+      "version": 1,
+      "name": "Trans Vinyl Pull",
+      "name_zh": "黑胶回拉",
+      "moods": [
+        "kinetic"
+      ],
+      "energy": "medium",
+      "desc": "Pull a record back across a transition",
+      "use_for": [
+        "Pull a record back across a transition"
+      ],
+      "avoid": [
+        "unaccented dialogue"
+      ],
+      "suggested_duration_ms": [
+        307,
+        708
+      ],
+      "sync_cue": "energy_peak",
+      "mix_hint": "Align the measured peak with the picture cut and leave room for the tail.",
+      "params": {}
+    },
+    "trans_shutter": {
+      "id": "trans_shutter",
+      "domain": "video",
+      "category": "transitions",
+      "version": 1,
+      "name": "Trans Shutter",
+      "name_zh": "机械快门",
+      "moods": [
+        "punchy"
+      ],
+      "energy": "high",
+      "desc": "Cut on a two-curtain shutter",
+      "use_for": [
+        "Cut on a two-curtain shutter"
+      ],
+      "avoid": [
+        "unaccented dialogue"
+      ],
+      "suggested_duration_ms": [
+        109,
+        252
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Seat the attack on contact, around −14 dB under speech.",
+      "params": {}
+    },
+    "accent_spark": {
+      "id": "accent_spark",
+      "domain": "video",
+      "category": "accents",
+      "version": 1,
+      "name": "Accent Spark",
+      "name_zh": "点睛闪音",
+      "moods": [
+        "bright"
+      ],
+      "energy": "medium",
+      "desc": "Highlight a key word",
+      "use_for": [
+        "Highlight a key word"
+      ],
+      "avoid": [
+        "unaccented dialogue"
+      ],
+      "suggested_duration_ms": [
+        179,
+        413
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Seat the attack on contact, around −14 dB under speech.",
+      "params": {}
+    },
+    "accent_counter": {
+      "id": "accent_counter",
+      "domain": "video",
+      "category": "accents",
+      "version": 1,
+      "name": "Accent Counter",
+      "name_zh": "数字跃升",
+      "moods": [
+        "precise"
+      ],
+      "energy": "medium",
+      "desc": "Accent a counter increment",
+      "use_for": [
+        "Accent a counter increment"
+      ],
+      "avoid": [
+        "unaccented dialogue"
+      ],
+      "suggested_duration_ms": [
+        94,
+        218
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Seat the attack on contact, around −14 dB under speech.",
+      "params": {}
+    },
+    "drop_vacuum": {
+      "id": "drop_vacuum",
+      "domain": "video",
+      "category": "drops",
+      "version": 1,
+      "name": "Drop Vacuum",
+      "name_zh": "瞬间抽空",
+      "moods": [
+        "dramatic"
+      ],
+      "energy": "medium",
+      "desc": "Pull the air out of a reveal",
+      "use_for": [
+        "Pull the air out of a reveal"
+      ],
+      "avoid": [
+        "unaccented dialogue"
+      ],
+      "suggested_duration_ms": [
+        579,
+        1335
+      ],
+      "sync_cue": "energy_peak",
+      "mix_hint": "Align the measured peak with the picture cut and leave room for the tail.",
+      "params": {}
+    },
+    "drop_pitch_dive": {
+      "id": "drop_pitch_dive",
+      "domain": "video",
+      "category": "drops",
+      "version": 1,
+      "name": "Drop Pitch Dive",
+      "name_zh": "失重俯冲",
+      "moods": [
+        "heavy"
+      ],
+      "energy": "high",
+      "desc": "Dive into a low electronic downbeat",
+      "use_for": [
+        "Dive into a low electronic downbeat"
+      ],
+      "avoid": [
+        "unaccented dialogue"
+      ],
+      "suggested_duration_ms": [
+        309,
+        713
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Seat the attack on contact, around −14 dB under speech.",
+      "params": {}
+    },
+    "glitch_rip": {
+      "id": "glitch_rip",
+      "domain": "video",
+      "category": "glitches",
+      "version": 1,
+      "name": "Glitch Rip",
+      "name_zh": "像素撕裂",
+      "moods": [
+        "abrasive"
+      ],
+      "energy": "high",
+      "desc": "Rip a frame into pixels",
+      "use_for": [
+        "Rip a frame into pixels"
+      ],
+      "avoid": [
+        "unaccented dialogue"
+      ],
+      "suggested_duration_ms": [
+        96,
+        222
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Seat the attack on contact, around −14 dB under speech.",
+      "params": {}
+    },
+    "glitch_data": {
+      "id": "glitch_data",
+      "domain": "video",
+      "category": "glitches",
+      "version": 1,
+      "name": "Glitch Data",
+      "name_zh": "数据流扫频",
+      "moods": [
+        "technical"
+      ],
+      "energy": "medium",
+      "desc": "Sweep through a stream of data",
+      "use_for": [
+        "Sweep through a stream of data"
+      ],
+      "avoid": [
+        "unaccented dialogue"
+      ],
+      "suggested_duration_ms": [
+        267,
+        615
+      ],
+      "sync_cue": "energy_peak",
+      "mix_hint": "Align the measured peak with the picture cut and leave room for the tail.",
+      "params": {}
+    },
+    "glitch_stutter": {
+      "id": "glitch_stutter",
+      "domain": "video",
+      "category": "glitches",
+      "version": 1,
+      "name": "Glitch Stutter",
+      "name_zh": "数字卡顿",
+      "moods": [
+        "urgent"
+      ],
+      "energy": "high",
+      "desc": "Interrupt playback with three clipped packets",
+      "use_for": [
+        "Interrupt playback with three clipped packets"
+      ],
+      "avoid": [
+        "unaccented dialogue"
+      ],
+      "suggested_duration_ms": [
+        174,
+        401
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Seat the attack on contact, around −14 dB under speech.",
+      "params": {}
+    },
+    "ambience_obsidian": {
+      "id": "ambience_obsidian",
+      "domain": "video",
+      "category": "ambience",
+      "version": 1,
+      "name": "Ambience Obsidian",
+      "name_zh": "暗石低鸣",
+      "moods": [
+        "dark"
+      ],
+      "energy": "medium",
+      "desc": "Hold a dark interior under a reveal",
+      "use_for": [
+        "Hold a dark interior under a reveal"
+      ],
+      "avoid": [
+        "unaccented dialogue"
+      ],
+      "suggested_duration_ms": [
+        1450,
+        3345
+      ],
+      "sync_cue": "energy_peak",
+      "mix_hint": "Align the measured peak with the picture cut and leave room for the tail.",
+      "params": {}
+    },
+    "ambience_warm_pad": {
+      "id": "ambience_warm_pad",
+      "domain": "video",
+      "category": "ambience",
+      "version": 1,
+      "name": "Ambience Warm Pad",
+      "name_zh": "暖空气垫",
+      "moods": [
+        "warm"
+      ],
+      "energy": "medium",
+      "desc": "Float a warm chord under a pause",
+      "use_for": [
+        "Float a warm chord under a pause"
+      ],
+      "avoid": [
+        "unaccented dialogue"
+      ],
+      "suggested_duration_ms": [
+        1879,
+        4335
+      ],
+      "sync_cue": "energy_peak",
+      "mix_hint": "Align the measured peak with the picture cut and leave room for the tail.",
+      "params": {}
+    },
+    "title_slam": {
+      "id": "title_slam",
+      "domain": "video",
+      "category": "titles",
+      "version": 1,
+      "name": "Title Slam",
+      "name_zh": "大字压屏",
+      "moods": [
+        "heavy"
+      ],
+      "energy": "high",
+      "desc": "Land a bold title on screen",
+      "use_for": [
+        "Land a bold title on screen"
+      ],
+      "avoid": [
+        "unaccented dialogue"
+      ],
+      "suggested_duration_ms": [
+        313,
+        723
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Seat the attack on contact, around −14 dB under speech.",
+      "params": {}
+    },
+    "title_shimmer": {
+      "id": "title_shimmer",
+      "domain": "video",
+      "category": "titles",
+      "version": 1,
+      "name": "Title Shimmer",
+      "name_zh": "标题鎏光",
+      "moods": [
+        "luminous"
+      ],
+      "energy": "medium",
+      "desc": "Pass a metallic highlight over type",
+      "use_for": [
+        "Pass a metallic highlight over type"
+      ],
+      "avoid": [
+        "unaccented dialogue"
+      ],
+      "suggested_duration_ms": [
+        689,
+        1590
+      ],
+      "sync_cue": "energy_peak",
+      "mix_hint": "Align the measured peak with the picture cut and leave room for the tail.",
+      "params": {}
+    },
+    "pop_crisp": {
+      "id": "pop_crisp",
+      "domain": "video",
+      "category": "pops",
+      "version": 1,
+      "name": "Pop Crisp",
+      "name_zh": "清脆蹦点",
+      "moods": [
+        "crisp"
+      ],
+      "energy": "medium",
+      "desc": "Pop a small graphic into view",
+      "use_for": [
+        "Pop a small graphic into view"
+      ],
+      "avoid": [
+        "unaccented dialogue"
+      ],
+      "suggested_duration_ms": [
+        42,
+        98
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Seat the attack on contact, around −14 dB under speech.",
+      "params": {}
+    },
+    "pop_droplet": {
+      "id": "pop_droplet",
+      "domain": "video",
+      "category": "pops",
+      "version": 1,
+      "name": "Pop Droplet",
+      "name_zh": "水滴微弹",
+      "moods": [
+        "playful"
+      ],
+      "energy": "medium",
+      "desc": "Accent a small liquid bounce",
+      "use_for": [
+        "Accent a small liquid bounce"
+      ],
+      "avoid": [
+        "unaccented dialogue"
+      ],
+      "suggested_duration_ms": [
+        152,
+        351
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Seat the attack on contact, around −14 dB under speech.",
+      "params": {}
+    },
+    "stinger_marimba": {
+      "id": "stinger_marimba",
+      "domain": "video",
+      "category": "stingers",
+      "version": 1,
+      "name": "Stinger Marimba",
+      "name_zh": "木琴三音",
+      "moods": [
+        "warm"
+      ],
+      "energy": "medium",
+      "desc": "Resolve a brand sign-off on wooden bars",
+      "use_for": [
+        "Resolve a brand sign-off on wooden bars"
+      ],
+      "avoid": [
+        "unaccented dialogue"
+      ],
+      "suggested_duration_ms": [
+        595,
+        1373
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Seat the attack on contact, around −14 dB under speech.",
+      "params": {}
+    },
+    "stinger_tech": {
+      "id": "stinger_tech",
+      "domain": "video",
+      "category": "stingers",
+      "version": 1,
+      "name": "Stinger Tech",
+      "name_zh": "未来定音",
+      "moods": [
+        "technical"
+      ],
+      "energy": "medium",
+      "desc": "Sign off with a compact electronic chord",
+      "use_for": [
+        "Sign off with a compact electronic chord"
+      ],
+      "avoid": [
+        "unaccented dialogue"
+      ],
+      "suggested_duration_ms": [
+        436,
+        1005
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Seat the attack on contact, around −14 dB under speech.",
+      "params": {}
+    },
+    "tension_radar": {
+      "id": "tension_radar",
+      "domain": "video",
+      "category": "tension",
+      "version": 1,
+      "name": "Tension Radar",
+      "name_zh": "雷达微扫描",
+      "moods": [
+        "suspenseful"
+      ],
+      "energy": "medium",
+      "desc": "Track a distant contact before a reveal",
+      "use_for": [
+        "Track a distant contact before a reveal"
+      ],
+      "avoid": [
+        "unaccented dialogue"
+      ],
+      "suggested_duration_ms": [
+        995,
+        2295
+      ],
+      "sync_cue": "energy_peak",
+      "mix_hint": "Align the measured peak with the picture cut and leave room for the tail.",
+      "params": {}
+    },
+    "tension_clock": {
+      "id": "tension_clock",
+      "domain": "video",
+      "category": "tension",
+      "version": 1,
+      "name": "Tension Clock",
+      "name_zh": "秒表滴答",
+      "moods": [
+        "tense"
+      ],
+      "energy": "medium",
+      "desc": "Count down to a decision",
+      "use_for": [
+        "Count down to a decision"
+      ],
+      "avoid": [
+        "unaccented dialogue"
+      ],
+      "suggested_duration_ms": [
+        728,
+        1680
+      ],
+      "sync_cue": "energy_peak",
+      "mix_hint": "Align the measured peak with the picture cut and leave room for the tail.",
+      "params": {}
+    },
+    "tension_heartbeat": {
+      "id": "tension_heartbeat",
+      "domain": "video",
+      "category": "tension",
+      "version": 1,
+      "name": "Tension Heartbeat",
+      "name_zh": "双搏心跳",
+      "moods": [
+        "tense"
+      ],
+      "energy": "medium",
+      "desc": "Build suspense with a double heartbeat",
+      "use_for": [
+        "Build suspense with a double heartbeat"
+      ],
+      "avoid": [
+        "unaccented dialogue"
+      ],
+      "suggested_duration_ms": [
+        536,
+        1238
+      ],
+      "sync_cue": "onset",
+      "mix_hint": "Seat the attack on contact, around −14 dB under speech.",
+      "params": {}
+    }
+  },
+  "acoustics": {
+    "whoosh": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 540,
+      "peak_offset_ms": 268,
+      "peak_dbfs": -2,
+      "rms_dbfs": -16.9,
+      "lufs": -11.23,
+      "spectral_centroid_hz": 1948,
+      "waveform_peaks": [
+        0.005,
+        0.022,
+        0.077,
+        0.117,
+        0.254,
+        0.307,
+        0.398,
+        0.443,
+        0.498,
+        0.655,
+        0.932,
+        0.837,
+        0.837,
+        0.943,
+        0.849,
+        0.982,
+        0.976,
+        1,
+        0.909,
+        0.999,
+        0.668,
+        0.771,
+        0.707,
+        0.59,
+        0.529,
+        0.387,
+        0.335,
+        0.198,
+        0.139,
+        0.095,
+        0.033,
+        0.011
+      ]
+    },
+    "impact": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 380,
+      "peak_offset_ms": 8,
+      "peak_dbfs": -2,
+      "rms_dbfs": -12.84,
+      "lufs": -11.44,
+      "spectral_centroid_hz": 127,
+      "waveform_peaks": [
+        1,
+        0.943,
+        0.903,
+        0.757,
+        0.777,
+        0.686,
+        0.619,
+        0.575,
+        0.493,
+        0.464,
+        0.419,
+        0.386,
+        0.355,
+        0.31,
+        0.278,
+        0.254,
+        0.23,
+        0.203,
+        0.189,
+        0.166,
+        0.147,
+        0.135,
+        0.12,
+        0.107,
+        0.099,
+        0.088,
+        0.078,
+        0.073,
+        0.064,
+        0.057,
+        0.053,
+        0.03
+      ]
+    },
+    "click": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 65,
+      "peak_offset_ms": 5,
+      "peak_dbfs": -2,
+      "rms_dbfs": -14.45,
+      "lufs": -19.38,
+      "spectral_centroid_hz": 871,
+      "waveform_peaks": [
+        0.94,
+        1,
+        0.865,
+        0.745,
+        0.716,
+        0.544,
+        0.496,
+        0.459,
+        0.404,
+        0.326,
+        0.303,
+        0.265,
+        0.211,
+        0.186,
+        0.167,
+        0.147,
+        0.139,
+        0.119,
+        0.103,
+        0.08,
+        0.074,
+        0.059,
+        0.055,
+        0.052,
+        0.046,
+        0.041,
+        0.033,
+        0.031,
+        0.027,
+        0.022,
+        0.016,
+        0.002
+      ]
+    },
+    "riser": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 1050,
+      "peak_offset_ms": 1000,
+      "peak_dbfs": -2,
+      "rms_dbfs": -14.71,
+      "lufs": -12.11,
+      "spectral_centroid_hz": 755,
+      "waveform_peaks": [
+        0.001,
+        0.004,
+        0.009,
+        0.015,
+        0.025,
+        0.036,
+        0.048,
+        0.066,
+        0.091,
+        0.114,
+        0.139,
+        0.154,
+        0.185,
+        0.219,
+        0.273,
+        0.291,
+        0.325,
+        0.388,
+        0.403,
+        0.451,
+        0.534,
+        0.613,
+        0.688,
+        0.785,
+        0.775,
+        0.894,
+        0.885,
+        0.953,
+        0.982,
+        0.982,
+        0.994,
+        1
+      ]
+    },
+    "stinger": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 760,
+      "peak_offset_ms": 30,
+      "peak_dbfs": -2,
+      "rms_dbfs": -15.36,
+      "lufs": -13.7,
+      "spectral_centroid_hz": 406,
+      "waveform_peaks": [
+        0.938,
+        1,
+        1,
+        0.979,
+        0.876,
+        0.772,
+        0.694,
+        0.614,
+        0.565,
+        0.532,
+        0.489,
+        0.447,
+        0.409,
+        0.368,
+        0.329,
+        0.297,
+        0.264,
+        0.235,
+        0.21,
+        0.186,
+        0.165,
+        0.148,
+        0.136,
+        0.126,
+        0.116,
+        0.107,
+        0.098,
+        0.09,
+        0.083,
+        0.075,
+        0.069,
+        0.062
+      ]
+    },
+    "swoosh_cut": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 320,
+      "peak_offset_ms": 178,
+      "peak_dbfs": -2,
+      "rms_dbfs": -16.33,
+      "lufs": -12.97,
+      "spectral_centroid_hz": 1891,
+      "waveform_peaks": [
+        0.001,
+        0.007,
+        0.025,
+        0.053,
+        0.096,
+        0.118,
+        0.236,
+        0.293,
+        0.455,
+        0.799,
+        0.689,
+        0.772,
+        1,
+        1,
+        0.997,
+        0.84,
+        0.989,
+        0.938,
+        0.896,
+        0.922,
+        0.705,
+        0.565,
+        0.534,
+        0.432,
+        0.327,
+        0.215,
+        0.165,
+        0.081,
+        0.033,
+        0.026,
+        0.01,
+        0.007
+      ]
+    },
+    "sub_swell": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 920,
+      "peak_offset_ms": 870,
+      "peak_dbfs": -2,
+      "rms_dbfs": -10.01,
+      "lufs": -10.22,
+      "spectral_centroid_hz": 64,
+      "waveform_peaks": [
+        0.004,
+        0.016,
+        0.032,
+        0.048,
+        0.068,
+        0.091,
+        0.111,
+        0.136,
+        0.18,
+        0.212,
+        0.261,
+        0.296,
+        0.333,
+        0.382,
+        0.417,
+        0.478,
+        0.51,
+        0.558,
+        0.6,
+        0.644,
+        0.715,
+        0.762,
+        0.782,
+        0.85,
+        0.899,
+        0.917,
+        0.951,
+        0.976,
+        0.992,
+        0.999,
+        1,
+        0.862
+      ]
+    },
+    "shimmer_lift": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 1150,
+      "peak_offset_ms": 835,
+      "peak_dbfs": -2,
+      "rms_dbfs": -15.19,
+      "lufs": -10.46,
+      "spectral_centroid_hz": 1383,
+      "waveform_peaks": [
+        0.005,
+        0.013,
+        0.021,
+        0.034,
+        0.041,
+        0.05,
+        0.062,
+        0.078,
+        0.097,
+        0.104,
+        0.148,
+        0.15,
+        0.15,
+        0.207,
+        0.254,
+        0.356,
+        0.393,
+        0.48,
+        0.587,
+        0.642,
+        0.716,
+        0.812,
+        0.857,
+        0.89,
+        0.986,
+        0.894,
+        0.959,
+        0.966,
+        0.984,
+        1,
+        0.974,
+        0.986
+      ]
+    },
+    "deep_hit": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 530,
+      "peak_offset_ms": 5,
+      "peak_dbfs": -2,
+      "rms_dbfs": -15.38,
+      "lufs": -15.81,
+      "spectral_centroid_hz": 87,
+      "waveform_peaks": [
+        1,
+        0.798,
+        0.726,
+        0.646,
+        0.573,
+        0.427,
+        0.368,
+        0.318,
+        0.277,
+        0.228,
+        0.195,
+        0.174,
+        0.134,
+        0.098,
+        0.085,
+        0.069,
+        0.058,
+        0.047,
+        0.038,
+        0.032,
+        0.027,
+        0.022,
+        0.017,
+        0.014,
+        0.012,
+        0.01,
+        0.008,
+        0.007,
+        0.006,
+        0.005,
+        0.004,
+        0.001
+      ]
+    },
+    "sub_drop": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 660,
+      "peak_offset_ms": 10,
+      "peak_dbfs": -2,
+      "rms_dbfs": -14.2,
+      "lufs": -14,
+      "spectral_centroid_hz": 109,
+      "waveform_peaks": [
+        1,
+        0.889,
+        0.789,
+        0.732,
+        0.683,
+        0.569,
+        0.512,
+        0.458,
+        0.408,
+        0.352,
+        0.309,
+        0.288,
+        0.247,
+        0.224,
+        0.187,
+        0.166,
+        0.159,
+        0.146,
+        0.12,
+        0.104,
+        0.091,
+        0.085,
+        0.077,
+        0.067,
+        0.057,
+        0.05,
+        0.042,
+        0.038,
+        0.034,
+        0.03,
+        0.027,
+        0.016
+      ]
+    },
+    "kinetic_thud": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 270,
+      "peak_offset_ms": 23,
+      "peak_dbfs": -2,
+      "rms_dbfs": -15.94,
+      "lufs": -15.87,
+      "spectral_centroid_hz": 143,
+      "waveform_peaks": [
+        0.995,
+        0.888,
+        1,
+        0.688,
+        0.34,
+        0.555,
+        0.481,
+        0.194,
+        0.308,
+        0.254,
+        0.122,
+        0.151,
+        0.147,
+        0.081,
+        0.08,
+        0.081,
+        0.058,
+        0.039,
+        0.042,
+        0.032,
+        0.02,
+        0.021,
+        0.019,
+        0.013,
+        0.011,
+        0.01,
+        0.007,
+        0.006,
+        0.005,
+        0.004,
+        0.001,
+        0
+      ]
+    },
+    "velvet_pass": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 510,
+      "peak_offset_ms": 268,
+      "peak_dbfs": -2,
+      "rms_dbfs": -15.48,
+      "lufs": -12.97,
+      "spectral_centroid_hz": 261,
+      "waveform_peaks": [
+        0.001,
+        0.003,
+        0.016,
+        0.038,
+        0.07,
+        0.129,
+        0.198,
+        0.345,
+        0.447,
+        0.549,
+        0.578,
+        1,
+        0.725,
+        0.858,
+        0.913,
+        0.936,
+        0.912,
+        0.691,
+        0.984,
+        0.819,
+        0.919,
+        0.758,
+        0.604,
+        0.367,
+        0.531,
+        0.323,
+        0.153,
+        0.135,
+        0.074,
+        0.039,
+        0.023,
+        0.01
+      ]
+    },
+    "page_turn": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 365,
+      "peak_offset_ms": 198,
+      "peak_dbfs": -2,
+      "rms_dbfs": -17.36,
+      "lufs": -13.12,
+      "spectral_centroid_hz": 1991,
+      "waveform_peaks": [
+        0.004,
+        0.034,
+        0.088,
+        0.168,
+        0.182,
+        0.306,
+        0.332,
+        0.526,
+        0.648,
+        0.858,
+        0.93,
+        0.736,
+        0.935,
+        0.865,
+        1,
+        0.817,
+        0.756,
+        0.977,
+        0.902,
+        0.61,
+        0.473,
+        0.479,
+        0.266,
+        0.236,
+        0.171,
+        0.128,
+        0.055,
+        0.029,
+        0.022,
+        0.014,
+        0.007,
+        0.002
+      ]
+    },
+    "title_bloom": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 780,
+      "peak_offset_ms": 325,
+      "peak_dbfs": -2,
+      "rms_dbfs": -12.56,
+      "lufs": -8.77,
+      "spectral_centroid_hz": 273,
+      "waveform_peaks": [
+        0.089,
+        0.179,
+        0.282,
+        0.392,
+        0.482,
+        0.607,
+        0.704,
+        0.758,
+        0.847,
+        0.917,
+        0.954,
+        0.988,
+        0.998,
+        1,
+        1,
+        0.957,
+        0.926,
+        0.875,
+        0.807,
+        0.719,
+        0.655,
+        0.552,
+        0.45,
+        0.379,
+        0.288,
+        0.234,
+        0.166,
+        0.11,
+        0.08,
+        0.048,
+        0.028,
+        0.017
+      ]
+    },
+    "metric_chime": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 460,
+      "peak_offset_ms": 5,
+      "peak_dbfs": -2,
+      "rms_dbfs": -14.89,
+      "lufs": -11.74,
+      "spectral_centroid_hz": 672,
+      "waveform_peaks": [
+        1,
+        0.879,
+        0.797,
+        0.716,
+        0.635,
+        0.523,
+        0.491,
+        0.434,
+        0.393,
+        0.337,
+        0.304,
+        0.259,
+        0.229,
+        0.197,
+        0.174,
+        0.154,
+        0.135,
+        0.119,
+        0.104,
+        0.092,
+        0.08,
+        0.071,
+        0.062,
+        0.054,
+        0.048,
+        0.042,
+        0.037,
+        0.032,
+        0.029,
+        0.025,
+        0.021,
+        0.008
+      ]
+    },
+    "callout_ping": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 235,
+      "peak_offset_ms": 5,
+      "peak_dbfs": -2,
+      "rms_dbfs": -15.96,
+      "lufs": -15.39,
+      "spectral_centroid_hz": 920,
+      "waveform_peaks": [
+        1,
+        0.862,
+        0.734,
+        0.611,
+        0.525,
+        0.431,
+        0.359,
+        0.297,
+        0.252,
+        0.216,
+        0.18,
+        0.154,
+        0.122,
+        0.102,
+        0.082,
+        0.064,
+        0.053,
+        0.046,
+        0.037,
+        0.03,
+        0.025,
+        0.021,
+        0.017,
+        0.014,
+        0.011,
+        0.01,
+        0.008,
+        0.006,
+        0.005,
+        0.003,
+        0.002,
+        0
+      ]
+    },
+    "studio_air": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 1550,
+      "peak_offset_ms": 870,
+      "peak_dbfs": -2,
+      "rms_dbfs": -15.69,
+      "lufs": -12.92,
+      "spectral_centroid_hz": 319,
+      "waveform_peaks": [
+        0,
+        0.005,
+        0.019,
+        0.041,
+        0.081,
+        0.213,
+        0.238,
+        0.402,
+        0.529,
+        0.648,
+        0.75,
+        0.712,
+        0.843,
+        0.999,
+        0.999,
+        1,
+        1,
+        0.994,
+        1,
+        0.929,
+        0.928,
+        0.965,
+        0.712,
+        0.509,
+        0.311,
+        0.233,
+        0.174,
+        0.1,
+        0.058,
+        0.034,
+        0.019,
+        0.014
+      ]
+    },
+    "pulse_bed": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 1380,
+      "peak_offset_ms": 628,
+      "peak_dbfs": -2,
+      "rms_dbfs": -18.76,
+      "lufs": -16.08,
+      "spectral_centroid_hz": 120,
+      "waveform_peaks": [
+        0,
+        0,
+        0.251,
+        0.159,
+        0.085,
+        0.046,
+        0.027,
+        0.011,
+        0.579,
+        0.385,
+        0.193,
+        0.117,
+        0.061,
+        0.03,
+        1,
+        0.767,
+        0.45,
+        0.263,
+        0.134,
+        0.081,
+        0.634,
+        0.45,
+        0.254,
+        0.131,
+        0.069,
+        0.044,
+        0.304,
+        0.228,
+        0.131,
+        0.063,
+        0.035,
+        0.021
+      ]
+    },
+    "soft_pop": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 96,
+      "peak_offset_ms": 5,
+      "peak_dbfs": -2,
+      "rms_dbfs": -15.33,
+      "lufs": -19.12,
+      "spectral_centroid_hz": 433,
+      "waveform_peaks": [
+        1,
+        0.909,
+        0.741,
+        0.636,
+        0.529,
+        0.437,
+        0.369,
+        0.305,
+        0.26,
+        0.203,
+        0.171,
+        0.147,
+        0.121,
+        0.1,
+        0.088,
+        0.075,
+        0.055,
+        0.053,
+        0.045,
+        0.036,
+        0.03,
+        0.025,
+        0.018,
+        0.018,
+        0.015,
+        0.01,
+        0.012,
+        0.008,
+        0.006,
+        0.002,
+        0.001,
+        0
+      ]
+    },
+    "toggle_on": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 138,
+      "peak_offset_ms": 5,
+      "peak_dbfs": -2,
+      "rms_dbfs": -15,
+      "lufs": -17.06,
+      "spectral_centroid_hz": 752,
+      "waveform_peaks": [
+        1,
+        0.89,
+        0.664,
+        0.537,
+        0.403,
+        0.303,
+        0.241,
+        0.884,
+        0.823,
+        0.588,
+        0.478,
+        0.392,
+        0.32,
+        0.262,
+        0.2,
+        0.154,
+        0.119,
+        0.094,
+        0.074,
+        0.062,
+        0.05,
+        0.04,
+        0.029,
+        0.023,
+        0.019,
+        0.016,
+        0.012,
+        0.01,
+        0.007,
+        0.004,
+        0.002,
+        0
+      ]
+    },
+    "select_tick": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 64,
+      "peak_offset_ms": 3,
+      "peak_dbfs": -2,
+      "rms_dbfs": -17.58,
+      "lufs": -22.06,
+      "spectral_centroid_hz": 1178,
+      "waveform_peaks": [
+        1,
+        0.805,
+        0.538,
+        0.437,
+        0.324,
+        0.225,
+        0.152,
+        0.108,
+        0.081,
+        0.054,
+        0.042,
+        0.033,
+        0.023,
+        0.015,
+        0.012,
+        0.009,
+        0.007,
+        0.004,
+        0.004,
+        0.003,
+        0.003,
+        0.003,
+        0.003,
+        0.003,
+        0.002,
+        0.002,
+        0.002,
+        0.002,
+        0.002,
+        0.002,
+        0.001,
+        0
+      ]
+    },
+    "confirm_chime": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 340,
+      "peak_offset_ms": 5,
+      "peak_dbfs": -2,
+      "rms_dbfs": -14.47,
+      "lufs": -12.75,
+      "spectral_centroid_hz": 577,
+      "waveform_peaks": [
+        1,
+        0.853,
+        0.709,
+        0.584,
+        0.477,
+        0.372,
+        0.934,
+        0.902,
+        0.714,
+        0.637,
+        0.486,
+        0.422,
+        0.366,
+        0.274,
+        0.239,
+        0.184,
+        0.158,
+        0.134,
+        0.104,
+        0.09,
+        0.071,
+        0.058,
+        0.049,
+        0.038,
+        0.033,
+        0.026,
+        0.021,
+        0.019,
+        0.015,
+        0.012,
+        0.007,
+        0.002
+      ]
+    },
+    "tap_glass": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 186,
+      "peak_offset_ms": 5,
+      "peak_dbfs": -2,
+      "rms_dbfs": -15.76,
+      "lufs": -14.43,
+      "spectral_centroid_hz": 2103,
+      "waveform_peaks": [
+        1,
+        0.856,
+        0.721,
+        0.57,
+        0.491,
+        0.427,
+        0.358,
+        0.312,
+        0.269,
+        0.229,
+        0.195,
+        0.163,
+        0.137,
+        0.115,
+        0.096,
+        0.081,
+        0.068,
+        0.057,
+        0.048,
+        0.041,
+        0.034,
+        0.029,
+        0.024,
+        0.02,
+        0.017,
+        0.014,
+        0.012,
+        0.01,
+        0.007,
+        0.004,
+        0.002,
+        0
+      ]
+    },
+    "tap_soft": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 62,
+      "peak_offset_ms": 5,
+      "peak_dbfs": -2,
+      "rms_dbfs": -14.12,
+      "lufs": -20.17,
+      "spectral_centroid_hz": 174,
+      "waveform_peaks": [
+        0.307,
+        0.988,
+        1,
+        0.647,
+        0.654,
+        0.564,
+        0.476,
+        0.362,
+        0.378,
+        0.303,
+        0.249,
+        0.236,
+        0.185,
+        0.182,
+        0.134,
+        0.106,
+        0.109,
+        0.07,
+        0.078,
+        0.058,
+        0.06,
+        0.042,
+        0.043,
+        0.031,
+        0.032,
+        0.021,
+        0.023,
+        0.011,
+        0.009,
+        0.004,
+        0,
+        0
+      ]
+    },
+    "tap_wood": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 122,
+      "peak_offset_ms": 3,
+      "peak_dbfs": -2.02,
+      "rms_dbfs": -19.36,
+      "lufs": -19.73,
+      "spectral_centroid_hz": 1827,
+      "waveform_peaks": [
+        1,
+        0.846,
+        0.753,
+        0.607,
+        0.54,
+        0.429,
+        0.386,
+        0.31,
+        0.25,
+        0.225,
+        0.197,
+        0.171,
+        0.147,
+        0.136,
+        0.116,
+        0.107,
+        0.092,
+        0.085,
+        0.072,
+        0.061,
+        0.057,
+        0.048,
+        0.044,
+        0.038,
+        0.035,
+        0.03,
+        0.027,
+        0.022,
+        0.014,
+        0.009,
+        0.002,
+        0
+      ]
+    },
+    "select_lock": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 136,
+      "peak_offset_ms": 18,
+      "peak_dbfs": -2,
+      "rms_dbfs": -20.51,
+      "lufs": -19.44,
+      "spectral_centroid_hz": 4224,
+      "waveform_peaks": [
+        0.718,
+        0.547,
+        0.224,
+        1,
+        0.807,
+        0.594,
+        0.505,
+        0.374,
+        0.319,
+        0.233,
+        0.202,
+        0.148,
+        0.128,
+        0.094,
+        0.082,
+        0.063,
+        0.053,
+        0.043,
+        0.036,
+        0.029,
+        0.025,
+        0.02,
+        0.018,
+        0.014,
+        0.012,
+        0.01,
+        0.008,
+        0.006,
+        0.004,
+        0.002,
+        0.001,
+        0
+      ]
+    },
+    "select_pill": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 204,
+      "peak_offset_ms": 5,
+      "peak_dbfs": -2,
+      "rms_dbfs": -13.52,
+      "lufs": -14.06,
+      "spectral_centroid_hz": 543,
+      "waveform_peaks": [
+        1,
+        0.92,
+        0.821,
+        0.742,
+        0.673,
+        0.718,
+        0.635,
+        0.551,
+        0.472,
+        0.407,
+        0.361,
+        0.295,
+        0.264,
+        0.231,
+        0.191,
+        0.167,
+        0.147,
+        0.128,
+        0.111,
+        0.096,
+        0.084,
+        0.072,
+        0.063,
+        0.056,
+        0.048,
+        0.042,
+        0.037,
+        0.032,
+        0.025,
+        0.015,
+        0.007,
+        0.001
+      ]
+    },
+    "toggle_off": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 88,
+      "peak_offset_ms": 5,
+      "peak_dbfs": -2,
+      "rms_dbfs": -16.72,
+      "lufs": -21,
+      "spectral_centroid_hz": 298,
+      "waveform_peaks": [
+        1,
+        0.864,
+        0.696,
+        0.653,
+        0.58,
+        0.489,
+        0.416,
+        0.377,
+        0.315,
+        0.285,
+        0.234,
+        0.212,
+        0.181,
+        0.156,
+        0.14,
+        0.112,
+        0.1,
+        0.089,
+        0.079,
+        0.062,
+        0.055,
+        0.049,
+        0.043,
+        0.038,
+        0.029,
+        0.025,
+        0.022,
+        0.018,
+        0.011,
+        0.004,
+        0.001,
+        0
+      ]
+    },
+    "toggle_magnetic": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 173,
+      "peak_offset_ms": 28,
+      "peak_dbfs": -2,
+      "rms_dbfs": -18.11,
+      "lufs": -18.55,
+      "spectral_centroid_hz": 507,
+      "waveform_peaks": [
+        1,
+        0.624,
+        0.382,
+        0.23,
+        0.773,
+        0.77,
+        0.547,
+        0.448,
+        0.37,
+        0.285,
+        0.204,
+        0.174,
+        0.139,
+        0.11,
+        0.09,
+        0.075,
+        0.06,
+        0.049,
+        0.038,
+        0.03,
+        0.023,
+        0.019,
+        0.015,
+        0.012,
+        0.01,
+        0.008,
+        0.006,
+        0.005,
+        0.003,
+        0.002,
+        0.001,
+        0
+      ]
+    },
+    "feedback_success": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 435,
+      "peak_offset_ms": 73,
+      "peak_dbfs": -2,
+      "rms_dbfs": -16.71,
+      "lufs": -13.04,
+      "spectral_centroid_hz": 989,
+      "waveform_peaks": [
+        1,
+        0.711,
+        0.496,
+        0.369,
+        0.298,
+        0.806,
+        0.694,
+        0.568,
+        0.463,
+        0.398,
+        0.324,
+        0.279,
+        0.228,
+        0.197,
+        0.161,
+        0.139,
+        0.114,
+        0.094,
+        0.081,
+        0.066,
+        0.057,
+        0.047,
+        0.04,
+        0.033,
+        0.028,
+        0.024,
+        0.02,
+        0.017,
+        0.014,
+        0.012,
+        0.009,
+        0.003
+      ]
+    },
+    "feedback_complete": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 640,
+      "peak_offset_ms": 5,
+      "peak_dbfs": -2,
+      "rms_dbfs": -13.39,
+      "lufs": -12.27,
+      "spectral_centroid_hz": 757,
+      "waveform_peaks": [
+        0.939,
+        1,
+        0.957,
+        0.964,
+        0.914,
+        0.822,
+        0.657,
+        0.521,
+        0.479,
+        0.412,
+        0.318,
+        0.295,
+        0.261,
+        0.203,
+        0.182,
+        0.157,
+        0.133,
+        0.111,
+        0.099,
+        0.081,
+        0.071,
+        0.062,
+        0.053,
+        0.046,
+        0.039,
+        0.034,
+        0.028,
+        0.025,
+        0.021,
+        0.018,
+        0.016,
+        0.007
+      ]
+    },
+    "feedback_error": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 305,
+      "peak_offset_ms": 5,
+      "peak_dbfs": -2,
+      "rms_dbfs": -15.52,
+      "lufs": -14.68,
+      "spectral_centroid_hz": 197,
+      "waveform_peaks": [
+        1,
+        0.82,
+        0.675,
+        0.544,
+        0.433,
+        0.341,
+        0.268,
+        0.209,
+        0.641,
+        0.924,
+        0.758,
+        0.467,
+        0.382,
+        0.332,
+        0.195,
+        0.171,
+        0.12,
+        0.079,
+        0.076,
+        0.04,
+        0.037,
+        0.027,
+        0.018,
+        0.017,
+        0.01,
+        0.009,
+        0.007,
+        0.004,
+        0.004,
+        0.003,
+        0.001,
+        0
+      ]
+    },
+    "notify_crystal": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 560,
+      "peak_offset_ms": 5,
+      "peak_dbfs": -2,
+      "rms_dbfs": -13.59,
+      "lufs": -9.61,
+      "spectral_centroid_hz": 1735,
+      "waveform_peaks": [
+        1,
+        0.877,
+        0.79,
+        0.706,
+        0.624,
+        0.979,
+        0.866,
+        0.745,
+        0.633,
+        0.537,
+        0.453,
+        0.38,
+        0.318,
+        0.26,
+        0.217,
+        0.181,
+        0.15,
+        0.124,
+        0.103,
+        0.087,
+        0.074,
+        0.062,
+        0.053,
+        0.045,
+        0.038,
+        0.032,
+        0.027,
+        0.023,
+        0.019,
+        0.016,
+        0.013,
+        0.006
+      ]
+    },
+    "notify_bubble": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 182,
+      "peak_offset_ms": 5,
+      "peak_dbfs": -2,
+      "rms_dbfs": -14.57,
+      "lufs": -15.61,
+      "spectral_centroid_hz": 536,
+      "waveform_peaks": [
+        1,
+        0.91,
+        0.785,
+        0.734,
+        0.643,
+        0.551,
+        0.48,
+        0.452,
+        0.388,
+        0.335,
+        0.311,
+        0.266,
+        0.239,
+        0.208,
+        0.183,
+        0.161,
+        0.144,
+        0.124,
+        0.111,
+        0.098,
+        0.086,
+        0.076,
+        0.067,
+        0.059,
+        0.052,
+        0.045,
+        0.04,
+        0.035,
+        0.026,
+        0.016,
+        0.007,
+        0.001
+      ]
+    },
+    "motion_drawer_open": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 285,
+      "peak_offset_ms": 148,
+      "peak_dbfs": -2,
+      "rms_dbfs": -14.97,
+      "lufs": -13.55,
+      "spectral_centroid_hz": 671,
+      "waveform_peaks": [
+        0.002,
+        0.018,
+        0.032,
+        0.065,
+        0.2,
+        0.214,
+        0.329,
+        0.373,
+        0.434,
+        0.652,
+        0.777,
+        0.869,
+        0.875,
+        0.941,
+        0.819,
+        0.956,
+        0.972,
+        0.774,
+        1,
+        0.703,
+        0.726,
+        0.666,
+        0.661,
+        0.529,
+        0.37,
+        0.322,
+        0.271,
+        0.192,
+        0.093,
+        0.038,
+        0.009,
+        0
+      ]
+    },
+    "motion_drawer_close": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 195,
+      "peak_offset_ms": 103,
+      "peak_dbfs": -2,
+      "rms_dbfs": -15.09,
+      "lufs": -15.12,
+      "spectral_centroid_hz": 907,
+      "waveform_peaks": [
+        0.003,
+        0.018,
+        0.047,
+        0.135,
+        0.246,
+        0.302,
+        0.391,
+        0.498,
+        0.553,
+        0.447,
+        0.885,
+        0.811,
+        0.76,
+        1,
+        0.793,
+        0.996,
+        0.835,
+        0.997,
+        0.99,
+        0.951,
+        0.787,
+        0.476,
+        0.565,
+        0.404,
+        0.345,
+        0.266,
+        0.2,
+        0.134,
+        0.054,
+        0.029,
+        0.005,
+        0
+      ]
+    },
+    "motion_spring": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 324,
+      "peak_offset_ms": 8,
+      "peak_dbfs": -2,
+      "rms_dbfs": -15.34,
+      "lufs": -13.87,
+      "spectral_centroid_hz": 463,
+      "waveform_peaks": [
+        1,
+        0.891,
+        0.786,
+        0.684,
+        0.59,
+        0.509,
+        0.433,
+        0.763,
+        0.675,
+        0.57,
+        0.442,
+        0.33,
+        0.286,
+        0.272,
+        0.155,
+        0.066,
+        0.052,
+        0.041,
+        0.056,
+        0.056,
+        0.035,
+        0.037,
+        0.028,
+        0.026,
+        0.021,
+        0.017,
+        0.014,
+        0.012,
+        0.009,
+        0.007,
+        0.004,
+        0.001
+      ]
+    },
+    "type_mech_thock": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 116,
+      "peak_offset_ms": 3,
+      "peak_dbfs": -2,
+      "rms_dbfs": -19.54,
+      "lufs": -19.32,
+      "spectral_centroid_hz": 3330,
+      "waveform_peaks": [
+        1,
+        0.829,
+        0.699,
+        0.615,
+        0.595,
+        0.487,
+        0.431,
+        0.324,
+        0.261,
+        0.25,
+        0.21,
+        0.179,
+        0.172,
+        0.141,
+        0.115,
+        0.113,
+        0.092,
+        0.074,
+        0.074,
+        0.06,
+        0.049,
+        0.049,
+        0.04,
+        0.033,
+        0.032,
+        0.027,
+        0.022,
+        0.021,
+        0.014,
+        0.008,
+        0.003,
+        0
+      ]
+    },
+    "type_soft_key": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 49,
+      "peak_offset_ms": 3,
+      "peak_dbfs": -2,
+      "rms_dbfs": -19.86,
+      "lufs": -26.03,
+      "spectral_centroid_hz": 490,
+      "waveform_peaks": [
+        0.386,
+        1,
+        0.635,
+        0.354,
+        0.31,
+        0.327,
+        0.304,
+        0.199,
+        0.119,
+        0.154,
+        0.096,
+        0.08,
+        0.069,
+        0.05,
+        0.04,
+        0.037,
+        0.027,
+        0.025,
+        0.016,
+        0.013,
+        0.008,
+        0.007,
+        0.008,
+        0.007,
+        0.005,
+        0.003,
+        0.002,
+        0.001,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "type_enter": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 192,
+      "peak_offset_ms": 3,
+      "peak_dbfs": -2.22,
+      "rms_dbfs": -19.81,
+      "lufs": -17.96,
+      "spectral_centroid_hz": 2306,
+      "waveform_peaks": [
+        1,
+        0.889,
+        0.735,
+        0.535,
+        0.5,
+        0.572,
+        0.495,
+        0.404,
+        0.275,
+        0.296,
+        0.199,
+        0.173,
+        0.151,
+        0.118,
+        0.102,
+        0.08,
+        0.078,
+        0.069,
+        0.049,
+        0.039,
+        0.039,
+        0.029,
+        0.031,
+        0.026,
+        0.019,
+        0.016,
+        0.015,
+        0.012,
+        0.007,
+        0.006,
+        0.002,
+        0
+      ]
+    },
+    "type_backspace": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 78,
+      "peak_offset_ms": 3,
+      "peak_dbfs": -2,
+      "rms_dbfs": -17.34,
+      "lufs": -20.38,
+      "spectral_centroid_hz": 1357,
+      "waveform_peaks": [
+        1,
+        0.909,
+        0.633,
+        0.514,
+        0.354,
+        0.5,
+        0.268,
+        0.368,
+        0.232,
+        0.144,
+        0.082,
+        0.055,
+        0.045,
+        0.034,
+        0.039,
+        0.018,
+        0.011,
+        0.008,
+        0.008,
+        0.005,
+        0.003,
+        0.002,
+        0.002,
+        0.001,
+        0.001,
+        0.001,
+        0.001,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "system_unlock": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 292,
+      "peak_offset_ms": 5,
+      "peak_dbfs": -2,
+      "rms_dbfs": -14.6,
+      "lufs": -11.51,
+      "spectral_centroid_hz": 1672,
+      "waveform_peaks": [
+        1,
+        0.87,
+        0.737,
+        0.645,
+        0.556,
+        0.901,
+        0.828,
+        0.692,
+        0.584,
+        0.468,
+        0.389,
+        0.326,
+        0.271,
+        0.226,
+        0.18,
+        0.149,
+        0.124,
+        0.103,
+        0.086,
+        0.068,
+        0.057,
+        0.047,
+        0.039,
+        0.033,
+        0.026,
+        0.022,
+        0.018,
+        0.015,
+        0.012,
+        0.009,
+        0.004,
+        0.001
+      ]
+    },
+    "system_deploy": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 498,
+      "peak_offset_ms": 3,
+      "peak_dbfs": -2,
+      "rms_dbfs": -19.63,
+      "lufs": -14.65,
+      "spectral_centroid_hz": 1326,
+      "waveform_peaks": [
+        1,
+        0.787,
+        0.555,
+        0.388,
+        0.367,
+        0.61,
+        0.562,
+        0.452,
+        0.37,
+        0.322,
+        0.272,
+        0.203,
+        0.172,
+        0.148,
+        0.134,
+        0.102,
+        0.089,
+        0.077,
+        0.063,
+        0.049,
+        0.041,
+        0.035,
+        0.028,
+        0.026,
+        0.02,
+        0.018,
+        0.014,
+        0.012,
+        0.01,
+        0.009,
+        0.007,
+        0.003
+      ]
+    },
+    "system_connect": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 188,
+      "peak_offset_ms": 5,
+      "peak_dbfs": -2,
+      "rms_dbfs": -13.65,
+      "lufs": -14.51,
+      "spectral_centroid_hz": 601,
+      "waveform_peaks": [
+        1,
+        0.888,
+        0.813,
+        0.736,
+        0.657,
+        0.592,
+        0.534,
+        0.478,
+        0.433,
+        0.382,
+        0.34,
+        0.303,
+        0.266,
+        0.236,
+        0.208,
+        0.185,
+        0.164,
+        0.144,
+        0.127,
+        0.112,
+        0.099,
+        0.087,
+        0.076,
+        0.068,
+        0.059,
+        0.053,
+        0.046,
+        0.04,
+        0.03,
+        0.019,
+        0.008,
+        0.001
+      ]
+    },
+    "nav_forward": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 220,
+      "peak_offset_ms": 115,
+      "peak_dbfs": -2,
+      "rms_dbfs": -16.46,
+      "lufs": -14.66,
+      "spectral_centroid_hz": 1707,
+      "waveform_peaks": [
+        0.002,
+        0.013,
+        0.04,
+        0.092,
+        0.184,
+        0.247,
+        0.371,
+        0.409,
+        0.591,
+        0.679,
+        0.683,
+        0.766,
+        0.965,
+        0.97,
+        0.998,
+        0.933,
+        1,
+        0.982,
+        0.815,
+        0.788,
+        0.905,
+        0.653,
+        0.51,
+        0.64,
+        0.54,
+        0.407,
+        0.248,
+        0.117,
+        0.072,
+        0.047,
+        0.008,
+        0
+      ]
+    },
+    "nav_back": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 162,
+      "peak_offset_ms": 85,
+      "peak_dbfs": -2,
+      "rms_dbfs": -13.11,
+      "lufs": -14.61,
+      "spectral_centroid_hz": 411,
+      "waveform_peaks": [
+        0.003,
+        0.026,
+        0.055,
+        0.11,
+        0.179,
+        0.277,
+        0.35,
+        0.479,
+        0.741,
+        0.892,
+        0.816,
+        0.941,
+        0.922,
+        1,
+        0.852,
+        0.916,
+        0.966,
+        0.918,
+        0.807,
+        0.855,
+        0.658,
+        0.837,
+        0.765,
+        0.545,
+        0.396,
+        0.295,
+        0.241,
+        0.147,
+        0.098,
+        0.031,
+        0.002,
+        0
+      ]
+    },
+    "nav_tab": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 75,
+      "peak_offset_ms": 5,
+      "peak_dbfs": -2,
+      "rms_dbfs": -15.03,
+      "lufs": -18.43,
+      "spectral_centroid_hz": 1310,
+      "waveform_peaks": [
+        1,
+        0.908,
+        0.804,
+        0.809,
+        0.68,
+        0.53,
+        0.407,
+        0.362,
+        0.285,
+        0.253,
+        0.204,
+        0.171,
+        0.153,
+        0.125,
+        0.107,
+        0.085,
+        0.074,
+        0.062,
+        0.051,
+        0.043,
+        0.036,
+        0.031,
+        0.025,
+        0.021,
+        0.018,
+        0.015,
+        0.012,
+        0.01,
+        0.006,
+        0.002,
+        0.001,
+        0
+      ]
+    },
+    "drag_pickup": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 158,
+      "peak_offset_ms": 5,
+      "peak_dbfs": -2,
+      "rms_dbfs": -13.82,
+      "lufs": -15.8,
+      "spectral_centroid_hz": 210,
+      "waveform_peaks": [
+        1,
+        0.928,
+        0.833,
+        0.735,
+        0.662,
+        0.584,
+        0.529,
+        0.46,
+        0.412,
+        0.374,
+        0.321,
+        0.285,
+        0.255,
+        0.225,
+        0.2,
+        0.181,
+        0.152,
+        0.138,
+        0.122,
+        0.103,
+        0.094,
+        0.083,
+        0.071,
+        0.063,
+        0.058,
+        0.049,
+        0.044,
+        0.037,
+        0.028,
+        0.017,
+        0.007,
+        0.001
+      ]
+    },
+    "drag_snap": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 81,
+      "peak_offset_ms": 3,
+      "peak_dbfs": -2,
+      "rms_dbfs": -17.28,
+      "lufs": -20.54,
+      "spectral_centroid_hz": 911,
+      "waveform_peaks": [
+        1,
+        0.905,
+        0.651,
+        0.533,
+        0.464,
+        0.372,
+        0.273,
+        0.224,
+        0.203,
+        0.169,
+        0.146,
+        0.119,
+        0.094,
+        0.078,
+        0.066,
+        0.056,
+        0.044,
+        0.036,
+        0.03,
+        0.025,
+        0.021,
+        0.018,
+        0.014,
+        0.012,
+        0.01,
+        0.008,
+        0.007,
+        0.005,
+        0.003,
+        0.001,
+        0,
+        0
+      ]
+    },
+    "drag_drop": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 236,
+      "peak_offset_ms": 15,
+      "peak_dbfs": -2,
+      "rms_dbfs": -17.45,
+      "lufs": -16.36,
+      "spectral_centroid_hz": 742,
+      "waveform_peaks": [
+        0.929,
+        1,
+        0.886,
+        0.776,
+        0.653,
+        0.537,
+        0.542,
+        0.449,
+        0.363,
+        0.276,
+        0.234,
+        0.218,
+        0.174,
+        0.178,
+        0.147,
+        0.112,
+        0.107,
+        0.089,
+        0.073,
+        0.061,
+        0.057,
+        0.044,
+        0.039,
+        0.034,
+        0.026,
+        0.026,
+        0.019,
+        0.017,
+        0.014,
+        0.008,
+        0.004,
+        0.001
+      ]
+    },
+    "progress_tick": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 57,
+      "peak_offset_ms": 3,
+      "peak_dbfs": -2,
+      "rms_dbfs": -23.21,
+      "lufs": -26.44,
+      "spectral_centroid_hz": 1232,
+      "waveform_peaks": [
+        1,
+        0.59,
+        0.414,
+        0.347,
+        0.222,
+        0.161,
+        0.136,
+        0.096,
+        0.083,
+        0.065,
+        0.054,
+        0.037,
+        0.024,
+        0.016,
+        0.015,
+        0.017,
+        0.018,
+        0.018,
+        0.018,
+        0.017,
+        0.016,
+        0.014,
+        0.013,
+        0.011,
+        0.009,
+        0.008,
+        0.006,
+        0.005,
+        0.003,
+        0.001,
+        0.001,
+        0
+      ]
+    },
+    "progress_pulse": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 340,
+      "peak_offset_ms": 8,
+      "peak_dbfs": -2,
+      "rms_dbfs": -14.84,
+      "lufs": -13.89,
+      "spectral_centroid_hz": 130,
+      "waveform_peaks": [
+        1,
+        0.873,
+        0.748,
+        0.626,
+        0.551,
+        0.45,
+        0.364,
+        0.324,
+        0.345,
+        0.268,
+        0.221,
+        0.2,
+        0.176,
+        0.156,
+        0.122,
+        0.1,
+        0.078,
+        0.053,
+        0.038,
+        0.019,
+        0.014,
+        0.013,
+        0.013,
+        0.012,
+        0.01,
+        0.009,
+        0.007,
+        0.006,
+        0.004,
+        0.003,
+        0.002,
+        0
+      ]
+    },
+    "progress_milestone": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 510,
+      "peak_offset_ms": 5,
+      "peak_dbfs": -2,
+      "rms_dbfs": -14.48,
+      "lufs": -12.16,
+      "spectral_centroid_hz": 1288,
+      "waveform_peaks": [
+        1,
+        0.887,
+        0.793,
+        0.84,
+        0.815,
+        0.586,
+        0.476,
+        0.395,
+        0.335,
+        0.284,
+        0.241,
+        0.205,
+        0.174,
+        0.148,
+        0.125,
+        0.107,
+        0.091,
+        0.077,
+        0.066,
+        0.056,
+        0.047,
+        0.04,
+        0.034,
+        0.029,
+        0.025,
+        0.021,
+        0.018,
+        0.015,
+        0.013,
+        0.011,
+        0.009,
+        0.004
+      ]
+    },
+    "msg_send": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 166,
+      "peak_offset_ms": 5,
+      "peak_dbfs": -2,
+      "rms_dbfs": -13.1,
+      "lufs": -14.26,
+      "spectral_centroid_hz": 833,
+      "waveform_peaks": [
+        1,
+        1,
+        0.84,
+        0.797,
+        0.71,
+        0.657,
+        0.615,
+        0.522,
+        0.472,
+        0.457,
+        0.391,
+        0.357,
+        0.321,
+        0.284,
+        0.247,
+        0.225,
+        0.196,
+        0.179,
+        0.161,
+        0.142,
+        0.127,
+        0.111,
+        0.099,
+        0.089,
+        0.08,
+        0.07,
+        0.062,
+        0.054,
+        0.042,
+        0.026,
+        0.011,
+        0.001
+      ]
+    },
+    "msg_receive": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 248,
+      "peak_offset_ms": 5,
+      "peak_dbfs": -2,
+      "rms_dbfs": -13.48,
+      "lufs": -13.12,
+      "spectral_centroid_hz": 591,
+      "waveform_peaks": [
+        1,
+        0.904,
+        0.786,
+        0.687,
+        0.604,
+        0.958,
+        0.903,
+        0.495,
+        0.576,
+        0.444,
+        0.417,
+        0.348,
+        0.254,
+        0.222,
+        0.189,
+        0.153,
+        0.126,
+        0.106,
+        0.09,
+        0.074,
+        0.057,
+        0.046,
+        0.04,
+        0.035,
+        0.027,
+        0.023,
+        0.02,
+        0.016,
+        0.014,
+        0.008,
+        0.004,
+        0.001
+      ]
+    },
+    "msg_ai_start": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 426,
+      "peak_offset_ms": 5,
+      "peak_dbfs": -2,
+      "rms_dbfs": -13.99,
+      "lufs": -9.72,
+      "spectral_centroid_hz": 1367,
+      "waveform_peaks": [
+        1,
+        0.878,
+        0.787,
+        0.996,
+        0.889,
+        0.761,
+        0.665,
+        0.568,
+        0.476,
+        0.41,
+        0.341,
+        0.282,
+        0.242,
+        0.201,
+        0.166,
+        0.143,
+        0.118,
+        0.098,
+        0.084,
+        0.07,
+        0.058,
+        0.05,
+        0.041,
+        0.035,
+        0.029,
+        0.024,
+        0.021,
+        0.017,
+        0.014,
+        0.012,
+        0.009,
+        0.003
+      ]
+    },
+    "riser_snap_half": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 500,
+      "peak_offset_ms": 473,
+      "peak_dbfs": -2,
+      "rms_dbfs": -15.32,
+      "lufs": -11.66,
+      "spectral_centroid_hz": 1776,
+      "waveform_peaks": [
+        0.001,
+        0.005,
+        0.008,
+        0.016,
+        0.026,
+        0.038,
+        0.051,
+        0.079,
+        0.095,
+        0.123,
+        0.141,
+        0.202,
+        0.227,
+        0.249,
+        0.291,
+        0.285,
+        0.354,
+        0.437,
+        0.479,
+        0.6,
+        0.533,
+        0.593,
+        0.734,
+        0.856,
+        0.864,
+        0.923,
+        0.932,
+        0.963,
+        1,
+        0.975,
+        0.988,
+        0.413
+      ]
+    },
+    "impact_metal_cold": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 748,
+      "peak_offset_ms": 13,
+      "peak_dbfs": -2,
+      "rms_dbfs": -14.93,
+      "lufs": -13.42,
+      "spectral_centroid_hz": 484,
+      "waveform_peaks": [
+        1,
+        0.99,
+        0.98,
+        0.919,
+        0.77,
+        0.793,
+        0.635,
+        0.548,
+        0.47,
+        0.431,
+        0.326,
+        0.267,
+        0.195,
+        0.186,
+        0.139,
+        0.114,
+        0.087,
+        0.074,
+        0.061,
+        0.046,
+        0.038,
+        0.033,
+        0.029,
+        0.023,
+        0.02,
+        0.017,
+        0.015,
+        0.012,
+        0.01,
+        0.008,
+        0.007,
+        0.005
+      ]
+    },
+    "whoosh_micro": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 220,
+      "peak_offset_ms": 105,
+      "peak_dbfs": -2,
+      "rms_dbfs": -15.87,
+      "lufs": -15.52,
+      "spectral_centroid_hz": 751,
+      "waveform_peaks": [
+        0.001,
+        0.012,
+        0.038,
+        0.067,
+        0.115,
+        0.195,
+        0.362,
+        0.312,
+        0.474,
+        0.655,
+        0.759,
+        0.691,
+        0.754,
+        0.754,
+        0.992,
+        0.841,
+        0.91,
+        1,
+        0.659,
+        0.804,
+        0.824,
+        0.601,
+        0.555,
+        0.455,
+        0.423,
+        0.332,
+        0.255,
+        0.138,
+        0.073,
+        0.039,
+        0.005,
+        0
+      ]
+    },
+    "trans_tape_stop": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 695,
+      "peak_offset_ms": 13,
+      "peak_dbfs": -2,
+      "rms_dbfs": -13.23,
+      "lufs": -11.45,
+      "spectral_centroid_hz": 360,
+      "waveform_peaks": [
+        1,
+        0.961,
+        0.959,
+        0.882,
+        0.835,
+        0.805,
+        0.709,
+        0.654,
+        0.553,
+        0.535,
+        0.463,
+        0.417,
+        0.412,
+        0.342,
+        0.316,
+        0.291,
+        0.263,
+        0.237,
+        0.212,
+        0.146,
+        0.187,
+        0.163,
+        0.101,
+        0.138,
+        0.095,
+        0.082,
+        0.11,
+        0.087,
+        0.046,
+        0.076,
+        0.018,
+        0.014
+      ]
+    },
+    "trans_vinyl_pull": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 472,
+      "peak_offset_ms": 260,
+      "peak_dbfs": -2,
+      "rms_dbfs": -14.01,
+      "lufs": -10.39,
+      "spectral_centroid_hz": 711,
+      "waveform_peaks": [
+        0.002,
+        0.022,
+        0.045,
+        0.122,
+        0.184,
+        0.212,
+        0.42,
+        0.456,
+        0.601,
+        0.847,
+        0.823,
+        0.863,
+        0.968,
+        0.975,
+        0.993,
+        0.962,
+        0.968,
+        0.976,
+        1,
+        0.913,
+        0.864,
+        0.842,
+        0.845,
+        0.609,
+        0.468,
+        0.422,
+        0.295,
+        0.16,
+        0.089,
+        0.065,
+        0.013,
+        0.001
+      ]
+    },
+    "trans_shutter": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 168,
+      "peak_offset_ms": 3,
+      "peak_dbfs": -2,
+      "rms_dbfs": -21.97,
+      "lufs": -20.02,
+      "spectral_centroid_hz": 2637,
+      "waveform_peaks": [
+        1,
+        0.878,
+        0.484,
+        0.384,
+        0.238,
+        0.128,
+        0.447,
+        0.305,
+        0.235,
+        0.192,
+        0.123,
+        0.099,
+        0.063,
+        0.041,
+        0.029,
+        0.024,
+        0.019,
+        0.008,
+        0.005,
+        0.007,
+        0.003,
+        0.003,
+        0.001,
+        0.001,
+        0.001,
+        0.001,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "accent_spark": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 275,
+      "peak_offset_ms": 5,
+      "peak_dbfs": -2,
+      "rms_dbfs": -16.9,
+      "lufs": -12.96,
+      "spectral_centroid_hz": 2790,
+      "waveform_peaks": [
+        0.984,
+        1,
+        0.808,
+        0.64,
+        0.524,
+        0.43,
+        0.37,
+        0.304,
+        0.233,
+        0.186,
+        0.16,
+        0.133,
+        0.104,
+        0.086,
+        0.072,
+        0.06,
+        0.048,
+        0.038,
+        0.032,
+        0.027,
+        0.022,
+        0.018,
+        0.014,
+        0.012,
+        0.01,
+        0.008,
+        0.007,
+        0.005,
+        0.004,
+        0.003,
+        0.002,
+        0
+      ]
+    },
+    "accent_counter": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 145,
+      "peak_offset_ms": 3,
+      "peak_dbfs": -2.04,
+      "rms_dbfs": -20.43,
+      "lufs": -20.31,
+      "spectral_centroid_hz": 1216,
+      "waveform_peaks": [
+        1,
+        0.808,
+        0.577,
+        0.651,
+        0.513,
+        0.425,
+        0.25,
+        0.18,
+        0.176,
+        0.145,
+        0.115,
+        0.092,
+        0.068,
+        0.043,
+        0.031,
+        0.034,
+        0.032,
+        0.02,
+        0.017,
+        0.017,
+        0.01,
+        0.01,
+        0.006,
+        0.007,
+        0.005,
+        0.004,
+        0.004,
+        0.003,
+        0.002,
+        0.001,
+        0,
+        0
+      ]
+    },
+    "drop_vacuum": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 890,
+      "peak_offset_ms": 470,
+      "peak_dbfs": -2,
+      "rms_dbfs": -11.74,
+      "lufs": -11.39,
+      "spectral_centroid_hz": 83,
+      "waveform_peaks": [
+        0.003,
+        0.022,
+        0.06,
+        0.106,
+        0.215,
+        0.29,
+        0.405,
+        0.552,
+        0.716,
+        0.713,
+        0.895,
+        0.993,
+        0.885,
+        0.99,
+        0.992,
+        0.997,
+        1,
+        0.999,
+        0.888,
+        0.967,
+        0.954,
+        0.844,
+        0.703,
+        0.573,
+        0.564,
+        0.412,
+        0.242,
+        0.169,
+        0.097,
+        0.05,
+        0.014,
+        0.004
+      ]
+    },
+    "drop_pitch_dive": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 475,
+      "peak_offset_ms": 10,
+      "peak_dbfs": -2,
+      "rms_dbfs": -12.75,
+      "lufs": -11.3,
+      "spectral_centroid_hz": 145,
+      "waveform_peaks": [
+        0.999,
+        1,
+        1,
+        0.943,
+        0.846,
+        0.777,
+        0.691,
+        0.695,
+        0.805,
+        0.674,
+        0.721,
+        0.438,
+        0.436,
+        0.331,
+        0.209,
+        0.366,
+        0.344,
+        0.179,
+        0.206,
+        0.183,
+        0.134,
+        0.092,
+        0.054,
+        0.051,
+        0.04,
+        0.104,
+        0.036,
+        0.046,
+        0.019,
+        0.01,
+        0.012,
+        0.003
+      ]
+    },
+    "glitch_rip": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 148,
+      "peak_offset_ms": 5,
+      "peak_dbfs": -2,
+      "rms_dbfs": -17.09,
+      "lufs": -17.35,
+      "spectral_centroid_hz": 1180,
+      "waveform_peaks": [
+        0.979,
+        1,
+        0.795,
+        0.622,
+        0.721,
+        0.471,
+        0.623,
+        0.438,
+        0.302,
+        0.306,
+        0.158,
+        0.158,
+        0.159,
+        0.149,
+        0.143,
+        0.148,
+        0.13,
+        0.017,
+        0.012,
+        0.007,
+        0.008,
+        0.007,
+        0.006,
+        0.005,
+        0.004,
+        0.003,
+        0.004,
+        0.003,
+        0.002,
+        0.001,
+        0,
+        0
+      ]
+    },
+    "glitch_data": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 410,
+      "peak_offset_ms": 195,
+      "peak_dbfs": -2,
+      "rms_dbfs": -14.58,
+      "lufs": -10.67,
+      "spectral_centroid_hz": 1499,
+      "waveform_peaks": [
+        0.001,
+        0.02,
+        0.049,
+        0.145,
+        0.253,
+        0.248,
+        0.351,
+        0.537,
+        0.636,
+        0.725,
+        0.817,
+        0.98,
+        0.998,
+        0.919,
+        0.92,
+        1,
+        0.879,
+        0.867,
+        0.976,
+        0.831,
+        0.767,
+        0.941,
+        0.619,
+        0.638,
+        0.534,
+        0.361,
+        0.356,
+        0.147,
+        0.09,
+        0.046,
+        0.02,
+        0
+      ]
+    },
+    "glitch_stutter": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 267,
+      "peak_offset_ms": 5,
+      "peak_dbfs": -2,
+      "rms_dbfs": -20.6,
+      "lufs": -17.18,
+      "spectral_centroid_hz": 2532,
+      "waveform_peaks": [
+        1,
+        0.63,
+        0.303,
+        0.173,
+        0.848,
+        0.359,
+        0.187,
+        0.096,
+        0.011,
+        0.337,
+        0.211,
+        0.211,
+        0.107,
+        0.097,
+        0.011,
+        0.008,
+        0.005,
+        0.004,
+        0.002,
+        0.001,
+        0.001,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "ambience_obsidian": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 2230,
+      "peak_offset_ms": 1343,
+      "peak_dbfs": -2,
+      "rms_dbfs": -11.41,
+      "lufs": -10.32,
+      "spectral_centroid_hz": 74,
+      "waveform_peaks": [
+        0.004,
+        0.019,
+        0.055,
+        0.099,
+        0.189,
+        0.274,
+        0.418,
+        0.484,
+        0.65,
+        0.721,
+        0.872,
+        0.961,
+        0.992,
+        0.992,
+        1,
+        0.997,
+        1,
+        0.991,
+        0.991,
+        0.948,
+        0.909,
+        0.887,
+        0.831,
+        0.602,
+        0.482,
+        0.352,
+        0.239,
+        0.182,
+        0.104,
+        0.057,
+        0.02,
+        0.004
+      ]
+    },
+    "ambience_warm_pad": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 2890,
+      "peak_offset_ms": 1448,
+      "peak_dbfs": -2,
+      "rms_dbfs": -11.81,
+      "lufs": -8.14,
+      "spectral_centroid_hz": 232,
+      "waveform_peaks": [
+        0.003,
+        0.016,
+        0.047,
+        0.097,
+        0.16,
+        0.269,
+        0.343,
+        0.501,
+        0.573,
+        0.737,
+        0.872,
+        0.888,
+        0.959,
+        0.983,
+        1,
+        0.996,
+        0.998,
+        0.983,
+        0.996,
+        0.987,
+        0.934,
+        0.882,
+        0.764,
+        0.676,
+        0.54,
+        0.454,
+        0.307,
+        0.206,
+        0.125,
+        0.072,
+        0.036,
+        0.015
+      ]
+    },
+    "title_slam": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 482,
+      "peak_offset_ms": 15,
+      "peak_dbfs": -2,
+      "rms_dbfs": -15.11,
+      "lufs": -12.29,
+      "spectral_centroid_hz": 276,
+      "waveform_peaks": [
+        1,
+        0.923,
+        0.866,
+        0.753,
+        0.703,
+        0.702,
+        0.498,
+        0.494,
+        0.31,
+        0.294,
+        0.271,
+        0.277,
+        0.103,
+        0.115,
+        0.091,
+        0.125,
+        0.093,
+        0.064,
+        0.054,
+        0.04,
+        0.02,
+        0.026,
+        0.025,
+        0.025,
+        0.013,
+        0.014,
+        0.014,
+        0.011,
+        0.006,
+        0.005,
+        0.002,
+        0.001
+      ]
+    },
+    "title_shimmer": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 1060,
+      "peak_offset_ms": 518,
+      "peak_dbfs": -2,
+      "rms_dbfs": -11.37,
+      "lufs": -7.03,
+      "spectral_centroid_hz": 870,
+      "waveform_peaks": [
+        0.003,
+        0.02,
+        0.056,
+        0.112,
+        0.176,
+        0.304,
+        0.395,
+        0.572,
+        0.623,
+        0.797,
+        0.887,
+        0.963,
+        0.982,
+        0.978,
+        0.998,
+        1,
+        0.995,
+        0.997,
+        0.996,
+        0.994,
+        0.917,
+        0.843,
+        0.729,
+        0.63,
+        0.505,
+        0.408,
+        0.29,
+        0.182,
+        0.112,
+        0.065,
+        0.037,
+        0.025
+      ]
+    },
+    "pop_crisp": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 65,
+      "peak_offset_ms": 3,
+      "peak_dbfs": -2,
+      "rms_dbfs": -16.57,
+      "lufs": -19.74,
+      "spectral_centroid_hz": 1611,
+      "waveform_peaks": [
+        1,
+        0.979,
+        0.722,
+        0.632,
+        0.498,
+        0.384,
+        0.308,
+        0.242,
+        0.197,
+        0.158,
+        0.127,
+        0.103,
+        0.083,
+        0.068,
+        0.053,
+        0.043,
+        0.035,
+        0.028,
+        0.022,
+        0.018,
+        0.015,
+        0.012,
+        0.009,
+        0.007,
+        0.006,
+        0.005,
+        0.004,
+        0.003,
+        0.002,
+        0.001,
+        0,
+        0
+      ]
+    },
+    "pop_droplet": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 234,
+      "peak_offset_ms": 5,
+      "peak_dbfs": -2,
+      "rms_dbfs": -14.66,
+      "lufs": -13.9,
+      "spectral_centroid_hz": 955,
+      "waveform_peaks": [
+        1,
+        0.901,
+        0.767,
+        0.667,
+        0.617,
+        0.575,
+        0.663,
+        0.494,
+        0.484,
+        0.396,
+        0.296,
+        0.236,
+        0.206,
+        0.158,
+        0.126,
+        0.109,
+        0.089,
+        0.073,
+        0.058,
+        0.045,
+        0.039,
+        0.03,
+        0.025,
+        0.021,
+        0.018,
+        0.014,
+        0.011,
+        0.009,
+        0.007,
+        0.004,
+        0.002,
+        0
+      ]
+    },
+    "stinger_marimba": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 915,
+      "peak_offset_ms": 3,
+      "peak_dbfs": -2,
+      "rms_dbfs": -22.31,
+      "lufs": -16.33,
+      "spectral_centroid_hz": 2526,
+      "waveform_peaks": [
+        1,
+        0.562,
+        0.328,
+        0.8,
+        0.364,
+        0.22,
+        0.902,
+        0.508,
+        0.325,
+        0.204,
+        0.203,
+        0.118,
+        0.072,
+        0.054,
+        0.036,
+        0.02,
+        0.013,
+        0.011,
+        0.01,
+        0.008,
+        0.005,
+        0.005,
+        0.003,
+        0.002,
+        0.001,
+        0.001,
+        0.001,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "stinger_tech": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 670,
+      "peak_offset_ms": 5,
+      "peak_dbfs": -2,
+      "rms_dbfs": -14.47,
+      "lufs": -12.95,
+      "spectral_centroid_hz": 535,
+      "waveform_peaks": [
+        0.999,
+        0.858,
+        1,
+        0.922,
+        0.926,
+        0.797,
+        0.803,
+        0.648,
+        0.596,
+        0.477,
+        0.407,
+        0.34,
+        0.305,
+        0.245,
+        0.204,
+        0.172,
+        0.143,
+        0.12,
+        0.092,
+        0.078,
+        0.061,
+        0.05,
+        0.039,
+        0.033,
+        0.027,
+        0.021,
+        0.018,
+        0.014,
+        0.012,
+        0.009,
+        0.008,
+        0.003
+      ]
+    },
+    "tension_radar": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 1530,
+      "peak_offset_ms": 800,
+      "peak_dbfs": -2,
+      "rms_dbfs": -12.15,
+      "lufs": -8.65,
+      "spectral_centroid_hz": 607,
+      "waveform_peaks": [
+        0.004,
+        0.022,
+        0.059,
+        0.117,
+        0.205,
+        0.312,
+        0.421,
+        0.611,
+        0.72,
+        0.838,
+        0.887,
+        0.963,
+        1,
+        0.997,
+        1,
+        0.999,
+        0.952,
+        0.99,
+        0.968,
+        0.954,
+        0.91,
+        0.891,
+        0.772,
+        0.598,
+        0.48,
+        0.38,
+        0.3,
+        0.181,
+        0.147,
+        0.078,
+        0.071,
+        0.041
+      ]
+    },
+    "tension_clock": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 1120,
+      "peak_offset_ms": 510,
+      "peak_dbfs": -2,
+      "rms_dbfs": -23.68,
+      "lufs": -14.93,
+      "spectral_centroid_hz": 1528,
+      "waveform_peaks": [
+        0.348,
+        0.087,
+        0.008,
+        0.001,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0.55,
+        0.18,
+        0.052,
+        0.015,
+        0.004,
+        0.001,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0.208,
+        0.067,
+        0.001,
+        0
+      ]
+    },
+    "tension_heartbeat": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "duration_ms": 825,
+      "peak_offset_ms": 8,
+      "peak_dbfs": -2,
+      "rms_dbfs": -15.75,
+      "lufs": -15.21,
+      "spectral_centroid_hz": 88,
+      "waveform_peaks": [
+        1,
+        0.806,
+        0.643,
+        0.448,
+        0.336,
+        0.84,
+        0.807,
+        0.432,
+        0.282,
+        0.175,
+        0.117,
+        0.088,
+        0.063,
+        0.038,
+        0.021,
+        0.011,
+        0.002,
+        0.003,
+        0.003,
+        0.003,
+        0.002,
+        0.002,
+        0.001,
+        0.001,
+        0.001,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  }
+}

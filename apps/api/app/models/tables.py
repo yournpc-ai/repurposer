@@ -671,6 +671,7 @@ class SoundEffect(Base):
 
     slug = Column(String(120), nullable=False, unique=True, index=True)
     engine_kind = Column(String(24), nullable=False)
+    domain = Column(String(24), nullable=False, server_default="video")
 
     category = Column(String(48), nullable=False, index=True)
     subcategory = Column(String(64), nullable=True)
@@ -722,6 +723,8 @@ class SoundEffect(Base):
         CheckConstraint("engine_kind IN ('sample', 'dsp_recipe')", name="ck_sound_effects_engine_kind"),
         CheckConstraint("sync_cue IN ('onset', 'energy_peak', 'end_peak')", name="ck_sound_effects_sync_cue"),
         Index("ix_sfx_scope_status_cat", "scope", "status", "category"),
+        CheckConstraint("domain IN ('interface', 'video')", name="ck_sfx_domain"),
+        Index("ix_sfx_domain_cat", "domain", "category"),
         Index("ix_sfx_energy_sync", "energy", "sync_cue"),
         Index("ix_sfx_moods_gin", "moods", postgresql_using="gin"),
         Index("ix_sfx_tags_gin", "tags", postgresql_using="gin"),

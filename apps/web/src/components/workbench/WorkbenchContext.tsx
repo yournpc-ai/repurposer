@@ -17,7 +17,7 @@ import {
   type WorkbenchData,
 } from "@/lib/workbench"
 
-export type WorkbenchTab = "player" | "inspector" | "slots"
+export type WorkbenchTab = "player" | "inspector" | "slots" | "sounds"
 
 export type WorkbenchOpenTarget =
   | { tab: "player"; versionId?: string; outputId?: string }
@@ -46,6 +46,8 @@ export interface WorkbenchContextValue {
   /** Register the active AgentThread composer mention-injection handler. */
   registerMentionHandler: (handler: ((mention: ChatMention) => void) | null) => void
   /** Inject a mention (+ optional region selection) into the active composer. */
+  registerTextHandler: (handler: ((text: string) => void) | null) => void
+  citeText: (text: string) => boolean
   citeMention: (mention: ChatMention) => boolean
 }
 
@@ -107,6 +109,13 @@ export function WorkbenchProvider({
   const [selectedSkillVersionId, setSelectedSkillVersionId] = useState<string | null>(null)
 
   const mentionHandlerRef = useRef<((mention: ChatMention) => void) | null>(null)
+  const textRef = useRef<((text: string) => void) | null>(null)
+  const registerTextHandler = useCallback((handler: ((text: string) => void) | null) => { textRef.current = handler }, [])
+  const citeText = useCallback((text: string) => {
+    if (!textRef.current) return false
+    textRef.current(text)
+    return true
+  }, [])
   const propCiteRef = useRef(onCiteMention)
   propCiteRef.current = onCiteMention
 
@@ -230,6 +239,8 @@ export function WorkbenchProvider({
       setSelectedAssetId,
       setSelectedSkillVersionId,
       registerMentionHandler,
+      registerTextHandler,
+      citeText,
       citeMention,
     }),
     [
@@ -247,6 +258,8 @@ export function WorkbenchProvider({
       closeWorkbench,
       toggleWorkbench,
       registerMentionHandler,
+      registerTextHandler,
+      citeText,
       citeMention,
     ],
   )

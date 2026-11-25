@@ -1,17 +1,15 @@
 """Synchronize code-owned discovery fields while preserving usage and lifecycle state."""
 
-import json
 from functools import lru_cache
-from pathlib import Path
 from uuid import NAMESPACE_URL, uuid5
 
 from pydantic import TypeAdapter
 from sqlalchemy import func, or_, select
 from sqlalchemy.dialects.postgresql import insert
 
-from app.catalog.builtin import BLOCK_SUMMARIES, BLOCKS, SOUNDS, TRANSITIONS
+from app.catalog.builtin import BLOCK_SUMMARIES, BLOCKS, TRANSITIONS
 from app.catalog.preview import preview_spec
-from app.editing.catalog import MOTION_BLOCK_CATALOG, SOUND_RECIPE_CATALOG
+from app.editing.catalog import MOTION_BLOCK_CATALOG, SOUND_ACOUSTICS, SOUND_RECIPE_CATALOG
 from app.editing.schemas import MOTION_BLOCK_PROP_MODELS, Transition
 from app.editing.text_presets import (
     TEXT_STYLE_PRESET_CATALOG,
@@ -144,31 +142,33 @@ def builtin_rows():
                 preview_spec=preview_spec("transition", key, {}),
             )
         )
-    acoustics = json.loads(Path(__file__).with_name("recipe_acoustics.json").read_text())
     for key, meta in SOUND_RECIPE_CATALOG.items():
-        zh, category, mood, energy = SOUNDS[key]
+        measured = SOUND_ACOUSTICS[key]
         sounds.append(
             dict(
                 slug="dsp_" + key,
                 engine_kind="dsp_recipe",
                 recipe_id=key,
                 recipe_version=meta["version"],
-                category=category,
+                domain=meta["domain"],
+                category=meta["category"],
                 subcategory=meta["category"],
                 name=meta["name"],
-                name_zh=zh,
+                name_zh=meta["name_zh"],
                 summary=meta["desc"],
-                moods=[mood],
-                energy=energy,
+                moods=meta["moods"],
+                energy=meta["energy"],
                 use_for=meta["use_for"],
                 avoid=meta["avoid"],
                 tags=[key, meta["category"]],
-                compatible_styles=_styles(energy),
+                compatible_styles=_styles(meta["energy"]),
                 sync_cue=meta["sync_cue"],
                 mix_hint=meta["mix_hint"],
                 params_schema=meta["params"],
                 source_provider="sound_engine",
-                **acoustics[key],
+                duration_ms=measured["duration_ms"],
+                peak_offset_ms=measured["peak_offset_ms"],
+                lufs=measured["lufs"],
             )
         )
     for row in visuals + sounds:
@@ -207,13 +207,18 @@ async def sync_builtin_catalog(db):
 
 
 async def ensure_builtin_catalog(db):
-    """Initialize an empty catalog on the first read when startup hooks are bypassed."""
-    if not await db.scalar(
-        select(VisualPreset.id).where(
-            VisualPreset.asset_kind == "block",
-            VisualPreset.preset_id == "code_terminal",
-            VisualPreset.is_builtin,
-        )
-    ):
+    """Refresh missing built-ins on first read when startup hooks are bypassed."""
+    visual = select(VisualPreset.id).where(
+        VisualPreset.asset_kind == "block",
+        VisualPreset.preset_id == "code_terminal",
+        VisualPreset.is_builtin,
+    ).exists()
+    sound = select(SoundEffect.id).where(
+        SoundEffect.slug == "dsp_tension_radar",
+        SoundEffect.domain == "video",
+        SoundEffect.engine_kind == "dsp_recipe",
+        SoundEffect.scope == "platform",
+    ).exists()
+    if not await db.scalar(select(visual & sound)):
         await sync_builtin_catalog(db)
         await db.commit()

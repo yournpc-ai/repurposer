@@ -166,6 +166,7 @@ class Studio:
         return rows
 
     async def capture(self, name, *locators):
+        locators = tuple(self.page.locator("body") if loc is self.page else loc for loc in locators)
         for locator in locators:
             await expect(locator).to_be_visible(timeout=15000)
         await self.page.screenshot(path=self.folder / f"{name}.png", full_page=True, animations="disabled")

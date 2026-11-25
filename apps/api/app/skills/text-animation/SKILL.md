@@ -2,7 +2,7 @@
 name: text-animation
 description: First-version direction for a beat-led kinetic text video driven by musical rhythm, high-impact typography presets, native motion blocks, and v2 sound effects.
 license: Proprietary
-compatibility: Repurposer create_video native motion blocks, 11 text style presets, 4 CompositionStyle presets, and 22 v2 sound recipes; no narration, website capture, or footage required.
+compatibility: Repurposer create_video native motion blocks, 11 text style presets, 4 CompositionStyle presets, and 80 sound recipes; no narration, website capture, or footage required.
 metadata:
   version: "1.0.0"
   author: repurposer
@@ -25,7 +25,7 @@ metadata:
    - `institutional_dark`：深墨色柔光玻璃卡片、青蓝强调色与 `crossfade` 叠化，适合克制权威的行业主张与品牌定调。
 2. **用短拍组织画面**：优先以 `kinetic_beat` 的 `impact_cut`、`typewriter_swap`、`slot_flip`、`inline_badge_split`、`marquee_wall` 分别承载主张、修辞转折、递进、揭示与高潮。每拍留 0.4–1.6 秒，全片最多 48 幕；有真实界面时穿插 `ui_montage`，用单幕黑白反色断句。
 3. **运用 11 套原生文字样式预设（`insert_text` / `edit_text`）**：按语义角色挑选行业预设——主标题/强钩子用 `kinetic_impact`、`vox_highlighter` 或 `creator_pop`，逐词踩拍强调与节奏卡点用 `karaoke_focus`，双语字幕用 `bilingual_cinema`，轻量标注/角标用 `vox_label`、`editorial_callout`、`lower_third_tag`，常规清晰阅读用 `clean_broadcast`、`cinema_glass`、`minimal_light`。
-4. **用 22 配方 v2 音效（`generate_sfx`）堆叠起势与重击**：在关键切镜与核心金句落点前叠加起势（`riser`、`sub_swell`、`shimmer_lift`），在字块定帧瞬间落重击或清脆提示（`impact`、`deep_hit`、`kinetic_thud`、`sub_drop`、`stinger`、`title_bloom`、`metric_chime`、`callout_ping`），在转场中点贴合扫风（`whoosh`、`swoosh_cut`、`velvet_pass`、`page_turn`），用短促交互音（`click`、`soft_pop`、`toggle_on`、`select_tick`、`confirm_chime`）与空间铺底（`studio_air`、`pulse_bed`）拉开呼吸层次。
+4. **用音效库（`generate_sfx`）堆叠起势与重击**：在关键切镜与核心金句落点前叠加起势（`riser`、`sub_swell`、`shimmer_lift`），在字块定帧瞬间落重击或清脆提示（`impact`、`deep_hit`、`kinetic_thud`、`sub_drop`、`stinger`、`title_bloom`、`metric_chime`、`callout_ping`），在转场中点贴合扫风（`whoosh`、`swoosh_cut`、`velvet_pass`、`page_turn`），用短促交互音（`click`、`soft_pop`、`toggle_on`、`select_tick`、`confirm_chime`）与空间铺底（`studio_air`、`pulse_bed`）拉开呼吸层次。
 
 ### 输入与边界
 

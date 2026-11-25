@@ -1,10 +1,10 @@
 """Catalog synchronization, tenant visibility and deterministic SQL projections."""
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select, update
 
 from app.catalog.search import BlockArgs, SearchArgs, catalog_details, search_catalog
-from app.catalog.sync import sync_builtin_catalog
+from app.catalog.sync import ensure_builtin_catalog, sync_builtin_catalog
 from app.models.tables import SoundEffect, User, VisualPreset
 from test.support.db_helpers import _user, full_api_client
 
@@ -28,7 +28,7 @@ async def test_catalog_sync_visibility_and_gallery(database):
                 )
             ).all()
         ) == {"block": 17, "transition": 5, "text_preset": 24}
-        assert await db.scalar(select(func.count()).select_from(SoundEffect)) == 22
+        assert await db.scalar(select(func.count()).select_from(SoundEffect)) == 80
         db.add_all(
             [
                 VisualPreset(
@@ -88,3 +88,21 @@ async def test_catalog_sync_visibility_and_gallery(database):
             )
         r = await client.get("/api/v1/catalog/blocks", params={"category": "private"})
         assert [row["id"] for row in r.json()["items"]] == ["own"]
+
+
+async def test_ensure_builtin_catalog_backfills_sounds_when_visual_catalog_exists(database):
+    async with database.begin() as db:
+        await sync_builtin_catalog(db)
+        await db.execute(delete(SoundEffect).where(SoundEffect.slug != "dsp_click"))
+        await db.execute(update(SoundEffect).values(domain="video"))
+
+    async with database() as db:
+        await ensure_builtin_catalog(db)
+
+    async with database() as db:
+        sounds = dict((await db.execute(
+            select(SoundEffect.slug, SoundEffect.domain).where(SoundEffect.engine_kind == "dsp_recipe")
+        )).all())
+        assert len(sounds) == 80
+        assert sounds["dsp_click"] == "interface"
+        assert sounds["dsp_tension_radar"] == "video"

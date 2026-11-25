@@ -1,4 +1,6 @@
 import { analyzeAcoustics, encodeWavPcm16, renderGraph } from "./dsp.js";
+import { applySoundTune, normalizeSoundTune } from "./tune.js";
+export * from "./tune.js";
 import { INTERNAL_SOUND_RECIPES } from "./recipes.js";
 import {
   CHANNELS,
@@ -6,6 +8,7 @@ import {
   SOUND_ENGINE_NAME,
   SOUND_ENGINE_VERSION,
   type SoundRecipeCatalogEntry,
+  type SoundTune,
   type SoundSynthesisSpec,
   type SynthesisResult,
   type WavSynthesisResult,
@@ -61,6 +64,7 @@ export function normalizeSeed(seed?: number): number {
 export function buildSoundSpec(input: {
   recipeId: string;
   params?: Record<string, number>;
+  tune?: SoundTune;
   seed?: number;
 }): SoundSynthesisSpec {
   const recipe = INTERNAL_SOUND_RECIPES[input.recipeId];
@@ -73,6 +77,7 @@ export function buildSoundSpec(input: {
     recipe_id: recipe.catalog.id,
     recipe_version: recipe.catalog.version,
     params: normalizeSoundParams(input.recipeId, input.params),
+    tune: normalizeSoundTune(input.tune),
     seed: normalizeSeed(input.seed),
     sample_rate: SAMPLE_RATE,
     channels: CHANNELS,
@@ -97,18 +102,20 @@ export function canonicalSoundSpecJson(spec: SoundSynthesisSpec): string {
     recipe_version: spec.recipe_version,
     sample_rate: spec.sample_rate,
     seed: spec.seed,
+    tune: Object.fromEntries(Object.entries(spec.tune).sort(([a], [b]) => a < b ? -1 : 1)),
   });
 }
 
 export function synthesizeSound(input: {
   recipeId: string;
   params?: Record<string, number>;
+  tune?: SoundTune;
   seed?: number;
 }): SynthesisResult {
   const spec = buildSoundSpec(input);
   const recipe = INTERNAL_SOUND_RECIPES[spec.recipe_id]!;
   const graph = recipe.buildGraph(spec.params);
-  const { left, right } = renderGraph(graph, spec.seed);
+  const { left, right } = renderGraph(applySoundTune(graph, spec.tune, spec.seed), spec.seed);
   const acoustics = analyzeAcoustics(left, right);
   return {
     left,
@@ -123,6 +130,7 @@ export function synthesizeSound(input: {
 export function synthesizeWav(input: {
   recipeId: string;
   params?: Record<string, number>;
+  tune?: SoundTune;
   seed?: number;
 }): WavSynthesisResult {
   const result = synthesizeSound(input);

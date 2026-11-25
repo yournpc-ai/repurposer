@@ -69,6 +69,7 @@ function AudioPlaybackItem({
               void playSoundRecipePreview({
                 recipeId: item.sound_recipe!.recipe_id,
                 params: item.sound_recipe!.params,
+                tune: item.sound_recipe!.tune,
                 seed: item.sound_recipe!.seed,
               })
             }

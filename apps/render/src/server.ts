@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import {
+  TUNE_SCHEMA,
   canonicalSoundSpecJson,
   synthesizeWav,
 } from "@repurposer/sound-engine";
@@ -146,6 +147,8 @@ app.post("/render-mp4", express.json({ limit: "32mb" }), async (req, res) => {
 app.use(express.json({ limit: "8mb" }));
 
 const synthesizeSfxRequestSchema = z.object({
+  tune: z.object(Object.fromEntries(Object.entries(TUNE_SCHEMA).map(([key, axis]) =>
+    [key, z.number().finite().min(axis.min).max(axis.max).optional()]))).strict().optional(),
   recipe_id: z.string().min(1).max(64),
   params: z.record(z.string(), z.number().finite()).optional(),
   seed: z.number().int().min(0).max(0xffffffff).optional(),
@@ -166,6 +169,7 @@ app.post("/synthesize-sfx", (req, res) => {
     const result = synthesizeWav({
       recipeId: parsed.data.recipe_id,
       params: parsed.data.params,
+      tune: parsed.data.tune,
       seed: parsed.data.seed,
     });
     const specSha256 = createHash("sha256")

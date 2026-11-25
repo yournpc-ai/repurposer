@@ -85,6 +85,7 @@ async def _call_render_synthesize_sfx(spec: dict[str, Any]) -> dict[str, Any]:
     payload = {
         "recipe_id": spec["recipe_id"],
         "params": spec["params"],
+        "tune": spec["tune"],
         "seed": spec["seed"],
     }
     try:
@@ -156,6 +157,7 @@ async def _synthesize_and_persist(
         "recipe_id": spec["recipe_id"],
         "recipe_version": spec["recipe_version"],
         "params": spec["params"],
+        "tune": spec["tune"],
         "seed": spec["seed"],
         "spec_sha256": spec_sha256,
         "wav_digest": wav_digest,
@@ -205,15 +207,15 @@ async def synthesize_project_sfx(
     project_id: UUID,
     recipe_id: str,
     params: dict[str, Any] | None = None,
+    tune: dict[str, Any] | None = None,
     seed: int | None = None,
 ) -> dict[str, Any]:
     """Single-flight deduplicated SFX synthesis for (owner_id, project_id, spec_sha256)."""
-    spec = build_sound_spec(recipe_id, params=params, seed=seed)
+    spec = build_sound_spec(recipe_id, params=params, seed=seed, tune=tune)
     spec_sha256 = sound_spec_digest(spec)
     key = (owner_id, project_id, spec_sha256)
 
     task = _IN_FLIGHT_SFX.get(key)
-    is_owner = False
     if task is None or task.done():
         task = asyncio.create_task(
             _synthesize_and_persist(
@@ -224,12 +226,10 @@ async def synthesize_project_sfx(
             )
         )
         _IN_FLIGHT_SFX[key] = task
-        is_owner = True
+        def release(finished):
+            if _IN_FLIGHT_SFX.get(key) is finished:
+                _IN_FLIGHT_SFX.pop(key, None)
 
-    try:
-        result = await asyncio.shield(task)
-    finally:
-        if is_owner and _IN_FLIGHT_SFX.get(key) is task:
-            _IN_FLIGHT_SFX.pop(key, None)
+        task.add_done_callback(release)
 
-    return dict(result)
+    return dict(await asyncio.shield(task))

@@ -6,6 +6,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import case, func, or_, select
 
+from app.editing.catalog import SOUND_ACOUSTICS, TUNE_SCHEMA
 from app.models.tables import SoundEffect, VisualPreset
 
 Energy = Literal["subtle", "medium", "high", "explosive"]
@@ -26,6 +27,7 @@ class BlockArgs(SearchArgs):
 
 
 class SoundArgs(SearchArgs):
+    domain: Literal["interface", "video"] | None = None
     sync_cue: Literal["onset", "energy_peak", "end_peak"] | None = None
     max_duration_ms: int | None = Field(default=None, gt=0)
 
@@ -67,16 +69,16 @@ def _projection(kind, owner_id):
         model.use_for,
         model.avoid,
     ]
-    cols += [model.duration_ms, model.sync_cue] if sound else [model.slot_summary]
+    cols += [model.domain, model.duration_ms, model.peak_offset_ms, model.sync_cue] if sound else [model.slot_summary]
     stmt = select(*cols).where(visible(model, owner_id))
     if not sound:
         stmt = stmt.where(model.asset_kind == kind)
     return model, key, stmt
 
 
-async def search_catalog(db, owner_id, kind, args, *, offset=0):
+async def search_catalog(db, owner_id, kind, args, *, offset=0, gallery=False):
     model, key, stmt = _projection(kind, owner_id)
-    for field in ("category", "energy", "sync_cue"):
+    for field in ("category", "energy", "sync_cue", "domain"):
         if value := getattr(args, field, None):
             stmt = stmt.where(getattr(model, field) == value)
     if isinstance(args, BlockArgs) and args.needs_media != "any":
@@ -100,10 +102,20 @@ async def search_catalog(db, owner_id, kind, args, *, offset=0):
             + case((literal, 2.0), else_=0.0)
             + case((exact, 4.0), else_=0.0)
         )
+    if gallery and kind == "sfx":
+        stmt = stmt.add_columns(model.name_zh, model.engine_kind, model.recipe_id, model.storage_key)
     rows = await db.execute(
         stmt.order_by(score.desc(), model.id.asc()).offset(offset).limit(args.limit)
     )
-    return {"items": [dict(row) for row in rows.mappings()]}
+    items = [dict(row) for row in rows.mappings()]
+    if gallery and kind == "sfx":
+        from app.providers.storage import stream_url
+
+        for item in items:
+            key = item.pop("storage_key")
+            item["audio_url"] = stream_url(key) if key else None
+            item["waveform_peaks"] = SOUND_ACOUSTICS.get(item["recipe_id"], {}).get("waveform_peaks", [])
+    return {"items": items}
 
 
 async def catalog_details(db, owner_id, kind, ids):
@@ -113,7 +125,6 @@ async def catalog_details(db, owner_id, kind, ids):
     if kind == "sfx":
         stmt = stmt.add_columns(
             model.engine_kind,
-            model.peak_offset_ms,
             model.mix_hint,
             model.lufs,
             model.recipe_id,
@@ -137,6 +148,8 @@ async def catalog_details(db, owner_id, kind, ids):
                 item["storage_ready"] = bool(storage_key and await storage.exists(storage_key))
                 for field in ("recipe_id", "recipe_version", "params_schema"):
                     item.pop(field)
+            else:
+                item.update(tune_schema=TUNE_SCHEMA, base_duration_ms=item["duration_ms"])
         by_id[item["id"]] = item
     return {"items": [by_id[k] for k in dict.fromkeys(ids) if k in by_id]}
 

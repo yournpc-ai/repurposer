@@ -4,7 +4,8 @@
     "slug": "foley_switch",
     "name": "Heater switch",
     "name_zh": "机械开关",
-    "category": "tactile_ui",
+    "domain": "interface",
+    "category": "toggle",
     "subcategory": "mechanical_switch",
     "moods": [
       "crisp",
@@ -38,7 +39,8 @@
     "slug": "foley_metal",
     "name": "Metal rack",
     "name_zh": "金属架敲击",
-    "category": "foley_organic",
+    "domain": "video",
+    "category": "impacts",
     "subcategory": "metal_contact",
     "moods": [
       "metallic",
@@ -72,7 +74,8 @@
     "slug": "foley_steel",
     "name": "Steel pan",
     "name_zh": "钢盘敲击",
-    "category": "foley_organic",
+    "domain": "video",
+    "category": "impacts",
     "subcategory": "metal_resonance",
     "moods": [
       "resonant",

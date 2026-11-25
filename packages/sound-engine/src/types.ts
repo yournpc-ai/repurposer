@@ -1,25 +1,35 @@
 export const SOUND_ENGINE_NAME = "repurposer-sound-engine" as const;
-export const SOUND_ENGINE_VERSION = 2 as const;
+export const SOUND_ENGINE_VERSION = 3 as const;
 export const SAMPLE_RATE = 48000 as const;
 export const CHANNELS = 2 as const;
 
 export type SoundDomain = "video" | "interface";
 
 export type SoundCategory =
-  | "motion"
-  | "impact"
-  | "riser"
-  | "stinger"
-  | "transition"
-  | "drop"
-  | "title"
-  | "accent"
-  | "ambience"
-  | "tension"
   | "tap"
   | "select"
   | "toggle"
-  | "feedback";
+  | "feedback"
+  | "notify"
+  | "motion"
+  | "type"
+  | "system"
+  | "navigate"
+  | "drag"
+  | "progress"
+  | "message"
+  | "risers"
+  | "impacts"
+  | "whooshes"
+  | "transitions"
+  | "accents"
+  | "drops"
+  | "glitches"
+  | "ambience"
+  | "titles"
+  | "pops"
+  | "stingers"
+  | "tension";
 
 export type SyncCue = "onset" | "energy_peak" | "end_peak";
 
@@ -44,6 +54,9 @@ export interface SoundParamSpec {
 }
 
 export interface SoundRecipeCatalogEntry extends CatalogMetadataHeader<SoundDomain, SoundCategory> {
+  name_zh: string;
+  moods: readonly string[];
+  energy: "subtle" | "medium" | "high" | "explosive";
   suggested_duration_ms: readonly [number, number];
   sync_cue: SyncCue;
   mix_hint: string;
@@ -112,7 +125,45 @@ export interface NoiseLayer {
   pan?: PanConfig;
 }
 
-export type Layer = OscillatorLayer | NoiseLayer;
+interface ResonantLayer {
+  gain: number;
+  startMs?: number;
+  durationMs?: number;
+  envelope: EnvelopeConfig;
+  filter?: FilterConfig;
+  pan?: PanConfig;
+}
+
+export interface FmLayer extends ResonantLayer {
+  kind: "fm";
+  carrierFreqStart: number;
+  carrierFreqEnd?: number;
+  modRatio: number;
+  modIndexStart: number;
+  modIndexEnd: number;
+  secondaryRatio?: number;
+  secondaryIndex?: number;
+}
+
+export interface PluckLayer extends ResonantLayer {
+  kind: "pluck";
+  freqStart: number;
+  damping: number;
+  brightness: number;
+}
+
+export type PitchCurve = { start: number; end: number; exponent: number };
+export type Layer = (OscillatorLayer | NoiseLayer | FmLayer | PluckLayer) & { pitchCurve?: PitchCurve };
+
+export interface SoundTune {
+  pitch_st?: number;
+  tone_pct?: number;
+  length_scale?: number;
+  space_pct?: number;
+  punch_pct?: number;
+  variation_pct?: number;
+  volume_db?: number;
+}
 
 export interface ReflectionTap {
   channel: 0 | 1;
@@ -123,6 +174,13 @@ export interface ReflectionTap {
 export interface SoundGraph {
   durationMs: number;
   layers: Layer[];
+  pitchCurve?: PitchCurve;
+  glitch?: { sampleHoldSteps: number; bitDepth: number; mix: number };
+  drive?: number;
+  bias?: number;
+  echo?: { delayMs: number; feedback: number; dampHz: number; mix: number };
+  tiltDb?: number;
+  volumeDb?: number;
   reflections?: {
     amount: number; // 0..1
     taps: readonly ReflectionTap[];
@@ -145,6 +203,7 @@ export interface SoundSynthesisSpec {
   recipe_id: string;
   recipe_version: number;
   params: Record<string, number>;
+  tune: Required<SoundTune>;
   seed: number;
   sample_rate: typeof SAMPLE_RATE;
   channels: typeof CHANNELS;

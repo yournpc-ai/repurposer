@@ -184,32 +184,6 @@ BLOCK_SUMMARIES = {
     "closing_cta": "A brand lockup, final tagline and action close the sequence.",
 }
 
-# Names and classifications follow the acoustic gesture of the default recipe.
-SOUNDS = {
-    "whoosh": ("空气掠过", "whoosh_motion", "fluid", "medium"),
-    "impact": ("柔和撞击", "impact_hit", "tactile", "medium"),
-    "click": ("机械点击", "tactile_ui", "crisp", "subtle"),
-    "riser": ("渐强上升", "riser_transition", "tense", "high"),
-    "stinger": ("片尾重音", "impact_hit", "bold", "high"),
-    "swoosh_cut": ("甩切掠风", "whoosh_motion", "kinetic", "high"),
-    "sub_swell": ("低频涌动", "riser_transition", "tense", "medium"),
-    "shimmer_lift": ("闪光上扬", "riser_transition", "bright", "medium"),
-    "deep_hit": ("深沉重击", "impact_hit", "cinematic", "explosive"),
-    "sub_drop": ("低音坠落", "impact_hit", "dramatic", "explosive"),
-    "kinetic_thud": ("节拍顿击", "impact_hit", "punchy", "high"),
-    "velvet_pass": ("柔风划过", "whoosh_motion", "smooth", "subtle"),
-    "page_turn": ("纸页翻动", "foley_organic", "organic", "subtle"),
-    "title_bloom": ("标题绽放", "chime_feedback", "warm", "medium"),
-    "metric_chime": ("数据铃音", "chime_feedback", "precise", "medium"),
-    "callout_ping": ("标注提示", "chime_feedback", "bright", "subtle"),
-    "studio_air": ("影棚空气", "foley_organic", "calm", "subtle"),
-    "pulse_bed": ("脉冲铺底", "riser_transition", "tense", "medium"),
-    "soft_pop": ("轻柔弹出", "tactile_ui", "playful", "subtle"),
-    "toggle_on": ("开关触发", "tactile_ui", "crisp", "subtle"),
-    "select_tick": ("选择轻响", "tactile_ui", "crisp", "subtle"),
-    "confirm_chime": ("确认和弦", "chime_feedback", "positive", "medium"),
-}
-
 TRANSITIONS = {
     "crossfade": (
         "叠化",

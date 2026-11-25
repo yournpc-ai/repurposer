@@ -11,6 +11,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react"
 import {
+  AudioLines,
   Crop,
   Download,
   Film,
@@ -54,6 +55,8 @@ const LazySlotPreviewContent = lazy(() =>
     default: m.SlotPreviewContent,
   })),
 )
+
+const SoundLabPanel = lazy(() => import("./SoundLabPanel"))
 
 const WIDTH_STORAGE_KEY = "repurposer-workbench-width"
 const DEFAULT_WIDTH = 460
@@ -793,7 +796,7 @@ export function WorkbenchPane({
 
   const paneContent = (
     <div className="flex h-full min-h-0 flex-col bg-background">
-      {/* Header with 3 native multi-tabs + close */}
+      {/* Workbench tabs and close control */}
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2">
         <SegmentedControl<WorkbenchTab>
           kind="tabs"
@@ -821,6 +824,7 @@ export function WorkbenchPane({
               icon: <Sparkles className="size-3.5" />,
               count: slotsCount > 0 ? slotsCount : undefined,
             },
+            { value: "sounds", label: t("workbench.tabs.sounds"), icon: <AudioLines className="size-3.5" /> },
           ]}
         />
         <IconButton
@@ -837,6 +841,7 @@ export function WorkbenchPane({
         {activeTab === "player" ? <PlayerTabContent /> : null}
         {activeTab === "inspector" ? <InspectorTabContent /> : null}
         {activeTab === "slots" ? <SlotsTabContent /> : null}
+        {activeTab === "sounds" && <Suspense fallback={<Spinner />}><SoundLabPanel /></Suspense>}
       </div>
     </div>
   )

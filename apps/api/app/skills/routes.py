@@ -186,7 +186,8 @@ async def _synthesize_blueprint_sfx_inline(
         async with httpx.AsyncClient(timeout=30.0, trust_env=False) as client:
             for cue in bp.sfx_cues:
                 sound_spec = build_sound_spec(
-                    cue.recipe_id, params=cue.params, seed=cue.seed
+                    cue.recipe_id, params=cue.params, seed=cue.seed,
+                    tune=cue.tune.model_dump(exclude_none=True) if cue.tune else None,
                 )
                 spec_hash = sound_spec_digest(sound_spec)
                 if spec_hash not in cache:
@@ -195,6 +196,7 @@ async def _synthesize_blueprint_sfx_inline(
                         json={
                             "recipe_id": sound_spec["recipe_id"],
                             "params": sound_spec["params"],
+                            "tune": sound_spec["tune"],
                             "seed": sound_spec["seed"],
                         },
                     )

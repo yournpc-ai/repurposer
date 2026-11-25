@@ -157,6 +157,31 @@ export function oscillatorSample(wave: OscillatorLayer["waveform"], phase: numbe
   }
 }
 
+// The loop low-pass adds half a sample of group delay. Interpolate the
+// remaining fractional period so the string stays in tune between integer taps.
+function pluckedString(frequency: number, brightness: number, damping: number, seed: number, minSpeed: number) {
+  const period = Math.max(2, SAMPLE_RATE / frequency - 0.5);
+  const line = new Float64Array(Math.ceil(period / minSpeed) + 2);
+  const random = createPrng(seed);
+  let excitation = 0;
+  for (let i = 0; i < line.length; i++) {
+    excitation += (0.08 + 0.92 * brightness) * (random() * 2 - 1 - excitation);
+    line[i] = excitation;
+  }
+  let cursor = 0;
+  let previous = 0;
+  return (speed: number) => {
+    const delay = Math.min(line.length - 1, period / speed);
+    const pos = (cursor - delay + line.length) % line.length;
+    const j = Math.floor(pos);
+    const y = line[j] + (pos - j) * (line[(j + 1) % line.length] - line[j]);
+    line[cursor] = (y + previous) * 0.5 * damping;
+    previous = y;
+    cursor = (cursor + 1) % line.length;
+    return y;
+  };
+}
+
 function renderLayer(
   layer: Layer, left: Float32Array, right: Float32Array, seed: number,
 ): void {
@@ -167,6 +192,12 @@ function renderLayer(
   const osc = layer.kind === "oscillator" ? layer : undefined;
   const noise = layer.kind === "noise" ? createNoise(layer.color ?? "white", seed) : undefined;
   const voices = Math.min(8, Math.max(1, Math.round(osc?.voices ?? 1)));
+  const brake = layer.pitchCurve;
+  const minSpeed = brake ? Math.max(0.01, Math.min(brake.start, brake.end)) : 1;
+  const pluck = layer.kind === "pluck"
+    ? pluckedString(layer.freqStart, layer.brightness, layer.damping, seed, minSpeed)
+    : undefined;
+  const brakeFilter = brake ? new BiquadFilter() : undefined;
   const cfg = layer.filter;
   const panStart = layer.pan?.start ?? 0;
   const panEnd = layer.pan?.end ?? panStart;
@@ -182,19 +213,30 @@ function renderLayer(
         const freq = cfg.freqStart * ((cfg.freqEnd ?? cfg.freqStart) / cfg.freqStart) ** (u ** (cfg.curve ?? 1));
         filter.configure(cfg.kind, freq, cfg.q, cfg.gainDb);
       }
+      const speed = brake ? brake.start * (brake.end / brake.start) ** (u ** brake.exponent) : 1;
+      if (brakeFilter && (i & 15) === 0) brakeFilter.configure("lowpass", 16000 * Math.min(1, speed), 0.7);
       let sample: number;
       if (osc) {
         const end = osc.freqEnd ?? osc.freqStart;
         const hz = osc.pitchDecayRate === undefined
           ? osc.freqStart * (end / osc.freqStart) ** (u ** (osc.curve ?? 1))
           : end + (osc.freqStart - end) * Math.exp(-osc.pitchDecayRate * t / 1000);
-        const step = Math.min(0.48, Math.max(1e-9, hz * ratio / SAMPLE_RATE));
+        const step = Math.min(0.48, Math.max(1e-9, hz * ratio * speed / SAMPLE_RATE));
         sample = oscillatorSample(osc.waveform, phase, step);
         phase += step;
         if (phase >= 1) phase--;
+      } else if (layer.kind === "fm") {
+        const carrier = layer.carrierFreqStart * ((layer.carrierFreqEnd ?? layer.carrierFreqStart) / layer.carrierFreqStart) ** u;
+        const index = layer.modIndexEnd + (layer.modIndexStart - layer.modIndexEnd) * (1 - u) ** 4;
+        const secondary = (layer.secondaryIndex ?? 0) * Math.sin(phase * (layer.secondaryRatio ?? 1));
+        sample = Math.sin(phase + index * Math.sin(phase * layer.modRatio + secondary));
+        phase += TWO_PI * carrier * speed / SAMPLE_RATE;
+      } else if (pluck) {
+        sample = pluck(speed);
       } else {
         sample = noise!();
       }
+      if (brakeFilter) sample = brakeFilter.process(sample);
       if (filter) sample = filter.process(sample);
       const value = sample * evalEnvelope(layer.envelope, t, duration) * layer.gain / voices;
       const pan = Math.max(-1, Math.min(1, panStart + (panEnd - panStart) * u + position * 0.7));
@@ -298,7 +340,7 @@ function centerChannel(channel: Float32Array): number {
   return peak;
 }
 
-function master(left: Float32Array, right: Float32Array): void {
+function master(left: Float32Array, right: Float32Array, volumeDb: number): void {
   const peaks = new Float64Array(Math.ceil(left.length / LIMITER_BLOCK));
   const peak = Math.max(measurePeaks(left, peaks), measurePeaks(right, peaks));
   if (peak === 0) return;
@@ -327,10 +369,26 @@ function master(left: Float32Array, right: Float32Array): void {
   // headroom. Re-measure after time-varying gain, including between samples.
   const samplePeak = Math.max(centerChannel(left), centerChannel(right));
   const truePeak = Math.max(measurePeaks(left), measurePeaks(right));
-  const trim = Math.min(10 ** (-2 / 20) / samplePeak, 10 ** (-1.75 / 20) / truePeak);
+  const normal = Math.min(10 ** (-2 / 20) / samplePeak, 10 ** (-1.75 / 20) / truePeak);
+  const trim = normal * 10 ** (volumeDb / 20);
+  const ceiling = 10 ** (-0.52 / 20);
+  const knee = 10 ** (-2 / 20);
+  const limit = (x: number) => {
+    const magnitude = Math.abs(x);
+    return magnitude <= knee ? x : Math.sign(x) * (knee + (ceiling - knee) * Math.tanh((magnitude - knee) / (ceiling - knee)));
+  };
   for (let i = 0; i < left.length; i++) {
-    left[i] *= trim;
-    right[i] *= trim;
+    left[i] = volumeDb > 0 ? limit(left[i] * trim) : left[i] * trim;
+    right[i] = volumeDb > 0 ? limit(right[i] * trim) : right[i] * trim;
+  }
+  if (volumeDb > 0) {
+    centerChannel(left);
+    centerChannel(right);
+    const safety = Math.min(1, ceiling / Math.max(measurePeaks(left), measurePeaks(right)));
+    for (let i = 0; i < left.length; i++) {
+      left[i] *= safety;
+      right[i] *= safety;
+    }
   }
 }
 
@@ -340,7 +398,7 @@ export function renderGraph(graph: SoundGraph, seed: number): { left: Float32Arr
   const right = new Float32Array(totalSamples);
 
   for (let idx = 0; idx < graph.layers.length; idx++) {
-    renderLayer(graph.layers[idx], left, right, (seed + Math.imul(idx + 1, 2654435761)) >>> 0);
+    renderLayer({ pitchCurve: graph.pitchCurve, ...graph.layers[idx] }, left, right, (seed + Math.imul(idx + 1, 2654435761)) >>> 0);
   }
 
   if (graph.reflections && graph.reflections.amount > 0 && graph.reflections.taps.length > 0) {
@@ -362,14 +420,45 @@ export function renderGraph(graph: SoundGraph, seed: number): { left: Float32Arr
     }
   }
 
+  if (graph.echo) {
+    const { delayMs, feedback, dampHz, mix } = graph.echo;
+    const delay = Math.max(1, Math.round(delayMs * SAMPLE_RATE / 1000));
+    const lines = [new Float32Array(delay), new Float32Array(delay)];
+    const alpha = 1 - Math.exp(-TWO_PI * dampHz / SAMPLE_RATE);
+    let l = 0, r = 0;
+    for (let i = 0; i < totalSamples; i++) {
+      const j = i % delay;
+      l += alpha * (lines[0][j] - l);
+      r += alpha * (lines[1][j] - r);
+      lines[0][j] = left[i] + r * feedback;
+      lines[1][j] = right[i] + l * feedback;
+      left[i] += r * mix;
+      right[i] += l * mix;
+    }
+  }
   for (const [side, channel] of [left, right].entries()) {
     if (graph.reverb && graph.reverb.mix > 0) reverberate(channel, side === 0 ? 0 : 1, graph.reverb);
     const highpass = new BiquadFilter();
     highpass.configure("highpass", graph.highpass ?? 24, Math.SQRT1_2);
     const lowpass = graph.lowpass ? new BiquadFilter() : undefined;
+    let held = 0;
+    const levels = 2 ** ((graph.glitch?.bitDepth ?? 16) - 1);
+    const tilt = graph.tiltDb ? new BiquadFilter() : undefined;
+    tilt?.configure("peaking", 4300, 0.36, graph.tiltDb);
     lowpass?.configure("lowpass", graph.lowpass!, Math.SQRT1_2);
     for (let i = 0; i < totalSamples; i++) {
-      const high = highpass.process(channel[i]);
+      let x = channel[i];
+      if (graph.glitch) {
+        const { sampleHoldSteps, mix } = graph.glitch;
+        if (i % sampleHoldSteps === 0) held = Math.round(x * levels) / levels;
+        x += (held - x) * mix;
+      }
+      if (graph.drive) {
+        const bias = graph.bias ?? 0;
+        x = (Math.tanh(x * (1 + graph.drive) + bias) - Math.tanh(bias)) / (1 + graph.drive);
+      }
+      if (tilt) x = tilt.process(x);
+      const high = highpass.process(x);
       channel[i] = lowpass ? lowpass.process(high) : high;
     }
   }
@@ -391,7 +480,7 @@ export function renderGraph(graph: SoundGraph, seed: number): { left: Float32Arr
     right[idx] *= gain;
   }
 
-  master(left, right);
+  master(left, right, graph.volumeDb ?? 0);
   return { left, right };
 }
 

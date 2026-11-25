@@ -1,3 +1,4 @@
+import { additionalRecipes } from "./presets.js";
 import type {
   EnvelopeConfig,
   Layer,
@@ -46,10 +47,10 @@ function roomBus(space: number, predelayMs: number, decaySec: number, dampHz: nu
 
 const WHOOSH_RECIPE: InternalSoundRecipe = {
   catalog: {
-    id: "whoosh",
+    id: "whoosh", name_zh: "空气掠过", moods: ["fluid"], energy: "medium",
     version: 2,
     domain: "video",
-    category: "motion",
+    category: "whooshes",
     name: "Air Whoosh",
     desc: "Clean directional air sweep that swells across the stereo field and dissipates softly.",
     use_for: ["kinetic title entrance", "product card slide-in", "scene motion cue"],
@@ -123,10 +124,10 @@ const WHOOSH_RECIPE: InternalSoundRecipe = {
 
 const IMPACT_RECIPE: InternalSoundRecipe = {
   catalog: {
-    id: "impact",
+    id: "impact", name_zh: "柔和撞击", moods: ["tactile"], energy: "medium",
     version: 2,
     domain: "video",
-    category: "impact",
+    category: "impacts",
     name: "Soft Impact",
     desc: "Restrained tactile settle with warm low-end body and clean studio reflections.",
     use_for: ["title lock-in", "product card landing", "headline emphasis"],
@@ -207,7 +208,7 @@ const IMPACT_RECIPE: InternalSoundRecipe = {
 
 const CLICK_RECIPE: InternalSoundRecipe = {
   catalog: {
-    id: "click",
+    id: "click", name_zh: "机械点击", moods: ["crisp"], energy: "subtle",
     version: 2,
     domain: "interface",
     category: "tap",
@@ -283,10 +284,10 @@ const CLICK_RECIPE: InternalSoundRecipe = {
 
 const RISER_RECIPE: InternalSoundRecipe = {
   catalog: {
-    id: "riser",
+    id: "riser", name_zh: "渐强上升", moods: ["tense"], energy: "high",
     version: 2,
     domain: "video",
-    category: "riser",
+    category: "risers",
     name: "Tension Riser",
     desc: "Smooth upward shimmer and harmonic swell building cleanly into a reveal cut.",
     use_for: ["pre-reveal build", "interface zoom anticipation", "transition lead-in"],
@@ -357,10 +358,10 @@ const RISER_RECIPE: InternalSoundRecipe = {
 
 const STINGER_RECIPE: InternalSoundRecipe = {
   catalog: {
-    id: "stinger",
+    id: "stinger", name_zh: "片尾重音", moods: ["bold"], energy: "high",
     version: 2,
     domain: "video",
-    category: "stinger",
+    category: "stingers",
     name: "Brand Stinger",
     desc: "Restrained institutional harmonic chime with crystalline overtones for logo or title lockups.",
     use_for: ["brand mark reveal", "opening statement accent", "closing lockup"],
@@ -440,10 +441,10 @@ const STINGER_RECIPE: InternalSoundRecipe = {
 
 const SWOOSH_CUT_RECIPE: InternalSoundRecipe = {
   catalog: {
-    id: "swoosh_cut",
+    id: "swoosh_cut", name_zh: "甩切掠风", moods: ["kinetic"], energy: "high",
     version: 2,
     domain: "video",
-    category: "transition",
+    category: "whooshes",
     name: "Swoosh Cut",
     desc: "Compact symmetrical bidirectional air-and-body sweep designed specifically for crossfade scene cuts.",
     use_for: ["scene crossfade cut", "act-to-act handoff", "product view switch"],
@@ -523,14 +524,15 @@ const SWOOSH_CUT_RECIPE: InternalSoundRecipe = {
 type Range = readonly [initial: number, min: number, max: number];
 
 function instrument(
-  id: string, name: string, category: SoundRecipeCatalogEntry["category"],
+  id: string, name_zh: string, mood: string, energy: SoundRecipeCatalogEntry["energy"],
+  name: string, category: SoundRecipeCatalogEntry["category"],
   cue: SoundRecipeCatalogEntry["sync_cue"], description: string, use: string,
   length: Range, pitch: Range, space: number,
   layers: (ms: number, hz: number) => Layer[],
 ): InternalSoundRecipe {
-  const ui = ["tap", "toggle", "select", "feedback"].includes(category);
+  const ui = ["soft_pop", "toggle_on", "select_tick", "confirm_chime"].includes(id);
   const catalog: SoundRecipeCatalogEntry = {
-    id, version: 2, domain: ui ? "interface" : "video", category, name,
+    id, name_zh, moods: [mood], energy, version: 2, domain: (category === "notify" || (ui && category !== "pops")) ? "interface" : "video", category, name,
     desc: description, use_for: [use], avoid: [ui ? "continuous pointer movement" : "static narration"],
     suggested_duration_ms: [length[1], length[2]], sync_cue: cue,
     mix_hint: "Use sparingly at −14 to −10 dB under narration.",
@@ -567,98 +569,98 @@ function breath(
 }
 
 const instruments = [
-  instrument("sub_swell", "Sub Swell", "riser", "end_peak",
+  instrument("sub_swell", "低频涌动", "tense", "medium", "Sub Swell", "risers", "end_peak",
     "Low bowed octave rising gently into an opening frame.", "opening title reveal",
     [920, 420, 2000], [68, 45, 110], 29, (ms, hz) => [
       note("sine", hz * 0.68, 0.48, { attackMs: 20, risePower: 1.55, releaseMs: ms * 0.043 }, { freqEnd: hz, curve: 0.72 }),
       note("triangle", hz * 1.6, 0.12, { attackMs: 35, risePower: 2.2 }, { freqEnd: hz * 2, voices: 3, detune: 6 }),
     ]),
-  instrument("shimmer_lift", "Shimmer Lift", "riser", "end_peak",
+  instrument("shimmer_lift", "闪光上扬", "bright", "medium", "Shimmer Lift", "risers", "end_peak",
     "A climbing fifth with a fine, diffuse high register.", "reveal anticipation",
     [1150, 510, 1900], [480, 290, 720], 64, (_ms, hz) => [
       note("triangle", hz, 0.24, { attackMs: 16, risePower: 1.5 }, { freqEnd: hz * 1.5, voices: 3, detune: 4 }),
       note("sine", hz * 2, 0.14, { attackMs: 30, risePower: 2.8 }, { freqEnd: hz * 3.01, pan: { start: -0.3, end: 0.32 } }),
       breath("pink", 0.19, { kind: "bandpass", freqStart: hz * 2, freqEnd: hz * 8, q: 0.85, curve: 1.4 }, { attackMs: 12, risePower: 2 }),
     ]),
-  instrument("deep_hit", "Deep Hit", "impact", "onset",
+  instrument("deep_hit", "深沉重击", "cinematic", "explosive", "Deep Hit", "impacts", "onset",
     "A felted bass strike with a brief grain of contact.", "anchor a chapter heading",
     [530, 240, 960], [67, 48, 105], 38, (ms, hz) => [
       note("sine", hz * 2.7, 0.49, { attackMs: 3, decayMs: ms * 0.16 }, { freqEnd: hz, pitchDecayRate: 48 }),
       breath("brown", 0.2, { kind: "bandpass", freqStart: hz * 5, q: 1 }, { attackMs: 2, decayMs: 17 }),
     ]),
-  instrument("sub_drop", "Sub Drop", "drop", "onset",
+  instrument("sub_drop", "低音坠落", "dramatic", "explosive", "Sub Drop", "drops", "onset",
     "A falling low register leaves space after a change of argument.", "pain-point pivot",
     [660, 300, 1250], [105, 74, 165], 22, (ms, hz) => [
       note("sine", hz * 1.45, 0.46, { attackMs: 5, decayMs: ms * 0.26 }, { freqEnd: hz * 0.39, curve: 0.64 }),
       note("triangle", hz * 2.9, 0.13, { attackMs: 2, decayMs: ms * 0.10 }, { freqEnd: hz * 0.8, curve: 0.62 }),
     ]),
-  instrument("kinetic_thud", "Kinetic Thud", "impact", "onset",
+  instrument("kinetic_thud", "节拍顿击", "punchy", "high", "Kinetic Thud", "impacts", "onset",
     "Two close contacts suggest a panel seating in its frame.", "product panel landing",
     [270, 140, 520], [147, 85, 220], 23, (ms, hz) => [
       note("triangle", hz * 1.6, 0.35, { attackMs: 1.8, decayMs: ms * 0.15 }, { freqEnd: hz, pitchDecayRate: 90 }),
       note("sine", hz * 0.75, 0.22, { attackMs: 2, decayMs: ms * 0.11 }, { startMs: 14 }),
       breath("pink", 0.16, { kind: "lowpass", freqStart: hz * 9, q: 0.72 }, { attackMs: 1, decayMs: 8 }),
     ]),
-  instrument("velvet_pass", "Velvet Pass", "transition", "energy_peak",
+  instrument("velvet_pass", "柔风划过", "smooth", "subtle", "Velvet Pass", "whooshes", "energy_peak",
     "A dark fabric-like sweep crosses the frame.", "soft lateral crossfade",
     [510, 240, 920], [340, 195, 580], 71, (_ms, hz) => [
       breath("pink", 0.5, { kind: "lowpass", freqStart: hz, freqEnd: hz * 3.3, q: 0.8 }, { attackMs: 10, bellPower: 3.6 }, { pan: { start: -0.72, end: 0.72 } }),
       note("sine", hz * 0.51, 0.18, { attackMs: 6, bellPower: 2.8 }, { freqEnd: hz * 0.72, voices: 2, detune: 5 }),
     ]),
-  instrument("page_turn", "Page Turn", "transition", "energy_peak",
+  instrument("page_turn", "纸页翻动", "organic", "subtle", "Page Turn", "transitions", "energy_peak",
     "A papery lift followed by the short brush of a settling leaf.", "document page change",
     [365, 210, 680], [1300, 780, 2300], 43, (ms, hz) => [
       breath("pink", 0.55, { kind: "bandpass", freqStart: hz * 0.6, freqEnd: hz * 2.4, q: 0.75 }, { attackMs: 5, bellPower: 2.2 }, { durationMs: ms * 0.89, pan: { start: -0.55, end: 0.36 } }),
       breath("white", 0.29, { kind: "bandpass", freqStart: hz * 2.3, freqEnd: hz, q: 1.3 }, { attackMs: 6, bellPower: 3 }, { startMs: ms * 0.42, durationMs: ms * 0.29, pan: { start: 0.32 } }),
     ]),
-  instrument("title_bloom", "Title Bloom", "title", "energy_peak",
+  instrument("title_bloom", "标题绽放", "warm", "medium", "Title Bloom", "titles", "energy_peak",
     "A slowly voiced open fifth comes into focus under a headline.", "opening title",
     [780, 400, 1350], [220, 147, 350], 56, (ms, hz) => [
       note("triangle", hz, 0.33, { attackMs: ms * 0.2, riseMs: ms * 0.21, riseCurve: 1.4, holdMs: ms * 0.035, decayMs: ms * 0.13 }, { voices: 3, detune: 4 }),
       note("sine", hz * 1.5, 0.16, { attackMs: 12, bellPower: 2.8 }, { pan: { start: 0.28 } }),
     ]),
-  instrument("metric_chime", "Metric Chime", "accent", "onset",
+  instrument("metric_chime", "数据铃音", "precise", "medium", "Metric Chime", "accents", "onset",
     "A measured glass strike with a short, clear upper partial.", "data-card arrival",
     [460, 230, 800], [659, 370, 990], 36, (ms, hz) => [
       note("sine", hz, 0.32, { attackMs: 3, decayMs: ms * 0.24 }),
       note("sine", hz * 2.41, 0.11, { attackMs: 1.4, decayMs: ms * 0.09 }, { voices: 2, detune: 3 }),
     ]),
-  instrument("callout_ping", "Callout Ping", "accent", "onset",
+  instrument("callout_ping", "标注提示", "bright", "subtle", "Callout Ping", "notify", "onset",
     "A single narrow focus tone settles a few cents downward.", "selection box focus",
     [235, 115, 470], [910, 520, 1400], 19, (ms, hz) => [
       note("sine", hz * 1.045, 0.4, { attackMs: 3.5, decayMs: ms * 0.16 }, { freqEnd: hz, pitchDecayRate: 70 }),
       note("sine", hz * 1.99, 0.055, { attackMs: 2, decayMs: 13 }),
     ]),
-  instrument("studio_air", "Studio Air", "ambience", "energy_peak",
+  instrument("studio_air", "影棚空气", "calm", "subtle", "Studio Air", "ambience", "energy_peak",
     "A brief pocket of room air with a soft center and quiet edges.", "pause before an interview reveal",
     [1550, 700, 2800], [330, 190, 610], 78, (_ms, hz) => [
       ...[-0.7, 0.7].map(start => breath("pink", 0.32, { kind: "lowpass", freqStart: hz * 3.7, q: 0.68 }, { attackMs: 30, bellPower: 3.2 }, { pan: { start } })),
       breath("brown", 0.16, { kind: "bandpass", freqStart: hz, q: 0.72 }, { attackMs: 22, bellPower: 2.6 }),
     ]),
-  instrument("pulse_bed", "Pulse Bed", "tension", "energy_peak",
+  instrument("pulse_bed", "脉冲铺底", "tense", "medium", "Pulse Bed", "tension", "energy_peak",
     "Five muted pulses grow toward a central editorial beat.", "brief analytical pause",
     [1380, 720, 2300], [109, 70, 172], 33, (ms, hz) =>
       [0.20, 0.46, 1, 0.50, 0.24].map((gain, i) =>
         note("triangle", hz * 1.18, gain * 0.38, { attackMs: 8, decayMs: ms * 0.049 },
           { startMs: ms * (0.065 + i * 0.19), durationMs: ms * 0.17, freqEnd: hz, pitchDecayRate: 43 }))),
-  instrument("soft_pop", "Soft Pop", "tap", "onset",
+  instrument("soft_pop", "轻柔弹出", "playful", "subtle", "Soft Pop", "pops", "onset",
     "A rounded descending bubble for a light press.", "button press",
     [96, 55, 185], [425, 275, 740], 12, (ms, hz) => [
       note("sine", hz * 1.75, 0.37, { attackMs: 1.7, decayMs: ms * 0.16 }, { freqEnd: hz * 0.78, pitchDecayRate: 85 }),
     ]),
-  instrument("toggle_on", "Toggle On", "toggle", "onset",
+  instrument("toggle_on", "开关触发", "crisp", "subtle", "Toggle On", "toggle", "onset",
     "A compact upward latch with a softer answering contact.", "enable a switch",
     [138, 85, 220], [540, 330, 820], 14, (ms, hz) => [
       note("triangle", hz, 0.34, { attackMs: 2, decayMs: ms * 0.11 }),
       note("sine", hz * 1.5, 0.24, { attackMs: 2, decayMs: ms * 0.13 }, { startMs: ms * 0.22 }),
     ]),
-  instrument("select_tick", "Select Tick", "select", "onset",
+  instrument("select_tick", "选择轻响", "crisp", "subtle", "Select Tick", "select", "onset",
     "A dry pin-sized contact with a hollow wooden resonance.", "single item selection",
     [64, 38, 112], [1120, 630, 1780], 7, (ms, hz) => [
       note("square", hz, 0.21, { attackMs: 0.8, decayMs: ms * 0.095 }, { filter: { kind: "lowpass", freqStart: hz * 1.9, q: 0.72 } }),
       breath("pink", 0.18, { kind: "bandpass", freqStart: hz * 2.1, q: 1.2 }, { attackMs: 0.6, decayMs: 4 }),
     ]),
-  instrument("confirm_chime", "Confirm Chime", "feedback", "onset",
+  instrument("confirm_chime", "确认和弦", "positive", "medium", "Confirm Chime", "feedback", "onset",
     "Two consonant notes resolve upward on completion.", "successful form submission",
     [340, 180, 590], [523, 349, 784], 32, (ms, hz) => [
       note("sine", hz, 0.34, { attackMs: 3, decayMs: ms * 0.13 }),
@@ -673,5 +675,5 @@ export const INTERNAL_SOUND_RECIPES: Readonly<Record<string, InternalSoundRecipe
   riser: RISER_RECIPE,
   stinger: STINGER_RECIPE,
   swoosh_cut: SWOOSH_CUT_RECIPE,
-  ...Object.fromEntries(instruments.map(recipe => [recipe.catalog.id, recipe])),
+  ...Object.fromEntries([...instruments, ...additionalRecipes].map(recipe => [recipe.catalog.id, recipe])),
 };

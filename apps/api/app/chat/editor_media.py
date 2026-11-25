@@ -70,6 +70,7 @@ async def _record_audio(db, project, receipt, result, request):
             recipe_id=sr["recipe_id"],
             recipe_version=sr["recipe_version"],
             params=sr["params"],
+            **({"tune": sr["tune"]} if "tune" in sr else {}),
             seed=sr["seed"],
             spec_sha256=sr["spec_sha256"],
             acoustics=result["acoustics"],
@@ -408,6 +409,8 @@ async def execute_generate_sfx(turn, args, composition, version):
         raise ValueError("A durable message, project, and native call identity are required.")
 
     recipe_id = args.recipe_id
+    explicit_tune = args.tune.model_dump(exclude_none=True) if args.tune else {}
+    tune = explicit_tune.copy()
     merged_params = dict(args.params or {})
     seed = args.seed
     if args.base_clip_id:
@@ -428,6 +431,7 @@ async def execute_generate_sfx(turn, args, composition, version):
         if recipe_id is None:
             recipe_id = origin["recipe_id"]
         if recipe_id == origin.get("recipe_id"):
+            tune = {**(origin.get("tune") or {}), **tune}
             base_params = dict(origin.get("params") or {})
             base_params.update(merged_params)
             merged_params = base_params
@@ -436,7 +440,14 @@ async def execute_generate_sfx(turn, args, composition, version):
     if not recipe_id:
         raise ValueError("Specify a sound recipe_id or a base_clip_id to revise.")
 
-    spec = build_sound_spec(recipe_id, params=merged_params, seed=seed)
+    if recipe_id not in SOUND_RECIPE_CATALOG:
+        raise ValueError(f"Unknown sound recipe: {recipe_id}")
+    if args.target_duration_ms is not None and "length_scale" not in explicit_tune:
+        from app.editing.catalog import SOUND_ACOUSTICS, normalize_sound_params
+
+        base_ms = normalize_sound_params(recipe_id, merged_params).get("length", SOUND_ACOUSTICS[recipe_id]["duration_ms"])
+        tune["length_scale"] = args.target_duration_ms / base_ms
+    spec = build_sound_spec(recipe_id, params=merged_params, seed=seed, tune=tune)
     spec_sha256 = sound_spec_digest(spec)
     identity = str(uuid5(turn.turn_id, call_id))
     composition_id = str(composition.id) if composition else None
@@ -445,6 +456,7 @@ async def execute_generate_sfx(turn, args, composition, version):
         "tool": "generate_sfx",
         "spec_sha256": spec_sha256,
         "place_at_seconds": args.place_at_seconds,
+        "align_peak_at_seconds": args.align_peak_at_seconds,
         "gain_db": args.gain_db,
     })
 
@@ -497,6 +509,7 @@ async def execute_generate_sfx(turn, args, composition, version):
             project_id=turn.project.id,
             recipe_id=spec["recipe_id"],
             params=spec["params"],
+            **({"tune": spec["tune"]} if tune else {}),
             seed=spec["seed"],
         )
     except SfxSynthesisError as exc:
@@ -545,7 +558,10 @@ async def execute_generate_sfx(turn, args, composition, version):
                 {"recipe_id": spec["recipe_id"], "title": f"{recipe_meta['name']} ({spec['recipe_id']})"},
             )
             media_facts = dict(row.intent["media_result"])
-            if args.place_at_seconds is not None and composition is not None:
+            place_at = args.place_at_seconds
+            if args.align_peak_at_seconds is not None:
+                place_at = max(0, args.align_peak_at_seconds - result["acoustics"]["peak_offset_ms"] / 1000)
+            if place_at is not None and composition is not None:
                 from app.editing.revisions import fixed_audio_ops
                 from app.editing.store import apply_composition_edits
                 from app.editing.timing import (
@@ -574,10 +590,10 @@ async def execute_generate_sfx(turn, args, composition, version):
                         + [s.range.end for s in comp_content.scenes]
                         + [0]
                     )
-                    start = seconds_to_ticks(args.place_at_seconds, rate)
+                    start = seconds_to_ticks(place_at, rate)
                     if limit <= 0 or start >= limit:
                         raise ValueError(
-                            f"place_at_seconds ({args.place_at_seconds:g}s) must fall strictly before the "
+                            f"place_at_seconds ({place_at:g}s) must fall strictly before the "
                             f"composition end ({limit / rate:g}s)."
                         )
                     raw_end = start + source_ticks_to_output_ticks(snap.duration_ticks, rate)

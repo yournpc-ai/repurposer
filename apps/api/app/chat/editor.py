@@ -13,7 +13,7 @@ from app.agents.tool_loop import ChatTool, ToolObservation, ToolPresentation
 from app.agents.tool_progress import current_call_id, current_group_id
 from app.chat.editor_create import CreateVideoArgs
 from app.skills.blueprint import InstantiateSkillBlueprintArgs, music_clips_for_window
-from app.editing.catalog import MotionBlockId, SoundRecipeId, VoiceId
+from app.editing.catalog import MotionBlockId, SoundRecipeId, SoundTuneArgs, VoiceId
 from app.editing.edits import AddClip, AddTrack, BindSource, SetTransition, SplitClip, TemporalEdit, UpdateClip, UpdateScene
 from app.editing.revisions import TextPosition
 from app.editing.schemas import (
@@ -159,6 +159,28 @@ class GenerateSfxArgs(BaseModel):
         default=None, ge=-48.0, le=6.0, allow_inf_nan=False,
         description="Optional clip gain in dB when placing the SFX onto the timeline (defaults to -12.0 dB).",
     )
+
+    sfx_id: str | None = Field(default=None, max_length=84, description="Permanent dsp_ ID from search_sfx_library.")
+    tune: SoundTuneArgs | None = None
+    target_duration_ms: int | None = Field(default=None, ge=40, le=12000,
+        description="Target duration in milliseconds. Explicit tune.length_scale takes precedence.")
+    align_peak_at_seconds: float | None = Field(default=None, ge=0, allow_inf_nan=False,
+        description="Place the measured energy peak on this timeline time in seconds.")
+
+    @model_validator(mode="after")
+    def check_sound_selection(self):
+        if self.sfx_id is not None:
+            from app.editing.catalog import SOUND_RECIPE_CATALOG
+
+            recipe = self.sfx_id.removeprefix("dsp_")
+            if not self.sfx_id.startswith("dsp_") or recipe not in SOUND_RECIPE_CATALOG:
+                raise ValueError("Select a DSP recipe from get_sfx. Place recordings with insert_audio.")
+            if self.recipe_id and self.recipe_id != recipe:
+                raise ValueError("sfx_id and recipe_id must select the same recipe.")
+            self.recipe_id = recipe
+        if self.align_peak_at_seconds is not None and self.place_at_seconds is not None:
+            raise ValueError("Choose one placement anchor.")
+        return self
 
 
 class AudioDuckWindowArgs(BaseModel):
@@ -611,8 +633,8 @@ EDITOR_TOOLS = (
     _editor_tool(
         "generate_sfx",
         "Synthesize a deterministic stereo sound effect using the recipe and parameters returned by get_sfx. "
-        "When a composition already exists, pass place_at_seconds (and optional gain_db) to synthesize and place onto the effect track in one atomic step. "
-        "Pass base_clip_id to revise an existing SFX clip while inheriting its recipe and seed. Returns acoustic metrics (duration_ms, peak_offset_ms, spectral_centroid_hz, peak_dbfs); align peak_offset_ms with visual sync cues (typical peak ~-2 dBFS; place at -14 to -10 dB under narration).",
+        "When a composition already exists, pass either place_at_seconds for onset or align_peak_at_seconds for a cut (and optional gain_db) to synthesize and place onto the effect track in one atomic step. "
+        "Use target_duration_ms to fit a shot or tune to transpose, shape the envelope, and adjust the room. Pass base_clip_id to revise an existing SFX clip while inheriting its recipe and seed. Returns acoustic metrics (duration_ms, peak_offset_ms, spectral_centroid_hz, peak_dbfs); align peak_offset_ms with visual sync cues (typical peak ~-2 dBFS; place at -14 to -10 dB under narration).",
         GenerateSfxArgs, "generateSfx",
     ),
     _editor_tool(
@@ -774,6 +796,7 @@ async def _load_snapshot_origins(db, clips) -> dict[UUID, dict[str, Any]]:
                 "recipe_id": origin.get("recipe_id"),
                 "recipe_version": origin.get("recipe_version"),
                 "params": origin.get("params"),
+                **({"tune": origin["tune"]} if "tune" in origin else {}),
                 "seed": origin.get("seed"),
                 "acoustics": origin.get("acoustics"),
             }

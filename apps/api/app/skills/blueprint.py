@@ -30,6 +30,7 @@ from app.editing.catalog import (
     SOUND_RECIPE_CATALOG,
     MotionBlockId,
     SoundRecipeId,
+    SoundTuneArgs,
 )
 from app.editing.revisions import build_audio_gain_animation
 from app.editing.schemas import (
@@ -231,6 +232,7 @@ class BlueprintSfxCue(BaseModel):
     model_config = ConfigDict(extra="forbid")
     cue_id: str
     recipe_id: SoundRecipeId
+    tune: SoundTuneArgs | None = Field(default=None, exclude_if=lambda value: value is None)
     params: dict[str, int | float] = Field(default_factory=dict)
     seed: int = Field(default=1248, ge=0, le=0xFFFFFFFF)
     gain_db: float = Field(default=-13.0, ge=-60.0, le=6.0)
@@ -611,6 +613,7 @@ def extract_skill_draft_from_composition(
             cue_id=f"sfx_{sfx_idx + 1}",
             recipe_id=origin["recipe_id"],
             params=dict(origin.get("params") or {}),
+            tune=origin.get("tune"),
             seed=int(origin.get("seed") if origin.get("seed") is not None else 1248),
             gain_db=float(sfx.object.gain_db),
             act_index=best_idx,
@@ -752,6 +755,7 @@ async def save_composition_as_skill(
                 origins[snap.id] = {
                     "recipe_id": origin.get("recipe_id"),
                     "params": origin.get("params") or {},
+                    "tune": origin.get("tune"),
                     "seed": origin.get("seed"),
                 }
 
@@ -1105,6 +1109,7 @@ async def instantiate_skill_blueprint(
             project_id=project,
             recipe_id=cue.recipe_id,
             params=cue.params,
+            **({"tune": cue.tune.model_dump(exclude_none=True)} if cue.tune else {}),
             seed=cue.seed,
         )
         snap_uuid = UUID(sfx_res["audio_snapshot_id"])

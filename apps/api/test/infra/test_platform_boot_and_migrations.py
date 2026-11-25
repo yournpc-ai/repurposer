@@ -49,6 +49,9 @@ def test_alembic_single_head_and_schema_matches_models(monkeypatch):
     check_engine = create_engine(f"{sync_server}/{db_name}", poolclass=NullPool)
     try:
         alembic_command.upgrade(cfg, "head")
+        alembic_command.downgrade(cfg, "-1")
+        assert "domain" not in {c["name"] for c in inspect(check_engine).get_columns("sound_effects")}
+        alembic_command.upgrade(cfg, "head")
         insp = inspect(check_engine)
         migrated_tables = set(insp.get_table_names()) - {"alembic_version"}
         model_tables = set(Base.metadata.tables.keys())

@@ -25,6 +25,7 @@ class Recording(BaseModel):
     file: str
     name: str = Field(min_length=1, max_length=160)
     name_zh: str | None = None
+    domain: Literal["interface", "video"] = "video"
     category: str
     subcategory: str | None = None
     moods: list[str]

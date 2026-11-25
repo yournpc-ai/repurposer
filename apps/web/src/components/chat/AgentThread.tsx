@@ -1234,7 +1234,11 @@ export function AgentThread({
       editorRef.current?.insertMention(mention)
       requestAnimationFrame(() => editorRef.current?.focus())
     })
-    return () => workbench.registerMentionHandler(null)
+    workbench.registerTextHandler((text) => editorRef.current?.insertText(text))
+    return () => {
+      workbench.registerMentionHandler(null)
+      workbench.registerTextHandler(null)
+    }
   }, [workbench])
 
   const handleFeedbackChange = useCallback(
