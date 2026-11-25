@@ -10,8 +10,14 @@ from app.models.schemas import (
     Brief,
     BriefSlot,
     BriefSlotSource,
+    BriefAnswerItem,
+    BriefQuestionItem,
+    GroupAnswerRequest,
+    QuestionPayload,
+    question_group_digest,
 )
 from app.pipeline.render_probe import DEFAULT_FPS
+from app.tools.video import visual_assets
 
 WEBSITE_URL = "https://www.legitevi.com/en"
 
@@ -192,3 +198,49 @@ def website_brand_profile() -> BrandProfile:
         source_refs=[BrandSourceRef(snapshot_id="snapshot-1", digest="a" * 64)],
         content_digest="c" * 64,
     )
+
+
+
+def group_payload(*, allow_freeform=True):
+    items = website_items()
+    for item in items:
+        item.allow_freeform = allow_freeform
+    return QuestionPayload(
+        kind="question",
+        question="Confirm the production setup",
+        items=items,
+        group_digest=question_group_digest(items, Brief()),
+        default_path="Use the stated safe defaults",
+    )
+
+
+def group_request(payload):
+    return GroupAnswerRequest(
+        kind="group",
+        group_digest=payload.group_digest,
+        answers=[
+            BriefAnswerItem(slot=item.slot, kind="option", option_id=item.options[0].id)
+            for item in payload.items
+        ],
+    )
+
+
+def website_items():
+    return [BriefQuestionItem.model_validate(item) for item in website_question_arguments()["items"]]
+
+
+
+def image_draft():
+    specs = [
+        visual_assets.SceneAssetSpec(
+            scene_id=scene_id,
+            intent="Show the citation mechanism",
+            source={"kind": "minimax_image", "prompt": f"Wordless illustration for {scene_id}"},
+            on_screen_copy="Prepare the exact caption separately",
+            palette=["#F9F9F9", "#DC0100"],
+        )
+        for scene_id in ("s1", "s2")
+    ]
+    draft = {"content": {"scenes": [{"scene_id": spec.scene_id} for spec in specs]},
+             "design": {"scene_assets": [spec.model_dump(mode="json") for spec in specs]}}
+    return draft, specs

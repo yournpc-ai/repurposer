@@ -1,4 +1,4 @@
-.PHONY: test-fast test-chat test-infra test-api test-web test-render test-all eval-chat eval-list
+.PHONY: test-fast test-chat test-infra test-api test-web test-render test-all test-e2e eval-chat eval-list
 
 PYTEST_RUN = cd apps/api && uv run --extra dev python scripts/run_pytest.py
 
@@ -30,6 +30,10 @@ test-web:
 test-render:
 	@pnpm --dir apps/render typecheck
 	@pnpm --dir apps/render test
+
+# Layer 2.5: deterministic Chromium + Studio + FastAPI + PostgreSQL
+test-e2e:
+	@$(PYTEST_RUN) test/e2e_browser -m e2e_browser -v
 
 # Full monorepo deterministic gate (zero live LLM calls, zero paid media IO)
 test-all:

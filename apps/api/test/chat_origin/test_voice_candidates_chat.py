@@ -11,6 +11,8 @@ from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import pytest
+
+pytestmark = pytest.mark.chat_origin
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 

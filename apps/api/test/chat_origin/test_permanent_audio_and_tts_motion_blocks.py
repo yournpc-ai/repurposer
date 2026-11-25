@@ -12,6 +12,8 @@ from uuid import UUID, uuid4
 import httpx
 import numpy as np
 import pytest
+
+pytestmark = pytest.mark.chat_origin
 from sqlalchemy import select
 
 from app.agents.tool_progress import bind_progress
@@ -609,14 +611,12 @@ async def test_create_video_motion_block_pending_speech_and_voice_forbidden_guar
 @pytest.mark.asyncio
 @pytest.mark.parametrize("needs_review", [False, True])
 async def test_align_recording_word_axis_drives_narration_and_insert_text(database, tmp_path, monkeypatch, needs_review):
-    from app.chat.editor import InsertTextArgs, edit_clip
-    from app.chat.video_turn_seats import align_recording_seat
+    from test.support.chat_http import tool_result
     from app.editing.edits import apply_ops
     from app.editing.narration_audio import narration_audio_ops
     from app.editing.revisions import text_safe_layout
     from app.editing.schemas import CompositionContent, Scene, TimeRange
     from app.editing.store import apply_composition_edits
-    from app.models.schemas import AlignRecordingArgs
     from app.models.tables import Asset, AssetType, NarrationAlignment
     from app.tools.video import alignment_store
 
@@ -643,14 +643,15 @@ async def test_align_recording_word_axis_drives_narration_and_insert_text(databa
     project_id = await _project(database, owner)
     await storage.save("audio/recording.wav", _wav_bytes(duration_s=4), content_type="audio/wav")
     async with database() as db:
-        project = await db.get(Project, project_id)
         asset = Asset(user_id=owner, project_id=project_id, type=AssetType.AUDIO, file_url="audio/recording.wav")
         chat = Conversation(user_id=owner, project_id=project_id)
         db.add_all([asset, chat])
         await db.commit()
-        read = await align_recording_seat(
-            project=project, args=AlignRecordingArgs(audio_asset_id=asset.id, text=script),
-            mentions=[SimpleNamespace(type="asset", id=asset.id)],
+        read, _ = await tool_result(
+            database, monkeypatch, owner, project_id, "Align the uploaded recording to this script.",
+            "align_recording", {"audio_asset_id": str(asset.id), "text": script},
+            conversation_id=str(chat.id), mentions=[{"type": "asset", "id": str(asset.id), "label": "Recording"}],
+            operation="app.chat.video_turn_seats.align_recording_seat",
         )
         facts = json.loads(read.text)
         assert facts["status"] == ("ALIGNED" if needs_review else "READY")
@@ -675,14 +676,11 @@ async def test_align_recording_word_axis_drives_narration_and_insert_text(databa
             assert c.object.caption.narration_alignment_id == row.id
             assert c.range == c.object.caption.source_range
         comp, version, _ = await apply_composition_edits(db, owner_id=owner, origin_project_id=project_id, content=content)
-        opening = await _create_message(db, chat.id, "user", "Caption the recording")
-        opening.turn_state = "in_flight"
         await db.commit()
-        result = await edit_clip(
-            db, name="insert_text", project=project, opening_id=opening.id, conversation_id=chat.id,
-            call_id="measured_captions", base={"composition_id": str(comp.id), "composition_version_id": str(version.id),
-                                             "content_digest": version.content_digest},
-            args=InsertTextArgs(from_audio_clip_id="clp_dialogue_intro", preset_id="karaoke_focus"),
+        result, _ = await tool_result(
+            database, monkeypatch, owner, project_id, "Caption the recording with measured karaoke text.",
+            "insert_text", {"from_audio_clip_id": "clp_dialogue_intro", "preset_id": "karaoke_focus"},
+            conversation_id=str(chat.id), call_id="measured_captions", operation="app.chat.editor.edit_clip",
         )
         assert result["text_summary"]["karaoke_clips"] == len(captions)
         updated = content_of(await db.get(CompositionVersion, UUID(result["version_id"])))

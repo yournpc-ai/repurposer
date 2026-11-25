@@ -19,6 +19,7 @@
 
 **固定入口只有两层**：先读本文与 `docs/PROGRESS.md` §0，再读当前任务的状态/合同。随后只读下表命中的具体章节；完整导航与文档职责见 `docs/README.md`。不创建历史文档库；排障需要证据时查当前代码、测试与运行数据。
 
+- **测试体系与门禁**：docs/TESTING.md
 - **当前状态 / 排期**：`docs/PROGRESS.md` §0 是唯一事实源；局部任务可以维护实施状态，但不得复制全局排期。
 - **Video Project**：项目、作品、版本与唯一内容写口读 `docs/VIDEO_PROJECT.md` §0、§8 与命中章节，目录契约见 §12。当前主线施工合同读 `docs/tasks/batch2-multiscene-skill.md`（I8 基础剪辑已阶段封板，见 `docs/tasks/i8.md`）。当前优先级见 PROGRESS §0。
 - **模块 / 表 / 队列 / 代码地图**：`docs/MODULE_ARCHITECTURE.md` §4（表归属）、§5（跨模块规则）、§7（代码地图与队列）；新表、新模块、新认领源必须登记。
@@ -145,7 +146,7 @@ t("home.allProjects", { count: projects.length })
 
 ## Testing
 
-测试体系按四层 Chat-Origin 金字塔组织（完整规范见 `docs/TESTING.md`）：**Layer 0 纯合同与 Py↔TS 跨运行时一致性**（`apps/api/test/unit/`、`packages/*`）、**Layer 1A Chat-Origin 集成套件**（`apps/api/test/chat_origin/`，经真实 ASGI `/api/v1/chat` + 一次性 PostgreSQL）、**Layer 1B 基础设施与迁移一致性**（`apps/api/test/infra/`）、**Layer 2 Web Studio 与 Render 服务**（含 EN↔ZH i18n 一致性门禁），以及按需运行的 **Layer 3 真实视听评测 CLI**（`apps/api/scripts/eval_chat_e2e.py`）。内部 helper、提示词文案与实现形态不另立永久测试。
+测试体系按 Chat-Origin 金字塔组织（完整规范见 `docs/TESTING.md`）：**Layer 0 纯合同与 Py↔TS 跨运行时一致性**（`apps/api/test/unit/`、`packages/*`）、**Layer 1A Chat-Origin 集成套件**（`apps/api/test/chat_origin/`，经真实 ASGI `/api/v1/chat` + 一次性 PostgreSQL）、**Layer 1B 基础设施与迁移一致性**（`apps/api/test/infra/`）、**Layer 2 Web Studio 与 Render 服务**（含 EN↔ZH i18n 一致性门禁）、**Layer 2.5 确定性全栈浏览器门禁**（`make test-e2e`），以及按需运行的 **Layer 3 真实视听评测 CLI**（`apps/api/scripts/eval_chat_e2e.py`）。内部 helper、提示词文案与实现形态不另立永久测试。
 
 **部署前检查**（统一经根目录 `Makefile` 运行，按改动面全绿才可部署）：
 
