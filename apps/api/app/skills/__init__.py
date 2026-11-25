@@ -1,20 +1,6 @@
-"""Skill packs (指令包, N-42) — domain knowledge as data, industry SKILL.md form.
-
-A pack is ``app/skills/<name>/SKILL.md``: YAML frontmatter (Agno's six keys —
-``name`` / ``description`` / ``license`` / ``compatibility`` / ``allowed-tools``
-/ ``metadata{version, author, tags}``) plus a markdown body of domain
-conventions (writing / channel / language craft). Packs parameterize tools;
-they never replace them (capability is always code).
-
-Consumption is assembly-time injection ONLY (禁令: no runtime discovery — no
-skill tools, the model never decides when a pack loads): an agent declaration
-carries ``packs=[...]`` and the assembler weaves the bodies into the prompt
-(``agents/contexts.py``). Override semantics are name-wins whole-pack
-replacement — a later loader's pack replaces an earlier one's wholesale
-(persona-level loaders stack after this platform level in a later batch).
-
-Loading validates eagerly at import (Agno ``SkillValidationError`` spirit):
-a malformed pack fails startup, never a generation mid-run.
+"""Validated SKILL.md instruction packs. Video turns discover a compact method index,
+load one manual with load_skill and read its bounded package on demand. Explicit
+references pin the selected version. Packages confer no tool or execution rights.
 """
 
 from __future__ import annotations

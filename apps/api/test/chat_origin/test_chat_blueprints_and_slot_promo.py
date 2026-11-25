@@ -1220,10 +1220,11 @@ async def test_skills_api_endpoints_owner_isolation_and_fonts(database, installe
         plain_ver, _ = await import_external_skill(db, owner_id=owner.id, draft=non_bp_draft)
         await db.commit()
 
-        # Verify list_available_skills returns all 4 builtins + blueprint_summary on external
+        # The picker exposes the production methods and the external template summary.
         available = await list_available_skills(db, owner_id=owner.id)
         builtin_ids = {o.reference.skill_id for o in available if o.reference.kind == "builtin"}
         assert builtin_ids == {
+            "kinetic-launch",
             "promo-video",
             "talking-head-video",
             "text-animation",

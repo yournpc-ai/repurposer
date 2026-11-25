@@ -95,6 +95,8 @@ BLUEPRINT_CAPABILITY = "slot_blueprint_v1"
 
 # Props that carry brand/project-specific content (stripped during extraction).
 _CONTENT_PROP_KEYS: dict[str, set[str]] = {
+    "kinetic_beat": {"headline", "highlight_phrase", "prefix", "words", "left_text", "right_text", "badge_text", "items"},
+    "ui_montage": {"headline", "badge"},
     "chat_demo": {"messages", "title", "work_steps", "result_card"},
     "device_mockup": {"eyebrow", "headline", "caption"},
     "flow_diagram": {"nodes", "eyebrow", "title"},
@@ -113,6 +115,8 @@ _CONTENT_PROP_KEYS: dict[str, set[str]] = {
 _NARRATIVE_STYLE = {"theme", "backdrop_style", "accent_color", "show_backdrop"}
 
 _STYLE_PROP_KEYS: dict[str, set[str]] = {
+    "kinetic_beat": _NARRATIVE_STYLE | {"mode", "rows", "badge_icon", "scale_emphasis", "entrance_duration_s"},
+    "ui_montage": _NARRATIVE_STYLE | {"layout_mode", "cut_interval_s", "entrance_duration_s"},
     "chat_demo": _NARRATIVE_STYLE,
     "device_mockup": _NARRATIVE_STYLE | {"layout", "reveal_at_s"},
     "flow_diagram": _NARRATIVE_STYLE,
@@ -163,11 +167,12 @@ class BlueprintAct(BaseModel):
     block_id: MotionBlockId
     block_version: Literal[1] = 1
     role: str
-    target_duration_s: float = Field(gt=0.5, le=60.0)
-    min_duration_s: float = Field(gt=0.5, le=30.0)
+    target_duration_s: float = Field(ge=0.2, le=60.0)
+    min_duration_s: float = Field(ge=0.2, le=30.0)
     style_defaults: dict[str, Any] = Field(default_factory=dict)
     required_slots: list[str] = Field(default_factory=list)
     optional_slots: list[str] = Field(default_factory=list)
+    resource_count: int | None = Field(default=None, ge=1, le=16, exclude_if=lambda v: v is None)
     has_narration: bool = False
     transition_after: BlueprintTransition | None = None
     overlays: list[BlueprintOverlay] = Field(default_factory=list)
@@ -236,9 +241,9 @@ class SkillBlueprintV1(BaseModel):
     source_composition_uri: str | None = None
     canvas: dict[str, Any]
     style: CompositionStyle | None = Field(default=None, exclude_if=lambda v: v is None)
-    acts: list[BlueprintAct] = Field(min_length=1, max_length=24)
+    acts: list[BlueprintAct] = Field(min_length=1, max_length=48)
     audio_profile: BlueprintAudioProfile = Field(default_factory=BlueprintAudioProfile)
-    sfx_cues: list[BlueprintSfxCue] = Field(default_factory=list, max_length=48)
+    sfx_cues: list[BlueprintSfxCue] = Field(default_factory=list, max_length=96)
 
 
 def normalize_skill_slug(raw: str) -> str:
@@ -327,6 +332,8 @@ def _render_skill_md(name: str, description: str, bp: SkillBlueprintV1) -> str:
     ]
     for idx, act in enumerate(bp.acts, 1):
         req = ", ".join(act.required_slots) or "—"
+        if act.resource_count:
+            req += f" ({act.resource_count} ordered images)"
         opt_parts = list(act.optional_slots)
         if act.overlays:
             opt_parts.append("overlay_props (kinetic_title pill_caption headline)")
@@ -362,7 +369,7 @@ def _render_skill_md(name: str, description: str, bp: SkillBlueprintV1) -> str:
         "",
         "## How to Instantiate (Remake Workflow)",
         "1. Gather fresh target materials (`capture_web` / `prepare_video_materials` for screenshots, `search_music` + `prepare_video_materials` for BGM if desired).",
-        "2. Generate fresh per-act narration (`generate_voice`) in the user's requested language and angle.",
+        "2. Keep silent beats silent. When the brief calls for narration, prepare per-act voice in the requested language.",
         "3. Call `instantiate_skill_blueprint` once with `skill_version_id` from `skill_reference.skill_version_id` and the ordered `acts` slot values (`act_id`, `props`, `resources`/`view_id`, `narration_snapshot_id`, optional `overlay_props`) plus optional `bgm_snapshot_id`. Replace ALL headlines, copy, metrics, URLs, and voiceovers with the new target brief.",
         "For each visual cue in the blueprint, bind a fresh target from the chosen capture. Match callout steps and timed list items in order to inherit their timing.",
         "4. The instantiated work is a normal editable `CompositionVersion` — preview and continue refining any individual act, audio clip, or transition in Chat.",
@@ -451,7 +458,12 @@ def extract_skill_draft_from_composition(
         assert isinstance(obj, MotionBlockObject)
         s_s = frame_time(clip.range.start)
         e_s = frame_time(clip.range.end)
-        dur_s = e_s - s_s
+        duration_frames = ticks_to_frames(clip.range.end, tb, fps.num, fps.den) - ticks_to_frames(
+            clip.range.start, tb, fps.num, fps.den
+        )
+        dur_s = duration_frames * fps.den / fps.num
+        if dur_s < 0.2:
+            dur_s = clip.range.duration / tb
         act_ranges_s.append((s_s, e_s))
 
         cue_lists = [
@@ -478,6 +490,16 @@ def extract_skill_draft_from_composition(
         content_keys = _CONTENT_PROP_KEYS.get(obj.block_id, set())
         req_slots = [k for k in cat["required_slots"] if k not in style_defaults]
         opt_slots = [k for k in cat["optional_slots"] if k in content_keys or k.endswith("_resource")]
+
+        if obj.block_id == "kinetic_beat":
+            mode = obj.props["mode"]
+            if mode in {"typewriter_swap", "slot_flip", "marquee_wall"}:
+                group = "items" if mode == "marquee_wall" else "words"
+                req_slots = [f"{group}[{i}]" for i in range(len(obj.props[group]))]
+            else:
+                req_slots = ["left_text", "right_text"] if mode == "inline_badge_split" else ["headline"]
+        if obj.block_id in {"kinetic_beat", "ui_montage"}:
+            opt_slots = [key for key in opt_slots if key not in req_slots and key not in {"words", "items"} and obj.props.get(key)]
 
         has_narr = any(
             d.range.start < clip.range.end and clip.range.start < d.range.end
@@ -513,7 +535,8 @@ def extract_skill_draft_from_composition(
             block_version=obj.block_version,
             role=role_by_block.get(obj.block_id, "scene"),
             target_duration_s=dur_s,
-            min_duration_s=round(max(2.5, min(dur_s, 3.5)), 2),
+            resource_count=len(obj.resources) if obj.block_id == "ui_montage" else None,
+            min_duration_s=min(dur_s, 3.5),
             style_defaults=style_defaults,
             required_slots=req_slots,
             optional_slots=opt_slots,
@@ -521,7 +544,7 @@ def extract_skill_draft_from_composition(
             cursor_click_at_s=(obj.props.get("cursor") or {}).get("click_at_s"),
             item_reveals_s=cue_lists[0] if cue_lists else [],
             secondary_reveals_s=cue_lists[1] if len(cue_lists) > 1 else [],
-            metric_reveals_s=[item.get("reveal_at_s") for item in obj.props.get("items", [])],
+            metric_reveals_s=[item.get("reveal_at_s") for item in obj.props.get("items", [])] if obj.block_id == "metric_grid" else [],
             has_narration=has_narr,
             transition_after=trn_after,
             overlays=overlays,
@@ -771,7 +794,7 @@ class BlueprintActSlotInput(BaseModel):
         description="Optional replacement props for this act's anchored kinetic_title overlay (e.g. pill_caption headline).",
     )
     duration_seconds: float | None = Field(
-        default=None, gt=0.5, le=60.0, allow_inf_nan=False,
+        default=None, ge=0.2, le=60.0, allow_inf_nan=False,
         description="Optional explicit act duration override when no narration_snapshot_id is provided.",
     )
 
@@ -781,7 +804,7 @@ class InstantiateSkillBlueprintArgs(BaseModel):
 
     skill_version_id: UUID = Field(description="Immutable SkillVersion UUID of the saved slot_blueprint_v1 Skill.")
     name: str = Field(min_length=1, max_length=120, description="Name for the new editable Composition.")
-    acts: list[BlueprintActSlotInput] = Field(min_length=1, max_length=24, description="Ordered slot values matching blueprint acts.")
+    acts: list[BlueprintActSlotInput] = Field(min_length=1, max_length=48, description="Ordered slot values matching blueprint acts.")
     style_preset: StylePresetId | None = Field(
         default=None,
         exclude_if=lambda v: v is None,
@@ -967,6 +990,8 @@ async def instantiate_skill_blueprint(
                 merged_props = bp_act.bind_props(slot.props)
 
             # Resolve visual resources (supports image snapshots & captured webpage views)
+            if bp_act.resource_count and len(slot.resources or []) != bp_act.resource_count:
+                raise ValueError(f"Act {bp_act.act_id} requires {bp_act.resource_count} images.")
             act_resources: list[RemotionResource] = []
             for r_idx, res_id in enumerate(slot.resources or []):
                 snap = await db.scalar(select(SourceSnapshot).where(
@@ -1132,7 +1157,7 @@ async def instantiate_skill_blueprint(
         if bp_act.overlays and slot.overlay_props:
             ov = bp_act.overlays[0]
             ov_props = {**ov.style_defaults, **slot.overlay_props}
-            ov_start = min(end - quantize_up_ticks(0.5), start + quantize_up_ticks(ov.rel_start_s))
+            ov_start = max(start, min(end - quantize_up_ticks(0.5), start + quantize_up_ticks(ov.rel_start_s)))
             ov_dur_target = max(1.5, ov.rel_end_s - ov.rel_start_s)
             ov_end = min(end - quantize_up_ticks(0.2), ov_start + quantize_up_ticks(ov_dur_target))
             if ov_end > ov_start:
@@ -1190,8 +1215,8 @@ async def instantiate_skill_blueprint(
         cur_start, cur_end, from_cid = act_windows[idx]
         nxt_start, nxt_end, to_cid = act_windows[idx + 1]
         if (
-            main_clips[idx].object.props.get("show_backdrop", False)
-            and main_clips[idx + 1].object.props.get("show_backdrop", False)
+            main_clips[idx].object.opaque_backdrop
+            and main_clips[idx + 1].object.opaque_backdrop
         ):
             trn_s = bp_act.transition_after.duration_s
             # A shortened replacement act must leave space for both adjacent cuts.

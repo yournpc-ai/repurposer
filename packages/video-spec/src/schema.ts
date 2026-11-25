@@ -221,6 +221,8 @@ const motionBlockObjectSchema = z
       "bento_features",
       "data_chart",
       "quote_proof",
+      "kinetic_beat",
+      "ui_montage",
     ]),
     block_version: z.literal(1),
     props: z.record(z.string(), z.unknown()),
@@ -394,6 +396,9 @@ const clipSchema = z
     if (clip.object.kind === "motion_block" && clip.object.block_id === "device_mockup" &&
         (clip.object.resources.length < 1 || clip.object.resources.length > 2)) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: "device_mockup requires one or two pinned images" });
+    }
+    if (clip.object.kind === "motion_block" && clip.object.block_id === "ui_montage" && !clip.object.resources.length) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "ui_montage requires pinned images" });
     }
     const hasWindow = clip.source?.start_frame !== undefined || clip.source?.end_frame !== undefined;
     if (["audio", "video"].includes(clip.object.kind) && !hasWindow) {

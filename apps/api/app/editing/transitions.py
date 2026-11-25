@@ -31,7 +31,7 @@ def transition_windows(content, snapshots):
         for clip, before, after in ((a, 0, end-cut), (b, cut-start, 0)):
             obj = clip.object
             if isinstance(obj, MotionBlockObject):
-                if not obj.props.get("show_backdrop", False):
+                if not obj.opaque_backdrop:
                     raise ValueError(
                         "transition on motion_block requires an opaque full-canvas backdrop (show_backdrop=True)"
                     )

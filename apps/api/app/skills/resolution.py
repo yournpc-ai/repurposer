@@ -1,10 +1,4 @@
-"""Resolve the composer's one explicit video-Skill binding.
-
-This is deliberately separate from @mentions and from the tool registry. A
-reference is validated against deployed built-ins or the owner's immutable
-SkillVersion before the turn. No resolver searches arbitrary packages or grants creative instructions
-any additional tool, material, network, file, production or billing rights.
-"""
+"""Resolve pinned picker references and owner-scoped production methods for Chat."""
 from __future__ import annotations
 
 from uuid import UUID
@@ -28,6 +22,7 @@ from app.skills.store import get_skill_version
 # Only packs with a real create_video / current-Editor consumer are selectable video Skills.
 # The broader instruction-pack registry also contains writers and other crafts.
 _BUILTIN_VIDEO_CAPABILITIES = {
+    "kinetic-launch": ("native_motion_graphics", "beat_led_typography", "ui_montage", "website_capture", "text_style_presets"),
     "promo-video": (
         "website_capture",
         "mixed_real_media",
@@ -116,8 +111,51 @@ def _external_option(skill: UserSkill, version: SkillVersion) -> SkillOption:
     )
 
 
+def _latest_methods(owner_id: UUID):
+    latest = (
+        select(SkillVersion.id, SkillVersion.skill_id, SkillVersion.version, SkillVersion.capability_report)
+        .where(SkillVersion.owner_id == owner_id)
+        .distinct(SkillVersion.skill_id)
+        .order_by(SkillVersion.skill_id, SkillVersion.version.desc())
+        .subquery()
+    )
+    return (
+        select(UserSkill, latest.c.id.label("method_version_id"), latest.c.version)
+        .join(latest, latest.c.skill_id == UserSkill.id)
+        .where(UserSkill.owner_id == owner_id,
+               ~latest.c.capability_report.contains({"supported": [BLUEPRINT_CAPABILITY]}))
+        .order_by(UserSkill.name)
+    )
+
+
+async def resolve_method(db: AsyncSession, *, owner_id: UUID, skill_id: str) -> SkillOption:
+    if skill_id in _BUILTIN_VIDEO_CAPABILITIES:
+        return get_builtin_skill_option(skill_id)
+    stmt = _latest_methods(owner_id)
+    version_id = stmt.selected_columns.method_version_id
+    lookup = UserSkill.name == skill_id
+    try:
+        identifier = UUID(skill_id)
+    except ValueError:
+        pass
+    else:
+        lookup = lookup | (UserSkill.id == identifier) | (version_id == identifier)
+    row = (await db.execute(stmt.where(lookup))).first()
+    if row is None:
+        raise SkillResolutionError("Skill is unavailable")
+    return _method_option(*row)
+
+
+def _method_option(skill: UserSkill, version_id: UUID, version_number: int) -> SkillOption:
+    return SkillOption(
+        reference=ExternalSkillReference(kind="external", skill_version_id=version_id),
+        skill_id=str(skill.id), name=skill.name, description=skill.description,
+        capabilities=["progressive_skill_package"], version_number=version_number,
+    )
+
+
 async def list_available_skills(
-    db: AsyncSession, *, owner_id: UUID
+    db: AsyncSession, *, owner_id: UUID, methods_only: bool = False
 ) -> list[SkillOption]:
     """Public picker projection; instructions/references never leave the DB."""
     from app.config import settings
@@ -127,6 +165,10 @@ async def list_available_skills(
         for skill_id in sorted(_BUILTIN_VIDEO_CAPABILITIES)
         if skill_id in SKILL_REGISTRY or skill_id in settings.managed_skill_versions
     ]
+    if methods_only:
+        rows = (await db.execute(_latest_methods(owner_id).limit(16 - len(options)))).all()
+        return [*options, *(_method_option(*row) for row in rows)]
+
     rows = (
         await db.execute(
             select(UserSkill, SkillVersion)
@@ -145,7 +187,7 @@ async def resolve_chat_skill(
     owner_id: UUID,
     reference: SkillReference | None,
 ) -> SkillReference | None:
-    """Only the submitted picker reference can bind a method to this opening."""
+    """Validate the immutable reference supplied by the picker."""
     if reference is None:
         return None
     if isinstance(reference, BuiltInSkillReference):

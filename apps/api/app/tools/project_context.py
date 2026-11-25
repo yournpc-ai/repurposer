@@ -230,6 +230,7 @@ async def load_project_context(db, *, project_id: UUID, owner_id: UUID, skill_re
             "timebase": raw_settings.get("timebase", 90000),
             "background": raw_settings.get("background", "#000000"),
             "composition_style": comp_style_summary,
+            "composition_style_input": raw_settings.get("style"),
             "clip_count": sum(len(track.get("clips") or []) for track in tracks),
             "scene_count": len(scenes),
             "duration_ticks": max((c["range"]["end"] for t in tracks for c in t.get("clips", [])), default=0),

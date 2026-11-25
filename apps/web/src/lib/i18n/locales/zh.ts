@@ -645,6 +645,10 @@ const zh: Resources = {
       receiptCta: "编号槽位宣传片",
     },
     builtin: {
+      "kinetic-launch": {
+        name: "节拍发布片", shortName: "节拍发布",
+        description: "用鼓点、动态大字和真实界面编排产品发布片。",
+      },
       // 仅保留当前可调用的内部视频 Skill。
       "promo-video": {
         name: "宣传视频制作",
@@ -669,6 +673,14 @@ const zh: Resources = {
     },
   },
   videoPresets: {
+    "kinetic_beat:impact_cut": { name: "主张重击" },
+    "kinetic_beat:typewriter_swap": { name: "打字换词" },
+    "kinetic_beat:slot_flip": { name: "词位翻滚" },
+    "kinetic_beat:inline_badge_split": { name: "徽章撑开" },
+    "kinetic_beat:marquee_wall": { name: "交错跑马灯" },
+    "ui_montage:rapid_cut": { name: "鼓点快切" },
+    "ui_montage:fan_slide": { name: "斜角横滑" },
+    "ui_montage:cascade_3d": { name: "阶梯巡航" },
     "caption-phrases": { name: "字幕分句" },
     "text-reveal": { name: "文字显现" },
     "text-impact": { name: "词语强调" },
@@ -1341,6 +1353,13 @@ const zh: Resources = {
       musicTitle: "配乐试听",
       trackCount: "{{count}} 首配乐",
       useTrack: "选用",
+      usePreset: "选用",
+      presetMessage: "选用动效 {{ordinal}}（{{title}}）",
+      playPreset: "播放{{title}}",
+      pausePreset: "暂停{{title}}",
+      kinetic_beat: "节奏文字",
+      ui_montage: "界面蒙太奇",
+      presetUnavailable: "预览不可用",
       selectTrackMessage: "选用 {{ordinal}} 号配乐（{{title}}）",
       instrumental: "纯音乐",
     },

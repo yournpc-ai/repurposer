@@ -221,7 +221,7 @@ class SetTransitionArgs(BaseModel):
 class InsertMotionBlockArgs(BaseModel):
     model_config = ConfigDict(extra="forbid")
     block_id: MotionBlockId = Field(
-        description="Native motion block ID from creative_catalog.motion_blocks (13 blocks: statement_hook, product_showcase, device_mockup, chat_demo, flow_diagram, step_timeline, split_compare, bento_features, metric_grid, data_chart, quote_proof, kinetic_title, closing_cta).",
+        description="Native motion block ID from creative_catalog.motion_blocks (15 blocks: statement_hook, product_showcase, device_mockup, chat_demo, flow_diagram, step_timeline, split_compare, bento_features, metric_grid, data_chart, quote_proof, kinetic_title, kinetic_beat, ui_montage, closing_cta).",
     )
     start_seconds: float = Field(ge=0, allow_inf_nan=False, description="Inclusive start time on timeline.")
     end_seconds: float = Field(gt=0, allow_inf_nan=False, description="Exclusive end time on timeline.")
@@ -558,7 +558,7 @@ def _editor_tool(name, description, args, key, *, receipt_kind=None):
 EDITOR_TOOLS = (
     _editor_tool(
         "create_video",
-        "Create the first editable version from ordered shots (title cards, images, video, webpage captures, and optional narration) and/or native declarative motion_blocks (all 13 blocks with optional resources and act transitions). Save an editable draft without exporting.",
+        "Create the first editable version from ordered shots (title cards, images, video, webpage captures, and optional narration) and/or native declarative motion_blocks (all 15 blocks with optional resources and act transitions). Save an editable draft without exporting.",
         CreateVideoArgs, "createVideo",
     ),
     _editor_tool(
@@ -609,7 +609,7 @@ EDITOR_TOOLS = (
     ),
     _editor_tool(
         "insert_motion_block",
-        "Insert one of the 13 native declarative motion blocks from creative_catalog.motion_blocks onto the timeline below captions (statement_hook, product_showcase, device_mockup, chat_demo, flow_diagram, step_timeline, split_compare, bento_features, metric_grid, data_chart, quote_proof, kinetic_title, closing_cta). "
+        "Insert one of the 15 native declarative motion blocks from creative_catalog.motion_blocks onto the timeline below captions (statement_hook, product_showcase, device_mockup, chat_demo, flow_diagram, step_timeline, split_compare, bento_features, metric_grid, data_chart, quote_proof, kinetic_title, kinetic_beat, ui_montage, closing_cta). "
         "Pass captured webpage or image snapshot IDs in resources for product_showcase, device_mockup (primary then mobile), optional chat result, or CTA logo.",
         InsertMotionBlockArgs, "insertMotionBlock",
     ),

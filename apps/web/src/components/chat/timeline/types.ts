@@ -1,3 +1,4 @@
+import type { VideoSpec } from "@repurposer/video-spec"
 import type { Output } from "@/lib/types"
 import type { CreditTopupRequest } from "@/lib/credits"
 import type { SkillReference } from "@/lib/skills"
@@ -239,6 +240,8 @@ export interface CandidateMemberPayload {
   query?: string | null
   /** Complete native-Preset facts on video_preset_set members. */
   preset_id?: string | null
+  preview_spec?: VideoSpec
+  category?: string
   preview_digest?: string | null
   aspect?: string | null
   width?: number | null

@@ -670,6 +670,10 @@ const en = {
       receiptCta: "Slot Promo",
     },
     builtin: {
+      "kinetic-launch": {
+        name: "Kinetic launch", shortName: "Kinetic launch",
+        description: "Cut product launches to a beat with kinetic type and real screens.",
+      },
 // Skills are internal video creation methods, not user-installed products.
       "promo-video": {
         name: "Promotional video",
@@ -694,6 +698,14 @@ const en = {
     },
   },
   videoPresets: {
+    "kinetic_beat:impact_cut": { name: "Impact cut" },
+    "kinetic_beat:typewriter_swap": { name: "Typewriter swap" },
+    "kinetic_beat:slot_flip": { name: "Slot flip" },
+    "kinetic_beat:inline_badge_split": { name: "Split badge" },
+    "kinetic_beat:marquee_wall": { name: "Marquee wall" },
+    "ui_montage:rapid_cut": { name: "Rapid cut" },
+    "ui_montage:fan_slide": { name: "Fan slide" },
+    "ui_montage:cascade_3d": { name: "Cascade in 3D" },
     "caption-phrases": { name: "Caption phrases" },
     "text-reveal": { name: "Text reveal" },
     "text-impact": { name: "Word impact" },
@@ -1400,6 +1412,13 @@ const en = {
       musicTitle: "Music audition",
       trackCount: "{{count}} tracks",
       useTrack: "Use track",
+      usePreset: "Use",
+      presetMessage: "Use motion {{ordinal}} ({{title}})",
+      playPreset: "Play {{title}}",
+      pausePreset: "Pause {{title}}",
+      kinetic_beat: "Kinetic Beat",
+      ui_montage: "UI Montage",
+      presetUnavailable: "Preview unavailable",
       selectTrackMessage: "Use track {{ordinal}} ({{title}})",
       instrumental: "Instrumental",
     },

@@ -776,3 +776,42 @@ def test_blueprint_summary_attached_and_fault_tolerant():
     bad_opt = _external_option(skill, bad_ver)
     assert bad_opt.blueprint_summary is None
 
+
+
+def test_kinetic_launch_method_and_short_beat_capacity():
+    from app.skills import _parse_skill_md
+    from app.tools.video.presets import MOTION_PREVIEW_CATALOG, build_motion_preview_spec
+    from app.skills.blueprint import extract_skill_draft_from_composition
+
+    pack = _parse_skill_md(REPO_ROOT / "apps/api/app/skills/kinetic-launch/SKILL.md")
+    assert pack.name == "kinetic-launch" and pack.metadata["version"] == "1.0.0"
+    assert len(MOTION_PREVIEW_CATALOG) == 8
+    acts = []
+    for key in MOTION_PREVIEW_CATALOG:
+        spec = build_motion_preview_spec(key)
+        assert spec == build_motion_preview_spec(key)
+        assert (spec["width"], spec["height"], spec["fps"]["num"], spec["duration_frames"]) == (1280, 720, 30, 84)
+        assert all(f["url"].startswith("data:font/") for f in spec["fonts"])
+        block, mode = key.split(":")
+        obj = spec["tracks"][0]["clips"][0]["object"]
+        assert obj["block_id"] == block
+        assert all(r["url"].startswith("data:image/png;base64,") for r in obj["resources"])
+        acts.append(BlueprintAct(act_id=mode, block_id=block, role="beat",
+                                 target_duration_s=0.25, min_duration_s=0.2,
+                                 style_defaults={("mode" if block == "kinetic_beat" else "layout_mode"): mode},
+                                 resource_count=2 if block == "ui_montage" else None,
+                                 required_slots=[f"items[{i}]" for i in range(12)] if mode == "marquee_wall" else []))
+    bp = SkillBlueprintV1(canvas={"fps_num": 60}, acts=[
+        acts[i % 8].model_copy(update={"act_id": f"beat_{i}"}) for i in range(48)
+    ], sfx_cues=[BlueprintSfxCue(cue_id=f"tick_{i}", recipe_id="select_tick", act_index=i // 2)
+                 for i in range(96)])
+    content, slots = compile_blueprint_slot_preview(bp)
+    assert len(content.scenes) == 48 and all(s.range.duration == content.settings.timebase // 4 for s in content.scenes)
+    assert [s.slot_number for s in slots] == list(range(1, len(slots) + 1))
+    assert sum(s.kind == "image" for s in slots) == 36
+    draft, extracted = extract_skill_draft_from_composition(composition_id=uuid4(), version_number=1, content=content,
+        snapshot_origins={}, name="beat-copy", description="A short-beat production template")
+    assert all(len(act.required_slots) == 12 for act in extracted.acts if act.style_defaults.get("mode") == "marquee_wall")
+    assert len(draft.declared_inputs) == 49
+    assert len(extracted.acts) == 48 and all(a.target_duration_s == 0.25 for a in extracted.acts)
+    assert all(a.resource_count == 2 for a in extracted.acts if a.block_id == "ui_montage")

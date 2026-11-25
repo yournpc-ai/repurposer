@@ -18,6 +18,8 @@ export interface StudioStyle {
 }
 
 export interface Frame {
+  width: number;
+  height: number;
   tSec: number;
   durSec: number;
   scaleUnit: number;

@@ -32,6 +32,7 @@ from app.models.schemas import (
     SelectVoiceArgs,
     ShowMusicCandidatesArgs,
     ShowVideoPresetsArgs,
+    LoadSkillArgs,
     ShowVoiceCandidatesArgs,
     SkillReference,
     VideoPresetChoice,
@@ -379,6 +380,58 @@ async def prepare_bound_skill_context(*, project, skill, message, package_sessio
     return read
 
 
+async def load_skill_seat(db, project, turn, args: LoadSkillArgs) -> ToolObservation:
+    from app.config import settings
+    from app.skills import SKILL_REGISTRY
+    from app.skills.loading import load_skill_creative_context
+    from app.skills.package_reader import SkillPackageError, open_builtin_skill_package
+    from app.skills.package_session import SkillPackageSession
+    from app.skills.resolution import SkillResolutionError, resolve_method
+    from app.skills.store import SkillNotFoundError
+
+    try:
+        option = await resolve_method(db, owner_id=project.user_id, skill_id=args.skill_id)
+        reference = option.reference
+        if turn.explicit_skill is not None and reference != turn.explicit_skill:
+            return ToolObservation("This opening has a different explicitly selected Skill.", ok=False)
+        key = reference.model_dump_json()
+        package = turn._skill_package_sessions.get(key)
+        creative = None
+        if isinstance(reference, ExternalSkillReference):
+            creative = turn.skill_creative_contexts.get(reference.skill_version_id)
+            if creative is None:
+                creative = await load_skill_creative_context(
+                    db, owner_id=project.user_id, skill_version_id=reference.skill_version_id,
+                )
+            if package is not None and package is not creative.package:
+                from dataclasses import replace
+                creative = replace(creative, package=package)
+            package = creative.package
+        elif package is None and settings.managed_skill_versions.get(option.skill_id):
+            package = SkillPackageSession(open_builtin_skill_package(option.skill_id, reference.version))
+        instructions = await package.read_initial(["SKILL.md"]) if package else SKILL_REGISTRY[option.skill_id].body
+    except (SkillResolutionError, SkillNotFoundError, SkillPackageError):
+        return ToolObservation("Skill is unavailable for this opening.", ok=False)
+    turn.skill = reference
+    if getattr(turn, "_conversation_context", None) is not None:
+        turn._conversation_context.skill_reference = reference.model_dump(mode="json")
+    if creative is not None:
+        turn.skill_creative_contexts[reference.skill_version_id] = creative
+    if package:
+        turn._skill_package_sessions[key] = package
+    receipt = SkillReadReceipt(
+        package_identity=package.receipt_identity(reference) if package else key,
+        skill_reference=reference.model_dump(mode="json"), owner_id=str(project.user_id),
+        reads=package.provenance["reads"] if package else [], media_files=package.media_files if package else 0,
+    )
+    return ToolObservation(json.dumps({
+        "skill_id": option.skill_id, "name": option.name,
+        "version": reference.version if isinstance(reference, BuiltInSkillReference) else option.version_number,
+        "source": reference.kind, "description": option.description, "instructions": instructions,
+        "package_tools_available": package is not None,
+    }, ensure_ascii=False), context_lifetime="turn", receipt=receipt)
+
+
 async def skill_read_seat(
     *,
     project: Project,
@@ -577,13 +630,17 @@ async def show_video_presets_seat(
     project: Project,
     args: ShowVideoPresetsArgs,
     on_candidates,
+    composition_style=None,
 ) -> ToolObservation:
     """Present real dynamic native Presets through the existing candidate channel."""
 
     from app.tools.video.presets import VideoPresetError, show_video_preset_candidates
 
     try:
-        payload = show_video_preset_candidates(args.preset_ids)
+        from app.editing.styles import CompositionStyle
+
+        style = CompositionStyle.model_validate(composition_style) if composition_style else None
+        payload = show_video_preset_candidates(args.preset_ids, composition_style=style)
     except VideoPresetError as exc:
         return ToolObservation(f"show_video_presets rejected: {exc}", ok=False)
     await on_candidates(payload)

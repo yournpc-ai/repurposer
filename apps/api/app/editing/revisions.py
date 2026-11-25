@@ -493,6 +493,7 @@ def _add_audio_effect(
 
 
 _MOTION_FLOAT_KEYS = frozenset({
+    "cut_interval_s",
     "start_s",
     "end_s",
     "at_s",
@@ -514,7 +515,7 @@ _MOTION_FLOAT_KEYS = frozenset({
     "scroll_from_y",
     "scroll_to_y",
 })
-_MOTION_INT_KEYS = frozenset({"active_step", "highlight_index", "columns"})
+_MOTION_INT_KEYS = frozenset({"active_step", "highlight_index", "columns", "rows"})
 _MOTION_STR_KEYS = frozenset({"step_label", "badge", "tag", "number"})
 
 

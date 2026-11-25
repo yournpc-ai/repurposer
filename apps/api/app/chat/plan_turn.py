@@ -115,6 +115,9 @@ class PlanTurn:
         self.project = project
         self.request = request
         self.skill = skill
+        self.explicit_skill = skill
+        self._skill_package_sessions = {}
+        self.skill_creative_contexts = {}
         self.on_phase = on_phase
         # 工作会话里程碑通道 (iter-2 ⑥): the SSE pump's projector feed —
         # called at the exploration door's successes; None = the one-shot
@@ -617,12 +620,15 @@ class PlanTurn:
         return result
 
     async def _dispatch(self, name: str, params, prose: str) -> str | None | ToolObservation | TerminalRefusal | CandidateRejected:
+        if name == "load_skill":
+            from app.chat.video_turn_seats import load_skill_seat
+            return await load_skill_seat(self.db, self.project, self, params)
         if name in {"list_skill_shots", "read_skill_reference", "read_skill_demo", "get_skill_preview"}:
             from app.chat.video_turn_seats import skill_read_seat
             return await skill_read_seat(
                 project=self.project,
                 skill=self.skill,
-                package_sessions=self.__dict__.setdefault("_skill_package_sessions", {}),
+                package_sessions=self._skill_package_sessions,
                 name=name,
                 args=params,
             )
@@ -645,7 +651,8 @@ class PlanTurn:
             assert isinstance(params, ShowVideoPresetsArgs)
             from app.chat.video_turn_seats import show_video_presets_seat
             return await show_video_presets_seat(
-                project=self.project, args=params, on_candidates=self._emit_candidates
+                project=self.project, args=params, on_candidates=self._emit_candidates,
+                composition_style=getattr(self, "_video_preview_style", None),
             )
         if name == "select_video_preset":
             assert isinstance(params, SelectVideoPresetArgs)
@@ -1208,7 +1215,7 @@ async def run_plan_turn(
     )
     context_reader = await prepare_bound_skill_context(
         project=project, skill=skill, message=request.message,
-        package_sessions=turn.__dict__.setdefault("_skill_package_sessions", {}),
+        package_sessions=turn._skill_package_sessions,
     )
     await turn.assemble(recent)
     mention_target = await video_target_hint(db, project, request.mentions)
@@ -1288,7 +1295,14 @@ async def run_plan_turn(
     else:
         interim_prose_hook = _interim_prose_callback(db, turn.conversation_id, on_interim_prose, turn_id)
     from app.chat.conversation_context import ConversationContext, conversation_context_tool
-    from app.chat.turn_tools import tools_for_bound_skill, video_rejection_stop
+    from app.chat.turn_tools import video_rejection_stop
+    from app.skills.resolution import list_available_skills
+
+    methods = await list_available_skills(db, owner_id=project.user_id, methods_only=True) if project else []
+    available_skills = [
+        {"skill_id": m.skill_id, "name": m.name, "description": m.description[:180], "source": m.reference.kind}
+        for m in methods
+    ]
     conversation_context = (
         ConversationContext(conversation_id=turn.conversation_id, owner_id=turn.user_id,
                             turn_id=turn_id, skill=getattr(turn, "skill", None))
@@ -1327,6 +1341,9 @@ async def run_plan_turn(
             "speech_language": speech_language or getattr(conversation, "ui_language", None),
             "mode": "plan",
             "skill": turn.skill,
+            "explicit_skill": turn.explicit_skill,
+            "available_skills": available_skills,
+            "opening_references": turn.infer_kwargs.get("recent"),
             "user_text": request.message,
             "attachments": request.attachments,
             "asset_mentions": {m.id: m.label for m in request.mentions or [] if m.type == "asset"},
@@ -1347,12 +1364,12 @@ async def run_plan_turn(
             "target_hint": target_hint,
             "material_pending": bool(urls_in_text(request.message) or request.attachments or request.mentions),
             "creative_state": creative_state_for_pending(current_pending),
-            "package_sessions": turn.__dict__.setdefault("_skill_package_sessions", {}),
+            "package_active": turn.skill is not None and turn.skill.model_dump_json() in turn._skill_package_sessions,
             "compact_summary": compact_summary,
         })
-        turn._video_base_ref = (
-            (assembly.caller_state or {}).get("video_target") or {}
-        ).get("base_ref")
+        target = (assembly.caller_state or {}).get("video_target") or {}
+        turn._video_preview_style = target.get("composition_style_input")
+        turn._video_base_ref = target.get("base_ref")
         try:
             model_name = get_llm_client().model
         except Exception:  # noqa: BLE001
@@ -1380,7 +1397,7 @@ async def run_plan_turn(
         turn.execute,
         dialogue=dialogue,
         speech_language_hint=speech_language,
-        tools=[*tools_for_bound_skill(intent_router.tools, turn.skill), *context_tools],
+        tools=[*intent_router.tools, *context_tools],
         round_assembler=assemble_round,
         on_delta=on_delta,
         on_reasoning=on_reasoning,

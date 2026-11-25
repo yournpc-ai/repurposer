@@ -11,6 +11,7 @@
  * Shared wire and overlay types live in `./types`; this module only adapts
  * persisted rows and never owns layout. */
 
+import { videoSpecSchema } from "@repurposer/video-spec"
 import { messageAssetsFromAttachments, type MessageAttachment } from "@/lib/chatAttachments"
 import type { SkillReference } from "@/lib/skills"
 import type {
@@ -569,9 +570,10 @@ export function candidatesLog(intent: unknown): CandidatesLogEvent[] | undefined
       const members: CandidateMemberPayload[] = []
       for (const value of rawMembers) {
         const md = (value ?? {}) as Record<string, unknown>
+        const spec = md.preview_spec ? videoSpecSchema.safeParse(md.preview_spec).data : undefined
         if (
           typeof md.preset_id !== "string" ||
-          typeof md.preview_url !== "string" ||
+          (!spec && typeof md.preview_url !== "string") ||
           typeof md.preview_digest !== "string" ||
           typeof md.duration_seconds !== "number" ||
           !Number.isFinite(md.duration_seconds) || md.duration_seconds <= 0 ||
@@ -590,7 +592,9 @@ export function candidatesLog(intent: unknown): CandidatesLogEvent[] | undefined
           provider: "native",
           preset_id: md.preset_id,
           title: typeof md.title === "string" ? md.title : md.preset_id,
-          preview_url: md.preview_url,
+          preview_url: typeof md.preview_url === "string" ? md.preview_url : undefined,
+          preview_spec: spec,
+          category: typeof md.category === "string" ? md.category : undefined,
           preview_digest: md.preview_digest,
           duration_seconds: md.duration_seconds,
           aspect: md.aspect,

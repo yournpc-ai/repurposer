@@ -1,6 +1,6 @@
 """Deterministic numbered Slot Promo compiler & wireframe placeholder renderer.
 
-Given any ``SkillBlueprintV1`` (all 13 native MotionBlock types), compiles a
+Given any ``SkillBlueprintV1`` (all 15 native MotionBlock types), compiles a
 ready-to-preview and ready-to-render ``CompositionContent`` + sequential
 ``[01]..[N]`` ``SlotManifestItem`` list + copyable checklist, preserving 100%
 of act durations, transitions, 3D camera settings, reveal timings, overlays,
@@ -459,7 +459,44 @@ def _plan_act_slots(
 
     replacement: dict[str, Any] = {}
 
-    if bid == "statement_hook":
+    def copy_slot(key: str, zh: str, en: str) -> str:
+        slot = allocator.next(
+            act_index=act_index, act_id=act.act_id, block_id=bid, slot_key=key, kind="text",
+            label_zh=zh, label_en=en, example_zh="{code} " + zh, example_en="{code} " + en,
+        )
+        return slot.example_value
+
+    if bid == "kinetic_beat":
+        mode = defaults.get("mode", "impact_cut")
+        if mode == "impact_cut":
+            replacement["headline"] = copy_slot("headline", "核心观点", "Main idea")
+            if "highlight_phrase" in act.optional_slots:
+                replacement["highlight_phrase"] = replacement["headline"]
+        elif mode in {"slot_flip", "typewriter_swap"}:
+            if mode == "slot_flip" and "prefix" in act.optional_slots:
+                replacement["prefix"] = copy_slot("prefix", "前缀", "Prefix")
+            count = sum(key.startswith("words[") for key in act.required_slots) or 3
+            replacement["words"] = [copy_slot(f"words[{i}]", "关键词", "Keyword") for i in range(count)]
+        elif mode == "inline_badge_split":
+            replacement["left_text"] = copy_slot("left_text", "起句", "Opening")
+            replacement["right_text"] = copy_slot("right_text", "落点", "Landing")
+            if "badge_text" in act.optional_slots:
+                replacement["badge_text"] = copy_slot("badge_text", "徽标", "Badge")
+        elif mode == "marquee_wall":
+            count = sum(key.startswith("items[") for key in act.required_slots) or 3
+            icons = ("bolt", "play", "layers")
+            replacement["items"] = [
+                {"text": copy_slot(f"items[{i}].text", "关键词", "Keyword"), "icon": icons[i % len(icons)]}
+                for i in range(count)
+            ]
+    elif bid == "ui_montage":
+        for i in range(act.resource_count or 3):
+            add_image_slot(f"resources[{i}]", "产品界面", "Product screen",
+                           width=640, height=400, aspect_ratio="16:10", res_index=i)
+        for key, zh, en in (("headline", "标题", "Headline"), ("badge", "徽标", "Badge")):
+            if key in act.optional_slots:
+                replacement[key] = copy_slot(key, zh, en)
+    elif bid == "statement_hook":
         hl_zh, hl_en = "一句话击中核心痛点", "Your Core Hook"
         s_head = allocator.next(
             act_index=act_index,
@@ -1089,11 +1126,11 @@ def _plan_act_slots(
         replacement["cta_label"] = "立即体验" if is_zh else "Start Now"
         replacement["url_text"] = _truncate(s_cta.example_value, 80)
 
-    else:  # pragma: no cover - exhaustive over all 13 MotionBlockIds
+    else:  # pragma: no cover - exhaustive over all 15 MotionBlockIds
         raise ValueError(f"Unsupported motion block: {bid}")
 
     # Guarantee opaque canvas backdrop on main acts so blueprint transitions validate cleanly
-    if bid != "kinetic_title":
+    if bid not in {"kinetic_title", "kinetic_beat", "ui_montage"}:
         replacement.setdefault("show_backdrop", True)
 
     merged_props = act_for_bind.bind_props(replacement)
@@ -1328,7 +1365,7 @@ def compile_blueprint_slot_preview_with_assets(
                 for k in INHERITABLE_BLOCK_STYLE_KEYS["kinetic_title"]:
                     ov_defaults.pop(k, None)
             ov_props = {**ov_defaults, "headline": _truncate(s_ov.example_value, 140)}
-            ov_start = min(end - quantize_up_ticks(0.4), start + quantize_up_ticks(ov.rel_start_s))
+            ov_start = max(start, min(end - quantize_up_ticks(0.4), start + quantize_up_ticks(ov.rel_start_s)))
             ov_dur = max(1.0, ov.rel_end_s - ov.rel_start_s)
             ov_end = min(end - quantize_up_ticks(0.1), ov_start + quantize_up_ticks(ov_dur))
             if ov_end > ov_start:
@@ -1390,8 +1427,8 @@ def compile_blueprint_slot_preview_with_assets(
         cur_start, cur_end, from_cid = act_windows[idx]
         nxt_start, nxt_end, to_cid = act_windows[idx + 1]
         if (
-            main_clips[idx].object.props.get("show_backdrop", False)
-            and main_clips[idx + 1].object.props.get("show_backdrop", False)
+            main_clips[idx].object.opaque_backdrop
+            and main_clips[idx + 1].object.opaque_backdrop
             and main_clips[idx].object.fit == "cover"
             and main_clips[idx + 1].object.fit == "cover"
         ):

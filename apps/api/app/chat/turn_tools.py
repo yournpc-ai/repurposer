@@ -10,6 +10,7 @@ from app.chat.editor import EDITOR_TOOLS
 from app.chat.perception import perception_chat_tools
 from app.models.schemas import (
     AnalyzeBrandArgs,
+    LoadSkillArgs,
     ImportSfxArgs,
     PlanAnswerArgs,
     PlanAskArgs,
@@ -55,8 +56,17 @@ _REVIEW_VIDEO_TOOL = ChatTool(
 
 
 
+_LOAD_SKILL_TOOL = ChatTool(
+    name="load_skill", description="Read a production method from available_skills and activate its bounded package.",
+    params_model=LoadSkillArgs, terminal=False, batchable=True,
+    presentation=ToolPresentation(kind="read", active_key="chat.activity.skillRead",
+                                  done_key="chat.activity.skillReadDone", receipt_kind="skill_read"),
+)
+
+
 def _show_video_presets_tool() -> ChatTool:
     from app.editing.presets import PRESET_REGISTRY
+    from app.tools.video.presets import MOTION_PREVIEW_CATALOG
 
     return ChatTool(
         name="show_video_presets",
@@ -64,7 +74,7 @@ def _show_video_presets_tool() -> ChatTool:
         terminal=False,
         description=(
             "用真实动态预览展示 2–4 个不同且兼容的原生 Preset 候选。preset_ids 只能取自以下注册表："
-            + ", ".join(PRESET_REGISTRY)
+            + ", ".join([*PRESET_REGISTRY, *MOTION_PREVIEW_CATALOG])
             + "。标题、预览媒体、时长和摘要由服务端推导。展示比较后结束本轮，用户可在后续消息中按序号选择。此操作不创建版本、选择、Run 或制作意图。"
         ),
         params_model=ShowVideoPresetsArgs,
@@ -311,6 +321,7 @@ def _explicit_constraint_wire(
 
 def _video_project_tools() -> list[ChatTool]:
     return [
+        _LOAD_SKILL_TOOL,
         *_skill_authoring_read_tools(),
         *_video_material_tools(),
         *EDITOR_TOOLS,

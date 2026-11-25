@@ -65,7 +65,7 @@ def context_items(context):
 def _method_visible(item, reference):
     # get_skill_shot is the historical name retained in stored receipts.
     return item["tool"] not in {
-        "read_skill_reference", "list_skill_shots", "get_skill_shot", "read_skill_demo", "get_skill_preview",
+        "load_skill", "read_skill_reference", "list_skill_shots", "get_skill_shot", "read_skill_demo", "get_skill_preview",
     } or (reference is not None and item.get("skill_reference") == reference)
 
 

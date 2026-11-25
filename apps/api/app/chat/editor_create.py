@@ -143,7 +143,7 @@ class FirstShot(CompositionSceneAuthoring):
 class FirstMotionBlock(BaseModel):
     model_config = ConfigDict(extra="forbid")
     block_id: MotionBlockId = Field(
-        description="Native motion block ID from creative_catalog.motion_blocks (13 blocks).",
+        description="Native motion block ID from creative_catalog.motion_blocks (15 blocks).",
     )
     duration_seconds: float = Field(
         gt=0,
@@ -214,11 +214,11 @@ class CreateVideoArgs(BaseModel):
     )
     motion_blocks: list[FirstMotionBlock] = Field(
         default_factory=list,
-        max_length=24,
+        max_length=48,
         description=(
             "Ordered native declarative motion-graphics acts (statement_hook, product_showcase, "
             "device_mockup, chat_demo, flow_diagram, step_timeline, split_compare, bento_features, "
-            "metric_grid, data_chart, quote_proof, kinetic_title, closing_cta) built sequentially "
+            "metric_grid, data_chart, quote_proof, kinetic_title, kinetic_beat, ui_montage, closing_cta) built sequentially "
             "with optional narration, caption_translations, resources, and act transitions."
         ),
     )
@@ -389,6 +389,9 @@ def _creation_context(db, turn):
         provenance.update(skill_version=reference.version, skill_reference=reference.model_dump(mode="json"))
     elif isinstance(reference, ExternalSkillReference):
         async def load():
+            cached = getattr(turn, "skill_creative_contexts", {}).get(reference.skill_version_id)
+            if cached is not None:
+                return cached
             return await load_skill_creative_context(
                 db, owner_id=turn.project.user_id, skill_version_id=reference.skill_version_id,
             )
@@ -483,7 +486,7 @@ async def create_video(db, turn, args: CreateVideoArgs):
 
             if not settings.component_bake_enabled:
                 raise ValueError("Controlled Skill Generators are unavailable in this deployment. Use fixed media or native text.")
-            if not isinstance(getattr(turn, "skill", None), ExternalSkillReference):
+            if not isinstance(getattr(turn, "explicit_skill", getattr(turn, "skill", None)), ExternalSkillReference):
                 raise ValueError("A controlled Generator requires the current bound external Skill.")
         creative_state, provenance, skill_loader, _ = _creation_context(db, turn)
         skill = await skill_loader() if skill_loader is not None else None

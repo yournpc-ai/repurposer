@@ -1072,9 +1072,18 @@ def _skill_draft_for_blueprint(name: str, bp: SkillBlueprintV1) -> SkillDraft:
 
 
 @pytest.mark.parity
-def test_compile_all_13_motion_blocks_and_zod_video_spec_parity():
+def test_compile_all_15_motion_blocks_and_zod_video_spec_parity():
     bp = _make_all_13_blocks_blueprint()
-    assert {a.block_id for a in bp.acts} == set(MOTION_BLOCK_CATALOG.keys())
+    from typing import get_args
+    from app.editing.catalog import MotionBlockId
+    from app.editing.styles import INHERITABLE_BLOCK_STYLE_KEYS
+
+    bp.acts.extend([
+        BlueprintAct(act_id="act_14", block_id="kinetic_beat", role="beat", target_duration_s=0.25, min_duration_s=0.2),
+        BlueprintAct(act_id="act_15", block_id="ui_montage", role="screens", target_duration_s=0.35, min_duration_s=0.2),
+    ])
+    assert len(set(get_args(MotionBlockId))) == 15
+    assert {a.block_id for a in bp.acts} == set(MOTION_BLOCK_CATALOG) == set(get_args(MotionBlockId)) == set(INHERITABLE_BLOCK_STYLE_KEYS)
 
     # Provide synthetic SFX snapshots for all 4 blueprint SFX cues
     sfx_snapshots: dict[str, tuple[UUID, str, int, str]] = {}
@@ -1107,7 +1116,8 @@ def test_compile_all_13_motion_blocks_and_zod_video_spec_parity():
 
             # Verify Pillow wireframe PNGs exist for product_showcase (16:9),
             # device_mockup dual (16:9 + 9:16), and chat_demo preview (16:9)
-            assert len(assets) == 4
+            assert len(assets) == 7
+            assert sum(asset.width == 640 for asset in assets) == 3
             dims = [(a.width, a.height) for a in assets]
             assert (1280, 720) in dims
             assert (540, 960) in dims
@@ -1118,7 +1128,7 @@ def test_compile_all_13_motion_blocks_and_zod_video_spec_parity():
 
             # Verify HUD track has 1 corner TextObject badge per act
             hud_track = next(t for t in spec["tracks"] if t["track_id"] == "trk_slot_hud")
-            assert len(hud_track["clips"]) == 13
+            assert len(hud_track["clips"]) == 15
             for clip in hud_track["clips"]:
                 assert clip["object"]["kind"] == "text"
                 assert clip["object"]["style"]["background_mode"] == "pill"
@@ -1144,6 +1154,8 @@ def test_compile_all_13_motion_blocks_and_zod_video_spec_parity():
             if preset_id in ("vox_editorial", "institutional_dark"):
                 specs_to_validate.append(spec)
 
+    from app.tools.video.presets import MOTION_PREVIEW_CATALOG, build_motion_preview_spec
+    specs_to_validate.extend(build_motion_preview_spec(key) for key in MOTION_PREVIEW_CATALOG)
     # Verify exact parity against packages/video-spec Zod videoSpecSchema.parse!
     node_script = (
         'import { videoSpecSchema } from "./src/index.ts";'
@@ -1180,3 +1192,28 @@ def test_skill_saved_receipt_validation():
     assert receipt.skill_version_id == vid
     assert receipt.acts_count == 6
 
+
+
+@pytest.mark.parametrize("mode,valid,invalid", [
+    ("impact_cut", {"headline": "Go"}, {"headline": " "}),
+    ("typewriter_swap", {"words": ["设计", "Play"]}, {"words": ["only"]}),
+    ("slot_flip", {"words": ["A", "B"]}, {"words": ["A", "x" * 49]}),
+    ("inline_badge_split", {"left_text": "Make", "right_text": "waves"}, {"left_text": "Half"}),
+    ("marquee_wall", {"items": [{"text": "Go"}] * 3}, {"items": [{"text": " "}] * 3}),
+])
+def test_kinetic_mode_copy_contract(mode, valid, invalid):
+    from app.editing.schemas import KineticBeatProps
+    props = KineticBeatProps(mode=mode, **valid)
+    if mode == "inline_badge_split":
+        assert props.badge_icon == "sparkle"
+    for missing in ({}, invalid):
+        with pytest.raises(ValueError):
+            KineticBeatProps(mode=mode, **missing)
+
+
+@pytest.mark.parametrize("mode", ["rapid_cut", "fan_slide", "cascade_3d"])
+def test_montage_interval_contract(mode):
+    from app.editing.schemas import UiMontageProps
+    assert UiMontageProps(layout_mode=mode, cut_interval_s=0.35).layout_mode == mode
+    with pytest.raises(ValueError):
+        UiMontageProps(layout_mode=mode, cut_interval_s=0.17)

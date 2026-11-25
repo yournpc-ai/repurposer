@@ -29,7 +29,7 @@ export_video 在事务内固定版本、digest、授权上限与原生回执。W
 
 **网页状态仍是 WebObject**：CapturePlan 的 populated/full/cutout/blank_plate/hero 制品冻结为同一 web SourceSnapshot 下的独立 `view_id`；普通网页层仍由 `WebObject + view_id` 引用。受控 Generator 的显式派生 image Snapshot 资源由上游准备层校验 owner、原 web/view 与精确 digest，不能直接将 web 清单当 image 使用。共享相机的 RGBA cutout 按配对目标盒无缩放补齐透明全画布，保存原裁切与配对 digest；renderer 只消费固定 Generator 视频与独立原生文字，不拼采集坐标。selected 特写使用冻结元素盒与既有相机数学，before/after 使用普通 centered crossfade，原生 plate/cutout 使用普通 opacity/transform 动画；video-spec 不新增网页状态或 renderer 字段。
 
-Motion Block 的节拍按幕内秒数声明。居中转场扩展的入幕预卷参与镜头入场，旁白高光、卡片揭示、光标点击和多步框选以原切点为零。截图、光标和框选共用一个原尺寸比例平面，镜头对整个平面求值。Skill 蓝图保存镜头、舞台、转场和节拍时间，实例化时用新视图的元素重新解算坐标。每个蓝图最多 24 幕、48 条音效提示。
+Motion Block 的节拍按幕内秒数声明。居中转场扩展的入幕预卷参与镜头入场，旁白高光、卡片揭示、光标点击和多步框选以原切点为零。截图、光标和框选共用一个原尺寸比例平面，镜头对整个平面求值。Skill 蓝图保存镜头、舞台、转场和节拍时间，实例化时用新视图的元素重新解算坐标。每个蓝图最多 48 幕、96 条音效提示，短拍下限为 0.2 秒。`kinetic_beat` 和 `ui_montage` 在服务端与 Player 共用逐帧渲染器。Chat 的八种动效预览沿用 `video_preset_set`，2.8 秒内联规范固定示范字形和界面线框，并继承选中作品的风格。
 
 ## 4. 预览
 

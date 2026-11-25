@@ -60,7 +60,7 @@ def _native_creation_tools(tools, *, facts):
         constraints=project.get("user_stated_constraints") or (),
         brief=pending,
     )
-    external = isinstance(facts.get("skill"), ExternalSkillReference)
+    external = isinstance(facts.get("explicit_skill", facts.get("skill")), ExternalSkillReference)
     from app.chat.editor_create import voice_generation_forbidden
 
     voice_excluded = voice_generation_forbidden(facts.get("user_text") or "")
@@ -209,6 +209,8 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
             "assets": [{k: r.get(k) for k in ("asset_id", "type", "name")}
                        for _, r in resources if r.get("kind") == "asset"][:24],
         }
+        if not native_creation and facts.get("opening_references"):
+            context["opening_references"] = facts["opening_references"]
         if facts.get("answered_this_opening"):
             context["clarified_request"] = user_text
         if attachments := facts.get("attachments"):
@@ -260,13 +262,15 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
             context["observed_preview"] = last_preview
         names = set(EDITOR_NAMES) | {
             "update_focus", "update_steps", "read_conversation_context", "answer", "ask_user", "list_project_media",
-            "review_video", "align_recording",
+            "review_video", "align_recording", "load_skill", "show_video_presets", "select_video_preset",
             "search_music", "search_voices", "show_music_candidates", "select_music",
             "show_voice_candidates", "select_voice",
         }
         from app.chat.editor_create import media_generation_forbidden, voice_generation_forbidden
         from app.editing.catalog import catalog_prompt_index
 
+        context["available_skills"] = facts.get("available_skills", [])
+        names.update({"list_skill_shots", "read_skill_reference", "read_skill_demo", "get_skill_preview"})
         context["creative_catalog"] = catalog_prompt_index()
         if media_generation_forbidden(user_text):
             names.difference_update({"generate_voice", "design_voice", "generate_music", "generate_image", "generate_sfx"})
@@ -296,7 +300,7 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
             from app.models.schemas import ExternalSkillReference
             names.difference_update({*WRITE_TOOLS, "inspect_timeline", "inspect_clip", "preview_range",
                                      "export_video", "deliver_video", "save_composition_as_skill"})
-            if not isinstance(facts.get("skill"), ExternalSkillReference):
+            if not isinstance(facts.get("explicit_skill", facts.get("skill")), ExternalSkillReference):
                 names.discard("instantiate_skill_blueprint")
             source_resources = resources
             if readiness.task_kind == "website_promo":
@@ -321,7 +325,6 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
                 ]
             context["available_sources"] = _source_creation_facts(source_resources)
             if facts.get("skill") is not None:
-                names.update({"list_skill_shots", "read_skill_reference", "read_skill_demo", "get_skill_preview"})
                 reference = facts["skill"]
                 context["skill_reference"] = (
                     reference.model_dump(mode="json") if hasattr(reference, "model_dump")
@@ -401,7 +404,9 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
         if (facts.get("authorized_media") or {}).get("status") == "available":
             names.discard("ask_user")
 
-        tools = [t for t in facts["tools"] if t.name in names]
+        from app.chat.turn_tools import tools_for_bound_skill
+        package_ref = facts.get("skill") if facts.get("package_active") else None
+        tools = [t for t in tools_for_bound_skill(facts["tools"], package_ref) if t.name in names]
         if native_creation:
             tools = _native_creation_tools(tools, facts=facts)
         def terminal_wire(tool):

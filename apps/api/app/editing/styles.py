@@ -70,6 +70,8 @@ INHERITABLE_BLOCK_STYLE_KEYS: dict[str, tuple[str, ...]] = {
     "metric_grid": ("theme", "accent_color", "backdrop_style"),
     "closing_cta": ("theme", "accent_color", "backdrop_style"),
     "chat_demo": ("theme", "accent_color", "backdrop_style"),
+    "kinetic_beat": ("theme", "backdrop_style", "accent_color", "show_backdrop"),
+    "ui_montage": ("theme", "backdrop_style", "accent_color", "show_backdrop"),
     "device_mockup": ("theme", "accent_color", "backdrop_style"),
     "flow_diagram": ("theme", "accent_color", "backdrop_style"),
     "split_compare": ("theme", "accent_color", "backdrop_style"),

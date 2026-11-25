@@ -22,6 +22,8 @@ export const VIDEO_CAPABILITIES = {
     "bento_features",
     "data_chart",
     "quote_proof",
+    "ui_montage",
+    "kinetic_beat",
   ] as readonly string[],
   text_parts: ["line", "word", "grapheme"],
   segmentation_versions: [SEGMENTATION_VERSION] as readonly string[],

@@ -23,7 +23,7 @@ metadata:
    - `vox_editorial`：暖纸面杂志质感、左向右高亮扫条、硬边报刊框线与 `wipe_reveal` 擦除，适合深度观点、媒体评论与节奏拆解。
    - `swiss_paper`：瑞士网格白底、极细 1.5px 标尺线、零多余阴影与 `wipe_reveal`，适合理性宣言、设计发布与极简数据陈述。
    - `institutional_dark`：深墨色柔光玻璃卡片、青蓝强调色与 `crossfade` 叠化，适合克制权威的行业主张与品牌定调。
-2. **组合 13 个原生动效幕（`MotionBlockObject`）**：优先选用文字、对比、数据与引证核心幕（`statement_hook`、`kinetic_title`、`metric_grid`、`quote_proof`、`split_compare`、`closing_cta`），在需要展开论据或流程时衔接 `bento_features`、`flow_diagram`、`step_timeline`、`data_chart`、`chat_demo`、`product_showcase`、`device_mockup`；搭配五种无缝转场（`crossfade`、`whip_pan`、`wipe_reveal`、`zoom_through`、`iris_focus`）推进幕间张力。
+2. **用短拍组织画面**：优先以 `kinetic_beat` 的 `impact_cut`、`typewriter_swap`、`slot_flip`、`inline_badge_split`、`marquee_wall` 分别承载主张、修辞转折、递进、揭示与高潮。每拍留 0.4–1.6 秒，全片最多 48 幕；有真实界面时穿插 `ui_montage`，用单幕黑白反色断句。
 3. **运用 11 套原生文字样式预设（`insert_text` / `edit_text`）**：按语义角色挑选行业预设——主标题/强钩子用 `kinetic_impact`、`vox_highlighter` 或 `creator_pop`，逐词踩拍强调与节奏卡点用 `karaoke_focus`，双语字幕用 `bilingual_cinema`，轻量标注/角标用 `vox_label`、`editorial_callout`、`lower_third_tag`，常规清晰阅读用 `clean_broadcast`、`cinema_glass`、`minimal_light`。
 4. **用 22 配方 v2 音效（`generate_sfx`）堆叠起势与重击**：在关键切镜与核心金句落点前叠加起势（`riser`、`sub_swell`、`shimmer_lift`），在字块定帧瞬间落重击或清脆提示（`impact`、`deep_hit`、`kinetic_thud`、`sub_drop`、`stinger`、`title_bloom`、`metric_chime`、`callout_ping`），在转场中点贴合扫风（`whoosh`、`swoosh_cut`、`velvet_pass`、`page_turn`），用短促交互音（`click`、`soft_pop`、`toggle_on`、`select_tick`、`confirm_chime`）与空间铺底（`studio_air`、`pulse_bed`）拉开呼吸层次。
 

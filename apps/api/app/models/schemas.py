@@ -1222,12 +1222,22 @@ class ReviseVideoArgs(BaseModel):
         })
 
 
+class LoadSkillArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    skill_id: str = Field(min_length=1, max_length=120, description=(
+        "Skill ID from available_skills (built-in slug such as 'kinetic-launch' or an owned external skill UUID/slug)."
+    ))
+
+
 class ShowVideoPresetsArgs(BaseModel):
     """展示 2–4 个已注册的原生 Preset，各候选的事实由服务端提供。"""
 
     model_config = ConfigDict(extra="forbid")
 
-    preset_ids: list[str] = Field(min_length=2, max_length=4)
+    preset_ids: list[str] = Field(min_length=2, max_length=4, description=(
+        "Registered presets or kinetic_beat:{impact_cut,typewriter_swap,slot_flip,inline_badge_split,marquee_wall} "
+        "and ui_montage:{rapid_cut,fan_slide,cascade_3d}."
+    ))
     pending_disposition: Literal["answer", "skip", "none"] = "none"
 
     @model_validator(mode="before")

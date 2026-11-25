@@ -159,7 +159,7 @@ class SkillDraft(BaseModel):
     source_uri: str | None = None
     source_revision: str | None = None
     capability_report: SkillCapabilityReport
-    declared_inputs: list[SkillInputDeclaration] = Field(default=[], max_length=32)
+    declared_inputs: list[SkillInputDeclaration] = Field(default=[], max_length=50)
     policy: SkillPolicy = Field(default_factory=SkillPolicy)
 
 

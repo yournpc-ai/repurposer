@@ -14,6 +14,8 @@ import {
 } from "./engine/styles";
 
 import { ImageAdapter, type Frame } from "./blocks/Stage";
+import { KineticBeatBlock } from "./blocks/KineticBeatBlock";
+import { UiMontageBlock } from "./blocks/UiMontageBlock";
 import { ChatDemoBlock } from "./blocks/ChatDemoBlock";
 import { DeviceMockupBlock } from "./blocks/DeviceMockupBlock";
 import { FlowDiagramBlock } from "./blocks/FlowDiagramBlock";
@@ -1871,6 +1873,8 @@ function narrative<P>(Block: React.ComponentType<{ props: P; frame: Frame }>) {
 }
 
 const narratives = {
+  kinetic_beat: narrative(KineticBeatBlock),
+  ui_montage: narrative(UiMontageBlock),
   chat_demo: narrative(ChatDemoBlock),
   device_mockup: narrative(DeviceMockupBlock),
   flow_diagram: narrative(FlowDiagramBlock),
@@ -1896,6 +1900,7 @@ export const MotionBlockView: React.FC<{
     const render = narratives[id as keyof typeof narratives];
     const { layout, resources, props } = clip.object;
     const timing: Frame = {
+      width: layout.width, height: layout.height,
       tSec: (frame - cueOffsetFrames) / fps,
       durSec: (clip.end_frame - clip.start_frame - cueOffsetFrames - tailFrames) / fps,
       scaleUnit: Math.min(layout.width / 1920, layout.height / 1080),

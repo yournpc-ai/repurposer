@@ -1019,6 +1019,69 @@ class QuoteProofProps(NarrativeStyle):
     highlight_at_s: CueSecond | None = None
 
 
+class KineticMarqueeItem(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    text: str = Field(min_length=1, max_length=28)
+    icon: Literal["sparkle", "bolt", "cursor", "play", "code", "layers", "globe", "wand"] | None = None
+
+
+class KineticBeatProps(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    mode: Literal[
+        "impact_cut",
+        "typewriter_swap",
+        "slot_flip",
+        "inline_badge_split",
+        "marquee_wall",
+    ] = "impact_cut"
+    headline: str | None = Field(default=None, min_length=1, max_length=120)
+    highlight_phrase: str | None = Field(default=None, min_length=1, max_length=60)
+    prefix: str | None = Field(default=None, min_length=1, max_length=60)
+    words: list[str] = Field(default_factory=list, max_length=6)
+    left_text: str | None = Field(default=None, min_length=1, max_length=40)
+    right_text: str | None = Field(default=None, min_length=1, max_length=40)
+    badge_text: str | None = Field(default=None, min_length=1, max_length=20)
+    badge_icon: Literal["sparkle", "bolt", "cursor", "play", "code", "layers", "globe", "wand"] | None = None
+    items: list[KineticMarqueeItem] = Field(default_factory=list, max_length=12)
+    rows: int = Field(default=3, ge=2, le=4)
+    scale_emphasis: Literal["normal", "oversized"] = "normal"
+    theme: Literal["dark", "light"] | None = None
+    accent_color: str | None = Field(default=None, pattern=r"^#[0-9A-Fa-f]{6}$")
+    backdrop_style: BackdropStyle | None = None
+    show_backdrop: bool = False
+    entrance_duration_s: float = Field(default=0.25, gt=0.05, le=2.0, allow_inf_nan=False)
+
+    @model_validator(mode="after")
+    def validate_copy(self) -> KineticBeatProps:
+        if any(not word.strip() or len(word) > 48 for word in self.words):
+            raise ValueError("Each kinetic word must contain 1–48 characters")
+        if self.mode == "impact_cut" and not self.headline:
+            raise ValueError("impact_cut requires a headline")
+        if self.mode in {"typewriter_swap", "slot_flip"} and len(self.words) < 2:
+            raise ValueError(f"{self.mode} requires at least two words")
+        if self.mode == "inline_badge_split":
+            if not self.left_text or not self.right_text:
+                raise ValueError("inline_badge_split requires both text halves")
+            if not self.badge_text and not self.badge_icon:
+                self.badge_icon = "sparkle"
+        if self.mode == "marquee_wall" and len(self.items) < 3:
+            raise ValueError("marquee_wall requires at least three items")
+        return self
+
+
+class UiMontageProps(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    layout_mode: Literal["rapid_cut", "fan_slide", "cascade_3d"] = "fan_slide"
+    headline: str | None = Field(default=None, min_length=1, max_length=64)
+    badge: str | None = Field(default=None, min_length=1, max_length=32)
+    cut_interval_s: float | None = Field(default=None, ge=0.18, le=3.0, allow_inf_nan=False)
+    theme: Literal["dark", "light"] | None = None
+    accent_color: str | None = Field(default=None, pattern=r"^#[0-9A-Fa-f]{6}$")
+    backdrop_style: BackdropStyle | None = None
+    show_backdrop: bool = True
+    entrance_duration_s: float = Field(default=0.35, gt=0.05, le=2.0, allow_inf_nan=False)
+
+
 MOTION_BLOCK_PROP_MODELS: dict[str, type[BaseModel]] = {
     "kinetic_title": KineticTitleProps,
     "product_showcase": ProductShowcaseProps,
@@ -1033,6 +1096,8 @@ MOTION_BLOCK_PROP_MODELS: dict[str, type[BaseModel]] = {
     "bento_features": BentoFeaturesProps,
     "data_chart": DataChartProps,
     "quote_proof": QuoteProofProps,
+    "kinetic_beat": KineticBeatProps,
+    "ui_montage": UiMontageProps,
 }
 
 
@@ -1056,6 +1121,10 @@ class MotionBlockObject(BaseModel):
     transform: Transform = Transform()
     opacity: float = _OPACITY
 
+    @property
+    def opaque_backdrop(self) -> bool:
+        return self.block_id == "kinetic_beat" or bool(self.props.get("show_backdrop"))
+
     @model_validator(mode="after")
     def _validate_block_props_and_resources(self) -> MotionBlockObject:
         model = MOTION_BLOCK_PROP_MODELS[self.block_id]
@@ -1068,8 +1137,8 @@ class MotionBlockObject(BaseModel):
             raise ValueError("device_mockup requires one or two pinned image resources")
         if self.block_id == "chat_demo" and len(self.resources) > 1:
             raise ValueError("chat_demo accepts one result preview image")
-        if self.block_id == "product_showcase" and not self.resources:
-            raise ValueError("product_showcase requires at least one pinned image resource")
+        if self.block_id in {"product_showcase", "ui_montage"} and not self.resources:
+            raise ValueError(f"{self.block_id} requires at least one pinned image resource")
         return self
 
 

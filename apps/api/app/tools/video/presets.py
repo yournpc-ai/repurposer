@@ -6,15 +6,19 @@ from the validated registry manifest and real object-storage URL seam.
 """
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
-from uuid import uuid4
+from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.editing.presets import PRESET_REGISTRY
-from app.models.schemas import VideoPresetChoice
+from app.editing.styles import CompositionStyle, resolve_style_tokens
+from app.models.schemas import VideoPresetChoice, canonical_json_hash
 from app.models.tables import Project
 from app.providers import storage
 
@@ -55,8 +59,85 @@ def _preview_manifest() -> dict[str, PresetPreview]:
 _PREVIEWS = _preview_manifest()
 
 
-def preset_member(preset_id: str) -> dict[str, Any]:
+MOTION_PREVIEW_CATALOG = {
+    "kinetic_beat:impact_cut": {"headline": "Make it move", "highlight_phrase": "move", "scale_emphasis": "oversized"},
+    "kinetic_beat:typewriter_swap": {"words": ["Imagine", "Design", "Launch"]},
+    "kinetic_beat:slot_flip": {"prefix": "Make it", "words": ["clear", "bold", "move"]},
+    "kinetic_beat:inline_badge_split": {"left_text": "Made", "right_text": "visible", "badge_icon": "sparkle"},
+    "kinetic_beat:marquee_wall": {"items": [
+        {"text": "Create", "icon": "bolt"}, {"text": "Design", "icon": "layers"}, {"text": "Play", "icon": "play"},
+    ]},
+    "ui_montage:rapid_cut": {"cut_interval_s": 0.35},
+    "ui_montage:fan_slide": {},
+    "ui_montage:cascade_3d": {},
+}
+
+
+@lru_cache(maxsize=1)
+def _preview_font():
+    from app.skills.slot_preview import FONTS_DIR
+
+    data = (FONTS_DIR / "MotionPreviewLatin.otf").read_bytes()
+    digest = hashlib.sha256(data).hexdigest()
+    return {"family": "Motion Preview Latin", "weight": 900, "format": "opentype",
+            "font_id": "motion-preview-latin", "font_set_digest": digest, "digest": digest,
+            "url": "data:font/otf;base64," + base64.b64encode(data).decode("ascii")}
+
+
+def build_motion_preview_spec(preview_id: str, *, composition_style: CompositionStyle | None = None) -> dict[str, Any]:
+    from app.editing.schemas import CompositionContent, MotionBlockObject, Clip, Track, VersionSettings
+    from app.editing.video_spec import compile_video_spec
+    from app.skills.slot_preview import render_slot_placeholder_png
+
+    if preview_id not in MOTION_PREVIEW_CATALOG:
+        raise VideoPresetError("Unknown motion preview")
+    block, mode = preview_id.split(":")
+    style = composition_style or CompositionStyle(preset_id="institutional_dark", accent_color="#A1A1AA", backdrop_style="clean")
+    tokens = resolve_style_tokens(style)
+    settings = VersionSettings(width=1280, height=720, fps={"num": 30}, background=tokens["canvas_bg"], style=composition_style)
+    props = dict(MOTION_PREVIEW_CATALOG[preview_id])
+    if composition_style is None:
+        props.update(theme="dark", accent_color="#A1A1AA", backdrop_style="clean")
+    resources, snapshots = [], {}
+    if block == "ui_montage":
+        props["layout_mode"] = mode
+        for i, title in enumerate(("Workspace", "Library", "Timeline"), 1):
+            data = render_slot_placeholder_png(f"[{i:02}]", title, "Interface study",
+                                               width=480, height=300, tokens=tokens)
+            digest = hashlib.sha256(data).hexdigest()
+            sid = uuid5(NAMESPACE_URL, digest)
+            snapshots[sid] = {"storage_key": "data:image/png;base64," + base64.b64encode(data).decode("ascii"),
+                              "digest": digest}
+            resources.append({"path": f"media/screen_{i}.png", "content_type": "image/png",
+                              "snapshot_id": sid, "snapshot_digest": digest})
+    else:
+        props["mode"] = mode
+    obj = MotionBlockObject(kind="motion_block", object_id="preview", block_id=block,
+                            layout={"x": 0, "y": 0, "width": 1280, "height": 720},
+                            fit="cover", props=props, resources=resources)
+    clip = Clip(clip_id="motion", object=obj, range={"start": 0, "end": round(2.8 * settings.timebase)})
+    content = CompositionContent(settings=settings, sources=[
+        {"snapshot_id": sid, "snapshot_digest": snap["digest"]} for sid, snap in snapshots.items()
+    ], timeline={"tracks": [Track(track_id="main", kind="visual", role="main", order=0, clips=[clip])]})
+    digest = canonical_json_hash(content.model_dump(mode="json"))
+    spec = compile_video_spec(content, snapshots, composition_id=uuid5(NAMESPACE_URL, preview_id),
+                              version_id=uuid5(NAMESPACE_URL, digest), content_digest=digest)
+    spec["fonts"] = [dict(_preview_font())]
+    return spec
+
+
+def preset_member(preset_id: str, *, composition_style: CompositionStyle | None = None) -> dict[str, Any]:
     """Complete server-derived candidate facts; no scratch path leaves here."""
+    if preset_id in MOTION_PREVIEW_CATALOG:
+        spec = build_motion_preview_spec(preset_id, composition_style=composition_style)
+        block, mode = preset_id.split(":")
+        return {
+            "start": 0, "end": 2.8, "excerpt": preset_id, "speaker": None, "provider": "native",
+            "preset_id": preset_id, "title": mode.replace("_", " ").title(), "category": block,
+            "preview_spec": spec, "preview_digest": canonical_json_hash(spec),
+            "duration_seconds": 2.8, "aspect": "16:9", "width": spec["width"], "height": spec["height"],
+            "composition_style": composition_style.model_dump(mode="json") if composition_style else None,
+        }
     if preset_id not in PRESET_REGISTRY:
         raise VideoPresetError(f"unknown native Preset {preset_id!r}")
     preview = _PREVIEWS.get(preset_id)
@@ -82,7 +163,7 @@ def preset_member(preset_id: str) -> dict[str, Any]:
     }
 
 
-def show_video_preset_candidates(preset_ids: list[str]) -> dict[str, Any]:
+def show_video_preset_candidates(preset_ids: list[str], *, composition_style: CompositionStyle | None = None) -> dict[str, Any]:
     if not 2 <= len(preset_ids) <= 4 or len(set(preset_ids)) != len(preset_ids):
         raise VideoPresetError("show 2–4 distinct registered native Presets")
     return {
@@ -90,7 +171,7 @@ def show_video_preset_candidates(preset_ids: list[str]) -> dict[str, Any]:
         "candidate_set_id": str(uuid4()),
         "topic": "native-video-presets",
         "asset_id": None,
-        "members": [preset_member(preset_id) for preset_id in preset_ids],
+        "members": [preset_member(preset_id, composition_style=composition_style) for preset_id in preset_ids],
     }
 
 
@@ -112,7 +193,8 @@ def resolve_video_preset_member(
         member = members[choice.member_index]
         if not isinstance(member, dict) or not isinstance(member.get("preset_id"), str):
             raise VideoPresetError("the Preset candidate member is malformed")
-        expected = preset_member(member["preset_id"])
+        style = member.get("composition_style")
+        expected = preset_member(member["preset_id"], composition_style=CompositionStyle.model_validate(style) if style else None)
         if any(member.get(key) != value for key, value in expected.items()):
             raise VideoPresetError("the persisted Preset member no longer matches its registry preview")
         return dict(member)
@@ -156,7 +238,7 @@ def video_preset_candidate_context_lines(
                     continue
                 try:
                     resolved = [
-                        preset_member(str(member.get("preset_id")))
+                        member if member.get("preset_id") in MOTION_PREVIEW_CATALOG else preset_member(str(member.get("preset_id")))
                         for member in members
                         if isinstance(member, dict)
                     ]

@@ -104,7 +104,7 @@ test("centered transitions preserve cinematic kinds and default to crossfade", (
   assert.throws(() => parse({ end_frame: transition.cut_frame }));
 });
 
-test("the serialized native block library accepts all thirteen IDs", () => {
+test("the serialized native block library accepts all fifteen IDs", () => {
   const base = textSpec();
   const image = { path: "media/desktop.png", url: "asset.png", content_type: "image/png", digest: "a".repeat(64) };
   const parse = (block_id: string, resources = [image]) => {
@@ -114,10 +114,11 @@ test("the serialized native block library accepts all thirteen IDs", () => {
     return videoSpecSchema.parse({ ...base, tracks: [{ ...base.tracks[0], clips: [{ ...clip, object, animations: [] }] }] });
   };
   for (const id of ["statement_hook", "kinetic_title", "product_showcase", "metric_grid", "closing_cta",
-    "chat_demo", "device_mockup", "flow_diagram", "split_compare", "step_timeline", "bento_features", "data_chart", "quote_proof"]) {
+    "chat_demo", "device_mockup", "flow_diagram", "split_compare", "step_timeline", "bento_features", "data_chart", "quote_proof", "kinetic_beat", "ui_montage"]) {
     parse(id);
   }
   assert.throws(() => parse("unknown"));
+  assert.throws(() => parse("ui_montage", []));
   assert.throws(() => parse("device_mockup", []));
   assert.throws(() => parse("device_mockup", [image, image, image]));
 });

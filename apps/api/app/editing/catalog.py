@@ -40,6 +40,8 @@ MotionBlockId = Literal[
     "bento_features",
     "data_chart",
     "quote_proof",
+    "kinetic_beat",
+    "ui_montage",
 ]
 
 # Verified against live MiniMax speech-2.6-hd `/get_voice` system catalog.
@@ -539,6 +541,26 @@ MOTION_BLOCK_CATALOG: dict[str, dict[str, Any]] = {
         "supports_alpha": True, "suggested_duration_s": [4.0, 8.0],
         "required_slots": ["messages"],
         "optional_slots": ["title", "work_steps", "result_card", "preview_resource", "theme", "backdrop_style", "accent_color", "show_backdrop"],
+    },
+    "kinetic_beat": {
+        "id": "kinetic_beat", "version": 1, "domain": "typography", "category": "rhythm",
+        "name": "Kinetic Beat",
+        "desc": "impact_cut needs headline; typewriter_swap and slot_flip need 2–6 words; inline_badge_split needs left_text and right_text; marquee_wall needs 3–12 items with text.",
+        "use_for": ["Beat-led launch typography and single-act polarity changes."],
+        "avoid": ["Paragraphs or extended narration."],
+        "supports_alpha": False, "suggested_duration_s": [0.4, 1.6],
+        "required_slots": ["mode"],
+        "optional_slots": ["headline", "highlight_phrase", "prefix", "words", "left_text", "right_text", "badge_text", "badge_icon", "items", "rows", "scale_emphasis", "theme", "backdrop_style", "accent_color", "show_backdrop", "entrance_duration_s"],
+    },
+    "ui_montage": {
+        "id": "ui_montage", "version": 1, "domain": "product", "category": "interfaces",
+        "name": "UI Montage",
+        "desc": "Stage 1–16 ordered, pinned screenshots in rapid_cut, fan_slide or cascade_3d.",
+        "use_for": ["Present several real interfaces on a strong beat."],
+        "avoid": ["Unverified product imagery."],
+        "supports_alpha": True, "suggested_duration_s": [0.35, 2.0],
+        "required_slots": ["image_resource"],
+        "optional_slots": ["headline", "badge", "layout_mode", "cut_interval_s", "theme", "backdrop_style", "accent_color", "show_backdrop", "entrance_duration_s"],
     },
     "device_mockup": {
         "id": "device_mockup", "version": 1, "domain": "product", "category": "interfaces",
