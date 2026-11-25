@@ -67,6 +67,7 @@ addopts = "--strict-markers"
 markers = [
     "unit: Layer 0 pure contracts & cross-runtime parity (zero DB, zero network)",
     "chat_origin: Layer 1A deterministic Chat-Origin integration tests (ASGI /api/v1/chat + real PostgreSQL)",
+    "e2e_browser: Layer 2.5 real Chromium, Studio and migrated PostgreSQL",
     "infra: Layer 1B infrastructure & platform contracts (CAS store, storage, Alembic migrations, jobs, settings)",
     "parity: Cross-runtime Python <-> TypeScript parity contracts",
 ]

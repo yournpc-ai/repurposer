@@ -16,64 +16,49 @@ from __future__ import annotations
 from importlib import import_module
 from pathlib import Path
 from unittest.mock import AsyncMock
-from uuid import uuid4
 
 import pytest
 import pytest_asyncio
 from sqlalchemy import create_engine, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-from sqlalchemy.pool import NullPool
 
 from app.config import settings
-from app.models import tables as _tables  # noqa: F401 -- ensure all tables register on Base.metadata
+from app.models import (
+    tables as _tables,  # noqa: F401 -- ensure all tables register on Base.metadata
+)
 from app.models.database import Base
-
-
-def _sync_url(url: str) -> str:
-    return url.replace("postgresql+asyncpg", "postgresql+psycopg2")
+from test.support.db_helpers import disposable_postgres
+from test.support.sfx_import import sfx_import_race  # noqa: F401 -- shared fixture
 
 
 @pytest.fixture(scope="session")
 def _disposable_postgres():
-    db_name = f"rep_test_v2_{uuid4().hex[:12]}"
-    async_server = settings.database_url.rsplit("/", 1)[0]
-    sync_server = _sync_url(async_server)
-
-    admin = create_engine(f"{sync_server}/postgres", isolation_level="AUTOCOMMIT", poolclass=NullPool)
-    with admin.connect() as conn:
-        conn.execute(text(f'CREATE DATABASE "{db_name}"'))
-        conn.execute(text(f'ALTER DATABASE "{db_name}" SET synchronous_commit = off'))
-
-    sync_db_url = f"{sync_server}/{db_name}"
-    async_db_url = f"{async_server}/{db_name}"
-    # Keep 1 persistent sync connection so per-test cleanup avoids TCP/auth reconnect overhead
-    cleanup_engine = create_engine(sync_db_url, pool_size=1, max_overflow=0)
-    try:
-        with cleanup_engine.begin() as conn:
-            conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
-        Base.metadata.create_all(cleanup_engine)
-        reverse_tables = [t.name for t in reversed(Base.metadata.sorted_tables)]
-        delete_stmts = "".join(f'DELETE FROM "{t}";' for t in reverse_tables)
-
-        replica_sql = text(f"SET LOCAL session_replication_role = 'replica'; {delete_stmts}")
-        fallback_sql = text(
-            f'UPDATE "compositions" SET current_version_id = NULL; {delete_stmts}'
-        )
+    with disposable_postgres() as (async_db_url, sync_db_url):
+        # Keep 1 persistent sync connection so per-test cleanup avoids TCP/auth reconnect overhead
+        cleanup_engine = create_engine(sync_db_url, pool_size=1, max_overflow=0)
         try:
             with cleanup_engine.begin() as conn:
-                conn.execute(replica_sql)
-            cleanup_sql = replica_sql
-        except Exception:
-            with cleanup_engine.begin() as conn:
-                conn.execute(fallback_sql)
-            cleanup_sql = fallback_sql
+                conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
+            Base.metadata.create_all(cleanup_engine)
+            reverse_tables = [t.name for t in reversed(Base.metadata.sorted_tables)]
+            delete_stmts = "".join(f'DELETE FROM "{t}";' for t in reverse_tables)
 
-        yield async_db_url, cleanup_engine, cleanup_sql
-    finally:
-        cleanup_engine.dispose()
-        with admin.connect() as conn:
-            conn.execute(text(f'DROP DATABASE "{db_name}" WITH (FORCE)'))
-        admin.dispose()
+            replica_sql = text(f"SET LOCAL session_replication_role = 'replica'; {delete_stmts}")
+            fallback_sql = text(
+                f'UPDATE "compositions" SET current_version_id = NULL; {delete_stmts}'
+            )
+            try:
+                with cleanup_engine.begin() as conn:
+                    conn.execute(replica_sql)
+                cleanup_sql = replica_sql
+            except Exception:
+                with cleanup_engine.begin() as conn:
+                    conn.execute(fallback_sql)
+                cleanup_sql = fallback_sql
+
+            yield async_db_url, cleanup_engine, cleanup_sql
+        finally:
+            cleanup_engine.dispose()
 
 
 @pytest_asyncio.fixture

@@ -3,6 +3,8 @@
 from __future__ import annotations
 import pytest
 
+pytestmark = pytest.mark.chat_origin
+
 from datetime import UTC, datetime
 
 
@@ -60,7 +62,6 @@ from app.chat.editor_media import execute_generate_sfx
 from app.chat.intent import intent_router
 
 
-from app.chat.plan_turn import run_plan_turn
 
 
 from app.chat.prompts import assemble_video_round

@@ -3,6 +3,8 @@
 from __future__ import annotations
 import pytest
 
+pytestmark = pytest.mark.chat_origin
+
 import json
 
 
@@ -522,7 +524,6 @@ from app.chat.editor import (
     InsertTextArgs,
     InspectTimelineArgs,
     edit_clip,
-    execute_editor,
 )
 
 
@@ -1131,19 +1132,23 @@ async def test_edit_text_content_position_clear_background_protection_and_observ
         prompt_ctx = json.loads(raw_ctx.split("\n", 1)[1] if "\n" in raw_ctx and not raw_ctx.lstrip().startswith("{") else raw_ctx)
         assert prompt_ctx["composition_style"]["preset_id"] == "institutional_dark"
         assert prompt_ctx["composition_style"]["theme"] == "dark"
+        opening.turn_state = "settled"
         await db.commit()
 
-    # 8. Observability: execute_editor inspect_timeline, inspect_clip, and recently_edited_clips
-    monkeypatch.setattr("app.chat.editor.AsyncSessionLocal", database)
-    turn = SimpleNamespace(
-        project=project,
-        conversation_id=chat.id,
-        turn_id=opening.id,
-        db=None,
-        _video_base_ref=_ref(v6),
-    )
-    obs_tl = await execute_editor(turn, "inspect_timeline", InspectTimelineArgs(offset=0))
-    tl_data = json.loads(obs_tl.text)
+    # Read both inspectors through Chat and verify the next model round sees the edit.
+    from test.support.chat_http import scripted_chat, tool
+
+    llm, frames = await scripted_chat(database, monkeypatch, owner, project_id,
+        "Inspect the timeline and Chinese caption, then highlight the opening title.", [
+            tool("inspect_timeline", {"offset": 0}), tool("inspect_clip", {"clip_id": "clp_cap_zh"}),
+            tool("edit_text", {"scope": "clip", "clip_id": "clp_title", "preset_id": "vox_highlighter"}),
+            tool("answer", {}, "Updated the opening title."),
+        ])
+    def observation(index, name):
+        messages = llm.calls[index]["messages"]
+        return json.loads(next(m["content"] for m in messages if m.get("name") == name and m["role"] == "tool"))
+
+    tl_data = observation(1, "inspect_timeline")
     assert tl_data["background"] == "#0A0F16"
     assert tl_data["composition_style"]["preset_id"] == "institutional_dark"
     by_id = {c["clip_id"]: c for c in tl_data["clips"]}
@@ -1155,27 +1160,23 @@ async def test_edit_text_content_position_clear_background_protection_and_observ
     assert by_id["clp_title"]["caption_state"] is None
     assert by_id["clp_vo"]["has_gain_automation"] is True
 
-    obs_clip = await execute_editor(turn, "inspect_clip", ClipArgs(clip_id="clp_cap_zh"))
-    clip_data = json.loads(obs_clip.text)
+    clip_data = observation(2, "inspect_clip")
     assert clip_data["composition_style"]["preset_id"] == "institutional_dark"
     assert clip_data["background"] == "#0A0F16"
 
-    # Also verify recently_edited_clips records rich text metadata after edit_text
-    monkeypatch.setattr("app.chat.editor.current_call_id", lambda: "ed_obs_title")
     async with database() as db:
-        turn.db = db
-        obs_edit = await execute_editor(
-            turn,
-            "edit_text",
-            EditTextArgs(scope="clip", clip_id="clp_title", preset_id="vox_highlighter"),
-        )
-        assert obs_edit.version_saved is True
-        focused_title = turn._editor_recent["clips"]["clp_title"]
-        assert focused_title["text"] == "Opening Title"
-        assert focused_title["style"]["background_mode"] == "line"
-        assert focused_title["style"]["has_border"] is True
-        assert focused_title["caption_state"] is None
-        assert focused_title["karaoke_active"] is False
+        current = await db.get(Composition, comp.id)
+        saved = await db.get(CompositionVersion, current.current_version_id)
+        assert saved.base_version_id == v6.id
+    assert frames[-1][1]["assistant_message"]["content"] == "Updated the opening title."
+    recent = next(json.loads(m["content"])["recently_edited_clips"] for m in llm.calls[-1]["messages"]
+                  if isinstance(m["content"], str) and m["content"].startswith("{") and "recently_edited_clips" in m["content"])
+    focused_title = next(clip for clip in recent if clip["clip_id"] == "clp_title")
+    assert focused_title["text"] == "Opening Title"
+    assert focused_title["style"]["background_mode"] == "line"
+    assert focused_title["style"]["has_border"] is True
+    assert focused_title["caption_state"] is None
+    assert focused_title["karaoke_active"] is False
 
 
 # --- Motion block auto-extend & atomic SFX placement ---
@@ -1237,7 +1238,6 @@ from app.chat.editor_media import execute_generate_sfx
 from app.chat.intent import intent_router
 
 
-from app.chat.plan_turn import run_plan_turn
 
 
 from app.chat.prompts import assemble_video_round

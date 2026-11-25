@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
 from importlib import import_module
+from inspect import isawaitable
 from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import httpx
 from fastapi import FastAPI
-from sqlalchemy import text
+from sqlalchemy import create_engine, text
+from sqlalchemy.pool import NullPool
+
+from app.config import settings
 
 from app.dependencies import get_current_user_required, get_db
 from app.editing.store import apply_composition_edits
@@ -225,5 +229,27 @@ class ScriptedToolClient:
         gen = await self.generate_with_tools(**kwargs)
         on_delta = kwargs.get("on_delta")
         if on_delta is not None and gen.content:
-            on_delta(gen.content)
+            emitted = on_delta(gen.content)
+            if isawaitable(emitted):
+                await emitted
         return gen
+
+
+@contextmanager
+def disposable_postgres():
+    """Create an empty database for the duration of a test or session."""
+    db_name = f"rep_test_v2_{uuid4().hex[:12]}"
+    async_server = settings.database_url.rsplit("/", 1)[0]
+    sync_server = async_server.replace("postgresql+asyncpg", "postgresql+psycopg2")
+
+    admin = create_engine(f"{sync_server}/postgres", isolation_level="AUTOCOMMIT", poolclass=NullPool)
+    with admin.connect() as conn:
+        conn.execute(text(f'CREATE DATABASE "{db_name}"'))
+        conn.execute(text(f'ALTER DATABASE "{db_name}" SET synchronous_commit = off'))
+
+    try:
+        yield f"{async_server}/{db_name}", f"{sync_server}/{db_name}"
+    finally:
+        with admin.connect() as conn:
+            conn.execute(text(f'DROP DATABASE "{db_name}" WITH (FORCE)'))
+        admin.dispose()
