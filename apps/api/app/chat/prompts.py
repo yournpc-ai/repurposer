@@ -93,7 +93,9 @@ def _native_creation_tools(tools, *, facts):
                         shot["properties"].pop(field, None)
                 if voice_excluded:
                     if "FirstMotionBlock" in (parameters.get("$defs") or {}):
-                        parameters["$defs"]["FirstMotionBlock"]["properties"].pop("narration", None)
+                        mb_props = parameters["$defs"]["FirstMotionBlock"]["properties"]
+                        mb_props.pop("narration", None)
+                        mb_props.pop("caption_translations", None)
                     for field in ("voice_id", "narration_language"):
                         (parameters.get("properties") or {}).pop(field, None)
                 parameters = prune_wire_parameters(parameters, set())
@@ -260,6 +262,7 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
             "update_focus", "update_steps", "read_conversation_context", "answer", "ask_user", "list_project_media",
             "review_video", "align_recording", "get_narration_alignment", "annotate_narration",
             "search_music", "search_voices", "show_music_candidates", "select_music",
+            "show_voice_candidates", "select_voice",
         }
         from app.chat.editor_create import media_generation_forbidden, voice_generation_forbidden
         from app.editing.catalog import catalog_prompt_index

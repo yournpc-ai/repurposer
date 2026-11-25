@@ -20,8 +20,10 @@ from app.models.schemas import (
     SearchSfxArgs,
     SelectMusicArgs,
     SelectVideoPresetArgs,
+    SelectVoiceArgs,
     ShowMusicCandidatesArgs,
     ShowVideoPresetsArgs,
+    ShowVoiceCandidatesArgs,
 )
 
 def video_rejection_stop(current: ToolRejected, previous: tuple[ToolRejected, ...]) -> bool:
@@ -127,12 +129,38 @@ _SELECT_MUSIC_TOOL = ChatTool(
     terminal=False,
     description=(
         "选择用户从先前已结算的 Music 候选卡按序号点名的曲目。只传 candidate_set_id 和从零起的 member_index。服务端解析本地曲库条目，返回 music_id，不下载、不修改版本。"
-        "将该 ID 传给 prepare_video_materials 的 material_music_ids，再把返回的固定音频快照用 insert_audio 放入当前作品。修改已保存版本使用当前编辑工具。"
+        "将该 ID 传给 create_video 的 music_id 或 prepare_video_materials 的 material_music_ids，再把返回的固定音频快照用 insert_audio 放入当前作品。修改已保存版本使用当前编辑工具。"
     ),
     params_model=SelectMusicArgs,
     presentation=ToolPresentation(
         kind="read", active_key="chat.activity.musicSelection",
         done_key="chat.activity.musicSelectionDone", receipt_kind="music_selection",
+    ),
+)
+_SHOW_VOICE_CANDIDATES_TOOL = ChatTool(
+    name="show_voice_candidates",
+    terminal=False,
+    description=(
+        "按语言、风格、语气或关键词从永久音色库展示最多五个可试听的真实音色候选（voice_set）。候选在本轮结束时保存，不写素材、版本或 Run。"
+        "展示后用户可在卡片中直接试听并按序号选择；音色元数据不能作为主观试听依据。"
+    ),
+    params_model=ShowVoiceCandidatesArgs,
+    presentation=ToolPresentation(
+        kind="read", active_key="chat.activity.voiceSearch",
+        done_key="chat.activity.voiceSearchDone", receipt_kind="voice_search",
+    ),
+)
+_SELECT_VOICE_TOOL = ChatTool(
+    name="select_voice",
+    terminal=False,
+    description=(
+        "选择用户从先前已结算的音色候选卡（voice_set）按序号点名的永久音色。只传 candidate_set_id 和从零起的 member_index。"
+        "服务端校验当前所有者可见性并返回权威 voice_id 与音色元数据，可直接传给 create_video(voice_id=...) 或 generate_voice。"
+    ),
+    params_model=SelectVoiceArgs,
+    presentation=ToolPresentation(
+        kind="read", active_key="chat.activity.voiceSelection",
+        done_key="chat.activity.voiceSelectionDone", receipt_kind="voice_selection",
     ),
 )
 _ALIGN_RECORDING_TOOL = ChatTool(
@@ -321,6 +349,8 @@ def _video_project_tools() -> list[ChatTool]:
         _IMPORT_SFX_TOOL,
         _SHOW_MUSIC_CANDIDATES_TOOL,
         _SELECT_MUSIC_TOOL,
+        _SHOW_VOICE_CANDIDATES_TOOL,
+        _SELECT_VOICE_TOOL,
         _ALIGN_RECORDING_TOOL,
         _GET_NARRATION_ALIGNMENT_TOOL,
         _ANNOTATE_NARRATION_TOOL,

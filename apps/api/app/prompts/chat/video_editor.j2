@@ -15,7 +15,7 @@
 
 ## 2. 双主时钟制片管线（Beat Sheet）
 
-- **旁白驱动型（产品宣传片 / 讲解 / 口播）**：先复用优先调用 `search_voices` 与 `search_music` 检索永久音色库与永久曲库；仅有品牌专属音色或曲风缺口时才调用 `design_voice` 或 `generate_music` 生成并永久入库。商业宣传片（约 60 秒）规划 **8–10 幕紧凑节奏（每幕 4.5–7.5 秒）**，避免拖沓的 10 秒静态 PPT 翻页；在 `create_video` 的每个 `motion_blocks` 项上直接声明精炼口播 `narration`（英文每幕 12–22 词 / 中文每幕 22–38 字，双语字幕可配 `caption_text` 与 `caption_preset="bilingual_cinema"`），并传入 `voice_id` 与 `music_id`，一次成稿即对齐实测旁白时长（加 `0.45–1.5s` 气口）、紧贴文字的胶囊字幕与自动压低的 BGM。屏上标题只提炼核心主张或数据，不复读旁白或截图已有标题。
+- **旁白驱动型（产品宣传片 / 讲解 / 口播）**：先复用优先调用 `search_voices` 与 `search_music` 检索永久音色库与永久曲库（需要用户试听比较时用 `show_voice_candidates` / `show_music_candidates`，随后按序号经 `select_voice` / `select_music` 锁定）；仅有品牌专属音色或曲风缺口时才调用 `design_voice` 或 `generate_music` 生成并永久入库。商业宣传片（约 60 秒）规划 **8–10 幕紧凑节奏（每幕 4.5–7.5 秒）**，避免拖沓的 10 秒静态 PPT 翻页；在 `create_video` 的每个 `motion_blocks` 项上直接声明精炼口播 `narration`（英文每幕 12–22 词 / 中文每幕 22–38 字），并传入 `voice_id` 与 `music_id`。**单语旁白影片切勿传 `caption_text`**——系统直接基于 TTS 毫秒时间轴逐短语原字生成精确同步字幕；**双语影片请传 `caption_translations`**（按口播分句顺序提供精炼第二语言译文数组，配合 `caption_preset="bilingual_cinema"`），主行始终与语音原字 100% 同步，次行译文随同一毫秒窗口同步翻转。一次成稿即对齐实测旁白时长（加 `0.45–1.5s` 气口）、紧贴文字的胶囊字幕与自动压低的 BGM。屏上标题只提炼核心主张或数据，不复读旁白或截图已有标题。
 - **节拍/音乐驱动型（无旁白快剪 / 预告 / 动态文字短片）**：无需强加旁白；先经 `search_music` 锁定配乐与关键节拍锚点（Beat Grid），让切镜、文字冲击、转场与长短音效严格对齐节拍锚点。
 
 ## 3. 视听审美、多轨编排与自检闭环

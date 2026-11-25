@@ -166,6 +166,23 @@ class MusicSelectionReceipt(BaseModel):
     duration_seconds: float = Field(gt=0, allow_inf_nan=False)
 
 
+class VoiceSearchReceipt(BaseModel):
+    kind: Literal["voice_search"] = "voice_search"
+    candidate_set_id: str = Field(min_length=1)
+    topic: str = Field(min_length=1)
+    members: list[AudioCandidateReceipt] = Field(min_length=1)
+
+
+class VoiceSelectionReceipt(BaseModel):
+    kind: Literal["voice_selection"] = "voice_selection"
+    candidate_set_id: str = Field(min_length=1)
+    member_index: int = Field(ge=0)
+    voice_id: str = Field(min_length=1)
+    provider_voice_id: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    duration_seconds: float = Field(gt=0, allow_inf_nan=False)
+
+
 class SkillSavedReceipt(BaseModel):
     kind: Literal["skill_saved"] = "skill_saved"
     skill_id: str = Field(min_length=1)
@@ -184,6 +201,8 @@ ActivityReceipt = (
     | SfxImportReceipt
     | MusicSearchReceipt
     | MusicSelectionReceipt
+    | VoiceSearchReceipt
+    | VoiceSelectionReceipt
     | SkillReadReceipt
     | SkillSavedReceipt
 )
@@ -351,6 +370,26 @@ def music_selection_receipt(
         return None
 
 
+def voice_search_receipt(facts: Mapping[str, Any]) -> VoiceSearchReceipt | None:
+    try:
+        return VoiceSearchReceipt.model_validate(facts)
+    except (TypeError, ValueError):
+        return None
+
+
+def voice_selection_receipt(
+    facts: Mapping[str, Any], *, candidate_set_id: Any, member_index: int
+) -> VoiceSelectionReceipt | None:
+    try:
+        return VoiceSelectionReceipt.model_validate({
+            **facts,
+            "candidate_set_id": str(candidate_set_id),
+            "member_index": member_index,
+        })
+    except (TypeError, ValueError):
+        return None
+
+
 def skill_saved_receipt(facts: Mapping[str, Any]) -> SkillSavedReceipt | None:
     try:
         return SkillSavedReceipt.model_validate({
@@ -376,6 +415,8 @@ __all__ = [
     "SkillSavedReceipt",
     "VideoReviewReceipt",
     "VideoRevisionReceipt",
+    "VoiceSearchReceipt",
+    "VoiceSelectionReceipt",
     "component_receipt",
     "music_search_receipt",
     "music_selection_receipt",
@@ -384,4 +425,6 @@ __all__ = [
     "skill_saved_receipt",
     "video_review_receipt",
     "video_revision_receipt",
+    "voice_search_receipt",
+    "voice_selection_receipt",
 ]

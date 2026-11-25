@@ -182,11 +182,23 @@ class FirstMotionBlock(BaseModel):
         max_length=2000,
         description="Optional spoken voiceover script for this motion block act (concise 12-22 EN words or 22-38 ZH chars per act).",
     )
+    caption_translations: list[str] | None = Field(
+        default=None,
+        max_length=16,
+        description=(
+            "Optional ordered list of concise second-language translation lines matching each spoken phrase/clause "
+            "in narration for bilingual subtitles. Line 1 is always derived verbatim from the spoken TTS cues; "
+            "each entry aligns onto Line 2 in lockstep."
+        ),
+    )
     caption_text: str | None = Field(
         default=None,
         min_length=1,
         max_length=600,
-        description="Optional explicit display/bilingual caption text override (e.g. '中文主句\\nEnglish subtitle') aligned to this act's speech window.",
+        description=(
+            "Optional bilingual translation override (prefer caption_translations). For single-language acts, omit "
+            "caption_text — captions are derived verbatim and millisecond-synced from narration automatically."
+        ),
     )
 
 
@@ -205,7 +217,7 @@ class CreateVideoArgs(BaseModel):
             "Ordered native declarative motion-graphics acts (statement_hook, product_showcase, "
             "device_mockup, chat_demo, flow_diagram, step_timeline, split_compare, bento_features, "
             "metric_grid, data_chart, quote_proof, kinetic_title, closing_cta) built sequentially "
-            "with optional narration, caption_text, resources, and act transitions."
+            "with optional narration, caption_translations, resources, and act transitions."
         ),
     )
     aspect: Literal["16:9", "9:16", "1:1"] = "16:9"
@@ -647,11 +659,9 @@ async def create_video(db, turn, args: CreateVideoArgs):
                         )
                         extra_audio_ops.append(AddTrack(op="add_track", track=dialogue_track))
 
-                    caption_display = mb.caption_text or mb.narration
-                    caption_style = _resolve_create_caption_style(
-                        comp_content.settings,
-                        caption_preset=args.caption_preset,
-                        is_bilingual="\n" in caption_display,
+                    from app.editing.caption_timing import (
+                        build_motion_block_caption_phrases,
+                        detect_text_language,
                     )
 
                     if narr_prep["mode"] == "prepared":
@@ -697,30 +707,35 @@ async def create_video(db, turn, args: CreateVideoArgs):
                             )
                         )
                         cues = narr_prep.get("cues") or []
-                        if mb.caption_text is not None or not cues:
-                            deferred_captions.append(
-                                (scene_id, speech_start, speech_end, caption_display, caption_style, None)
+                        timed_phrases, is_bilingual = build_motion_block_caption_phrases(
+                            mb.narration,
+                            cues=cues,
+                            duration_ms=float(narr_prep["duration_s"]) * 1000.0,
+                            language=eff_lang or "en",
+                            caption_translations=mb.caption_translations,
+                            caption_text=mb.caption_text,
+                        )
+                        caption_style = _resolve_create_caption_style(
+                            comp_content.settings,
+                            caption_preset=args.caption_preset,
+                            is_bilingual=is_bilingual,
+                        )
+                        prev_end = speech_start
+                        for phrase in timed_phrases:
+                            cs = max(
+                                prev_end,
+                                speech_start + seconds_to_ticks(phrase.time_begin_ms / 1000.0, rate),
                             )
-                        else:
-                            prev_end = speech_start
-                            for cue in cues:
-                                cue_text = str(cue.get("text") or "").strip()
-                                if not cue_text:
-                                    continue
-                                cs = max(
-                                    prev_end,
-                                    speech_start + seconds_to_ticks(float(cue["time_begin"]) / 1000.0, rate),
-                                )
-                                ce = min(
-                                    speech_end,
-                                    speech_start + seconds_to_ticks(float(cue["time_end"]) / 1000.0, rate),
-                                )
-                                if ce <= cs:
-                                    continue
-                                deferred_captions.append(
-                                    (scene_id, cs, ce, cue_text, caption_style, None)
-                                )
-                                prev_end = ce
+                            ce = min(
+                                speech_end,
+                                speech_start + seconds_to_ticks(phrase.time_end_ms / 1000.0, rate),
+                            )
+                            if ce <= cs:
+                                continue
+                            deferred_captions.append(
+                                (scene_id, cs, ce, phrase.text, caption_style, None)
+                            )
+                            prev_end = ce
                     else:
                         assert resolved_provider_voice_id is not None and eff_lang is not None
                         speech_clip_id = f"clp_speech_{scene_id}"
@@ -747,15 +762,29 @@ async def create_video(db, turn, args: CreateVideoArgs):
                                 ),
                             )
                         )
-                        derivation: CaptionDerivation | None = None
-                        primary_line = caption_display.split("\n", 1)[0]
-                        if caption_display == mb.narration or primary_line == mb.narration:
-                            derivation = CaptionDerivation(
-                                speech_object_id=speech_obj_id,
-                                state="derived",
-                                source_text_digest=speech_text_digest(mb.narration),
-                                alignment="minimax-t2a-v2-sentence-v1",
-                            )
+                        pending_line2: str | None = None
+                        if mb.caption_translations:
+                            cleaned_trans = [t.strip() for t in mb.caption_translations if t and t.strip()]
+                            if cleaned_trans:
+                                pending_line2 = " ".join(cleaned_trans)
+                        elif mb.caption_text and mb.caption_text.strip():
+                            lines = [ln.strip() for ln in mb.caption_text.splitlines() if ln.strip()]
+                            if len(lines) >= 2:
+                                pending_line2 = " ".join(lines[1:])
+                            elif len(lines) == 1 and detect_text_language(lines[0]) != detect_text_language(mb.narration, hint=eff_lang):
+                                pending_line2 = lines[0]
+                        caption_display = f"{mb.narration}\n{pending_line2}" if pending_line2 else mb.narration
+                        caption_style = _resolve_create_caption_style(
+                            comp_content.settings,
+                            caption_preset=args.caption_preset,
+                            is_bilingual=pending_line2 is not None,
+                        )
+                        derivation = CaptionDerivation(
+                            speech_object_id=speech_obj_id,
+                            state="derived",
+                            source_text_digest=speech_text_digest(mb.narration),
+                            alignment="minimax-t2a-v2-sentence-v1",
+                        )
                         deferred_captions.append(
                             (scene_id, start, end, caption_display, caption_style, derivation)
                         )

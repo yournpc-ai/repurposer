@@ -1286,16 +1286,51 @@ class ShowMusicCandidatesArgs(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     query: str | None = Field(default=None, max_length=200)
+    style_preset: str | None = Field(default=None, max_length=64)
+    mood: str | None = Field(default=None, max_length=64)
+    tags: list[str] | None = Field(default=None, max_length=12)
     pending_disposition: Literal["answer", "skip", "none"] = "none"
 
     @model_validator(mode="before")
     @classmethod
     def _read_tolerance(cls, data: Any) -> Any:
-        return tolerate_null_keys(data, "query", "pending_disposition")
+        return tolerate_null_keys(data, "query", "style_preset", "mood", "tags", "pending_disposition")
 
 
 class SelectMusicArgs(BaseModel):
     """用服务端标识选择之前已保存的一个 Music 候选。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    candidate_set_id: UUID
+    member_index: int = Field(ge=0)
+    pending_disposition: Literal["answer", "skip", "none"] = "none"
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_tolerance(cls, data: Any) -> Any:
+        return tolerate_null_keys(data, "pending_disposition")
+
+
+class ShowVoiceCandidatesArgs(BaseModel):
+    """展示永久音色库的可试听候选，不创建 Asset 或版本。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    language: str | None = Field(default=None, max_length=16)
+    style_preset: str | None = Field(default=None, max_length=64)
+    tone: str | None = Field(default=None, max_length=64)
+    query: str | None = Field(default=None, max_length=200)
+    pending_disposition: Literal["answer", "skip", "none"] = "none"
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_tolerance(cls, data: Any) -> Any:
+        return tolerate_null_keys(data, "language", "style_preset", "tone", "query", "pending_disposition")
+
+
+class SelectVoiceArgs(BaseModel):
+    """用服务端标识选择之前已保存的一个永久音色候选。"""
 
     model_config = ConfigDict(extra="forbid")
 

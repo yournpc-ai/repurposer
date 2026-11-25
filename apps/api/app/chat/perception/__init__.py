@@ -99,7 +99,7 @@ PERCEPTION_TOOLS: dict[str, PerceptionTool] = {
         PerceptionTool(
             name="search_voices",
             description=(
-                "按语言、风格预设、音色气质或关键词复用优先检索永久音色库（voices 表与已验证系统音色）。配音或设计新音色前先调用，优先复用已有 voice_id；无合适音色时再调用 design_voice。"
+                "按语言、风格预设、音色气质或关键词复用优先检索永久音色库（voices 表与已验证系统音色）。配音或设计新音色前先调用，优先复用已有 voice_id；需要用户试听比较时用 show_voice_candidates；无合适音色时再调用 design_voice。"
             ),
             params_model=SearchVoicesParams,
             execute=executes.search_voices,

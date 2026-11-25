@@ -46,6 +46,15 @@ def _member_payload(track: Music, query: str) -> dict[str, Any] | None:
         "license": track.license or "",
         "attribution": track.attribution or "",
         "query": query,
+        "mood": track.mood,
+        "scope": track.scope,
+        "status": track.status,
+        "tags": list(track.tags or []),
+        "compatible_styles": list(track.compatible_styles or []),
+        "instrumental": bool(track.instrumental),
+        "bpm": meta.get("bpm"),
+        "lufs": track.lufs,
+        "use_count": int(track.use_count or 0),
     }
     digest = meta.get("content_sha256")
     if isinstance(digest, str) and len(digest) == 64:
@@ -57,21 +66,25 @@ async def show_music_candidate_set(
     db: AsyncSession,
     *,
     owner_id: UUID,
-    query: str | None,
+    query: str | None = None,
+    style_preset: str | None = None,
+    mood: str | None = None,
+    tags: list[str] | None = None,
 ) -> dict[str, Any]:
     """Return up to five playable library tracks; never create an Asset/version."""
-    from app.pipeline.music import list_music  # deferred: pipeline weight
+    from app.pipeline.music import search_music_library  # deferred: pipeline weight
 
     normalized = (query or "").strip().lower()
-    catalog = await list_music(db, owner_id)
-    matches = [
-        track
-        for track in catalog
-        if not normalized or normalized in (
-            f"{track.mood} {track.title} "
-            f"{(track.meta if isinstance(track.meta, dict) else {}).get('style', '')}"
-        ).lower()
-    ]
+    matches = await search_music_library(
+        db,
+        owner_id=owner_id,
+        style_preset=style_preset,
+        mood=mood,
+        tags=tags,
+        query=query,
+        instrumental_only=False,
+        limit=25,
+    )
     members: list[dict[str, Any]] = []
     for track in matches:
         member = _member_payload(track, normalized)
@@ -85,16 +98,22 @@ async def show_music_candidate_set(
             members.append(member)
         if len(members) == 5:
             break
+    topic_parts = [
+        part.strip()
+        for part in (query, style_preset, mood, *(tags or []))
+        if isinstance(part, str) and part.strip()
+    ]
+    topic_label = " · ".join(topic_parts) if topic_parts else "Music library"
     if not members:
-        if normalized:
+        if topic_parts:
             raise MusicCandidateError(
-                f"no playable Music library tracks match {normalized!r}"
+                f"no playable Music library tracks match {topic_label!r}"
             )
         raise MusicCandidateError("the Music library has no playable tracks with real durations")
     return {
         "kind": "music_set",
         "candidate_set_id": str(uuid4()),
-        "topic": normalized or "Music library",
+        "topic": topic_label,
         "asset_id": None,
         "members": members,
     }
@@ -180,8 +199,8 @@ async def select_music_candidate(
     )
     music_id = UUID(member["music_id"])
     track = await db.get(Music, music_id)
-    if track is None or not (
-        track.is_public or track.generated_by_user_id == project.user_id
+    if track is None or track.status == "archived" or not (
+        track.is_public or track.scope == "platform" or track.generated_by_user_id == project.user_id
     ):
         raise MusicCandidateError("the selected Music library piece is no longer accessible")
     if track.title != member["title"] or track.duration_seconds != member["duration_seconds"]:
