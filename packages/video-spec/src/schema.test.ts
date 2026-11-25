@@ -104,12 +104,12 @@ test("centered transitions preserve cinematic kinds and default to crossfade", (
   assert.throws(() => parse({ end_frame: transition.cut_frame }));
 });
 
-test("the serialized native block library accepts all fifteen IDs", () => {
+test("the serialized native block library accepts all twenty IDs and validates interactive props", () => {
   const base = textSpec();
   const image = { path: "media/desktop.png", url: "asset.png", content_type: "image/png", digest: "a".repeat(64) };
-  const parse = (block_id: string, resources = [image]) => {
+  const parse = (block_id: string, resources = [image], props: Record<string, unknown> = {}) => {
     const clip = base.tracks[0].clips[0];
-    const object = { kind: "motion_block", block_id, block_version: 1, props: {}, resources,
+    const object = { kind: "motion_block", block_id, block_version: 1, props, resources,
       object_id: "block", layout: clip.object.layout, fit: "cover", transform: clip.object.transform, opacity: 1 };
     return videoSpecSchema.parse({ ...base, tracks: [{ ...base.tracks[0], clips: [{ ...clip, object, animations: [] }] }] });
   };
@@ -117,6 +117,22 @@ test("the serialized native block library accepts all fifteen IDs", () => {
     "chat_demo", "device_mockup", "flow_diagram", "split_compare", "step_timeline", "bento_features", "data_chart", "quote_proof", "kinetic_beat", "ui_montage"]) {
     parse(id);
   }
+  parse("code_terminal", [], { lines: ["make"] });
+  parse("logo_wall", [], { items: [{ text: "Forma" }] });
+  parse("cursor_magnetic_click", [], { headline: "Go", cta_label: "Open" });
+  assert.throws(() => parse("cursor_magnetic_click", [], { headline: "Go" }));
+  for (const target of [0.1, 0.9]) {
+    parse("zoom_follows_click", [image], { target_x: target, target_y: target });
+  }
+  const target = { target_x: 0.5, target_y: 0.5 };
+  for (const patch of [{ target_x: 0.09 }, { target_y: 0.91 }, { zoom_scale: 2.61 },
+    { click_at_ratio: 0.24 }, { accent_color: "#ffcc99" }, { extra: true }]) {
+    assert.throws(() => parse("zoom_follows_click", [image], { ...target, ...patch }));
+  }
+  assert.throws(() => parse("zoom_follows_click", [], target));
+  parse("browser_url_load", [image], { url_text: "example.com" });
+  assert.throws(() => parse("browser_url_load", [], { url_text: "example.com" }));
+  assert.throws(() => parse("browser_url_load", [image], { url_text: "" }));
   assert.throws(() => parse("unknown"));
   assert.throws(() => parse("ui_montage", []));
   assert.throws(() => parse("device_mockup", []));

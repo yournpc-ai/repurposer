@@ -61,6 +61,9 @@ MotionBlockId = Literal[
     "quote_proof",
     "kinetic_beat",
     "ui_montage",
+    "cursor_magnetic_click",
+    "zoom_follows_click",
+    "browser_url_load",
 ]
 
 # Verified against live MiniMax speech-2.6-hd `/get_voice` system catalog.
@@ -139,6 +142,30 @@ VoiceId = Literal[
 ]
 
 MOTION_BLOCK_CATALOG: dict[str, dict[str, Any]] = {
+    "cursor_magnetic_click": {
+        "id": "cursor_magnetic_click", "version": 1, "domain": "product", "category": "cursors",
+        "name": "Magnetic Click", "desc": "A capsule follows the approaching pointer, compresses and lights on contact.",
+        "use_for": ["Confirm a single invitation to act."], "avoid": ["Multiple competing actions."],
+        "supports_alpha": True, "suggested_duration_s": [2, 5],
+        "required_slots": ["headline", "cta_label"],
+        "optional_slots": ["eyebrow", "subcopy", "accent_color", "theme", "backdrop_style", "show_backdrop"],
+    },
+    "zoom_follows_click": {
+        "id": "zoom_follows_click", "version": 1, "domain": "product", "category": "cursors",
+        "name": "Zoom Follows Click", "desc": "Click normalized screenshot coordinates and push the lens toward the selected detail.",
+        "use_for": ["Show precisely where a feature lives."], "avoid": ["Uncaptured controls or a sequence of clicks."],
+        "supports_alpha": True, "suggested_duration_s": [2, 5],
+        "required_slots": ["image_resource"],
+        "optional_slots": ["headline", "callout_label", "zoom_scale", "click_at_ratio", "theme", "backdrop_style", "show_backdrop"],
+    },
+    "browser_url_load": {
+        "id": "browser_url_load", "version": 1, "domain": "product", "category": "interfaces",
+        "name": "Browser URL Load", "desc": "Type the supplied address, trace loading progress and resolve a pinned product capture.",
+        "use_for": ["Introduce a site before demonstrating its workflow."], "avoid": ["Live navigation or an unverified destination."],
+        "supports_alpha": True, "suggested_duration_s": [2, 5],
+        "required_slots": ["image_resource"],
+        "optional_slots": ["headline", "badge", "theme", "backdrop_style", "show_backdrop"],
+    },
     "chat_demo": {
         "id": "chat_demo", "version": 1, "domain": "product", "category": "interfaces",
         "name": "Chat Demo",

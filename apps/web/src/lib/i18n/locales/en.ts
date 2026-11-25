@@ -2361,6 +2361,7 @@ const en = {
     textInstruction: "Apply the {{name}} text style (text_preset: {{id}}) to the text.",
     categories: {
       interfaces: "Interfaces",
+      cursors: "Cursor effects",
       titles: "Titles",
       code_terminal: "Code & terminal",
       logos_partners: "Partner logos",
@@ -2378,6 +2379,9 @@ const en = {
       fx_display: "Display effects",
     },
     summaries: {
+      cursor_magnetic_click: "A button draws the pointer in and a ripple marks the click.",
+      zoom_follows_click: "The camera zooms in on the point clicked in a screenshot.",
+      browser_url_load: "An address types out and a progress bar leads into the page reveal.",
       chat_demo: "Messages reveal a prompt, the steps and the result.",
       kinetic_beat: "Words flip or scroll to a short musical beat.",
       ui_montage: "Interface captures fan out or cascade in quick succession.",

@@ -24,7 +24,7 @@ import re
 from typing import TYPE_CHECKING, Annotated, Any, Literal, get_args
 from uuid import UUID
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, JsonValue, field_validator, model_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, JsonValue, ValidationError, field_validator, model_validator
 
 from app.editing.catalog import MotionBlockId
 from app.editing.fonts import FONT_ID, FONT_SET_DIGEST, LAYOUT_VERSION, SEGMENTATION_VERSION
@@ -877,11 +877,36 @@ class NarrativeFields(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True, strict=True)
 
 
-class NarrativeStyle(NarrativeFields):
+class StudioFields(NarrativeFields):
     theme: Literal["light", "dark"] | None = Field(default=None, exclude_if=lambda v: v is None)
     backdrop_style: BackdropStyle | None = Field(default=None, exclude_if=lambda v: v is None)
-    accent_color: Annotated[str, _HEX_COLOR] | None = Field(default=None, exclude_if=lambda v: v is None)
     show_backdrop: bool = True
+
+
+class NarrativeStyle(StudioFields):
+    accent_color: Annotated[str, _HEX_COLOR] | None = Field(default=None, exclude_if=lambda v: v is None)
+
+
+class CursorMagneticClickProps(NarrativeStyle):
+    eyebrow: ShortLabel | None = None
+    headline: BlockHeading
+    cta_label: ShortLabel
+    subcopy: BlockDetail | None = None
+
+
+class ZoomFollowsClickProps(StudioFields):
+    headline: BlockHeading | None = None
+    callout_label: ShortLabel | None = None
+    target_x: float = Field(ge=0.1, le=0.9)
+    target_y: float = Field(ge=0.1, le=0.9)
+    zoom_scale: float = Field(default=1.85, ge=1.3, le=2.6)
+    click_at_ratio: float = Field(default=0.4, ge=0.25, le=0.65)
+
+
+class BrowserUrlLoadProps(StudioFields):
+    url_text: BlockDetail
+    headline: BlockHeading | None = None
+    badge: ShortLabel | None = None
 
 
 class TitledNarrative(NarrativeStyle):
@@ -1118,6 +1143,9 @@ MOTION_BLOCK_PROP_MODELS: dict[str, type[BaseModel]] = {
     "chat_demo": ChatDemoProps,
     "code_terminal": CodeTerminalProps,
     "logo_wall": LogoWallProps,
+    "cursor_magnetic_click": CursorMagneticClickProps,
+    "zoom_follows_click": ZoomFollowsClickProps,
+    "browser_url_load": BrowserUrlLoadProps,
     "device_mockup": DeviceMockupProps,
     "flow_diagram": FlowDiagramProps,
     "split_compare": SplitCompareProps,
@@ -1128,6 +1156,17 @@ MOTION_BLOCK_PROP_MODELS: dict[str, type[BaseModel]] = {
     "kinetic_beat": KineticBeatProps,
     "ui_montage": UiMontageProps,
 }
+
+
+def validate_motion_block_props(block_id: MotionBlockId, props: dict[str, Any]) -> BaseModel:
+    try:
+        return MOTION_BLOCK_PROP_MODELS[block_id].model_validate(props)
+    except ValidationError as exc:
+        issues = [
+            f"{'.'.join(map(str, error['loc'])) or 'props'}: {error['msg']}"
+            for error in exc.errors(include_input=False, include_url=False)
+        ]
+        raise ValueError(f"Invalid {block_id} props. Check get_blocks for its schema. " + "; ".join(issues)) from exc
 
 
 class MotionBlockObject(BaseModel):
@@ -1156,8 +1195,7 @@ class MotionBlockObject(BaseModel):
 
     @model_validator(mode="after")
     def _validate_block_props_and_resources(self) -> MotionBlockObject:
-        model = MOTION_BLOCK_PROP_MODELS[self.block_id]
-        validated = model.model_validate(self.props)
+        validated = validate_motion_block_props(self.block_id, self.props)
         self.props = validated.model_dump(mode="json")
         paths = [r.path for r in self.resources]
         if len(paths) != len(set(paths)):
@@ -1171,7 +1209,7 @@ class MotionBlockObject(BaseModel):
             raise ValueError("device_mockup requires one or two pinned image resources")
         if self.block_id == "chat_demo" and len(self.resources) > 1:
             raise ValueError("chat_demo accepts one result preview image")
-        if self.block_id in {"product_showcase", "ui_montage"} and not self.resources:
+        if self.block_id in {"product_showcase", "ui_montage", "zoom_follows_click", "browser_url_load"} and not self.resources:
             raise ValueError(f"{self.block_id} requires at least one pinned image resource")
         return self
 

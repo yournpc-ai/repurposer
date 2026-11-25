@@ -96,6 +96,9 @@ BLUEPRINT_CAPABILITY = "slot_blueprint_v1"
 
 # Props that carry brand/project-specific content (stripped during extraction).
 _CONTENT_PROP_KEYS: dict[str, set[str]] = {
+    "cursor_magnetic_click": {"eyebrow", "headline", "cta_label", "subcopy"},
+    "zoom_follows_click": {"headline", "callout_label", "target_x", "target_y"},
+    "browser_url_load": {"url_text", "headline", "badge"},
     "kinetic_beat": {"headline", "highlight_phrase", "prefix", "words", "left_text", "right_text", "badge_text", "items"},
     "ui_montage": {"headline", "badge"},
     "code_terminal": {"title", "lines", "prompt_prefix"},
@@ -118,6 +121,9 @@ _CONTENT_PROP_KEYS: dict[str, set[str]] = {
 _NARRATIVE_STYLE = {"theme", "backdrop_style", "accent_color", "show_backdrop"}
 
 _STYLE_PROP_KEYS: dict[str, set[str]] = {
+    "cursor_magnetic_click": _NARRATIVE_STYLE,
+    "zoom_follows_click": (_NARRATIVE_STYLE - {"accent_color"}) | {"zoom_scale", "click_at_ratio"},
+    "browser_url_load": _NARRATIVE_STYLE - {"accent_color"},
     "kinetic_beat": _NARRATIVE_STYLE | {"mode", "rows", "badge_icon", "scale_emphasis", "entrance_duration_s"},
     "ui_montage": _NARRATIVE_STYLE | {"layout_mode", "cut_interval_s", "entrance_duration_s"},
     "code_terminal": _NARRATIVE_STYLE | {"mode", "highlight_line"},
@@ -496,6 +502,13 @@ def extract_skill_draft_from_composition(
         content_keys = _CONTENT_PROP_KEYS.get(obj.block_id, set())
         req_slots = [k for k in cat["required_slots"] if k not in style_defaults]
         opt_slots = [k for k in cat["optional_slots"] if k in content_keys or k.endswith("_resource")]
+
+        if obj.block_id == "zoom_follows_click":
+            req_slots.extend(["target_x", "target_y"])
+        if obj.block_id == "browser_url_load":
+            req_slots.append("url_text")
+        if obj.block_id in {"cursor_magnetic_click", "zoom_follows_click", "browser_url_load"}:
+            opt_slots = [key for key in opt_slots if obj.props.get(key)]
 
         if obj.block_id in {"code_terminal","logo_wall"}:
             group = "lines" if obj.block_id == "code_terminal" else "items"

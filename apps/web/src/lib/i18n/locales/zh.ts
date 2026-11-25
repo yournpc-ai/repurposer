@@ -2274,6 +2274,7 @@ const zh: Resources = {
     textInstruction: "请对文字应用「{{name}}」字效（text_preset: {{id}}）。",
     categories: {
       interfaces: "界面",
+      cursors: "光标动效",
       titles: "标题",
       code_terminal: "代码与终端",
       logos_partners: "合作标志",
@@ -2291,6 +2292,9 @@ const zh: Resources = {
       fx_display: "装饰字效",
     },
     summaries: {
+      cursor_magnetic_click: "光标靠近时按钮轻轻吸附，按下后泛起一圈涟漪。",
+      zoom_follows_click: "光标点中截图细节，镜头随即推近。",
+      browser_url_load: "地址栏逐字输入网址，进度条推进，页面随之展开。",
       chat_demo: "消息依次呈现提问、步骤和结果。",
       kinetic_beat: "文字随短促节拍翻转或滚动。",
       ui_montage: "界面截图快速切换、展开或层叠。",

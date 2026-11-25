@@ -51,7 +51,7 @@ def _styles(energy):
 def builtin_rows():
     visuals, sounds = [], []
     for key, meta in MOTION_BLOCK_CATALOG.items():
-        zh, category, mood, energy, sound, props = BLOCKS[key]
+        zh, category, mood, energy, recipes, props = BLOCKS[key]
         model = MOTION_BLOCK_PROP_MODELS[key]
         model.model_validate(props)
         required = "image_resource" in meta["required_slots"]
@@ -72,7 +72,7 @@ def builtin_rows():
                 avoid=meta["avoid"],
                 tags=[category, mood],
                 compatible_styles=_styles(energy),
-                recommended_sfx=["dsp_" + sound],
+                recommended_sfx=["dsp_" + recipe for recipe in recipes],
                 slot_summary={
                     "needs_media": "image_or_video" if required else "none",
                     "required": meta["required_slots"],
@@ -208,17 +208,19 @@ async def sync_builtin_catalog(db):
 
 async def ensure_builtin_catalog(db):
     """Refresh missing built-ins on first read when startup hooks are bypassed."""
-    visual = select(VisualPreset.id).where(
+    sentinels = ("code_terminal", "browser_url_load")
+    visual_count = select(func.count()).select_from(VisualPreset).where(
         VisualPreset.asset_kind == "block",
-        VisualPreset.preset_id == "code_terminal",
+        VisualPreset.preset_id.in_(sentinels),
+        VisualPreset.scope == "platform",
         VisualPreset.is_builtin,
-    ).exists()
+    ).scalar_subquery()
     sound = select(SoundEffect.id).where(
         SoundEffect.slug == "dsp_tension_radar",
         SoundEffect.domain == "video",
         SoundEffect.engine_kind == "dsp_recipe",
         SoundEffect.scope == "platform",
     ).exists()
-    if not await db.scalar(select(visual & sound)):
+    if not await db.scalar(select((visual_count == len(sentinels)) & sound)):
         await sync_builtin_catalog(db)
         await db.commit()

@@ -3,12 +3,27 @@
 from app.tools.video.presets import MOTION_PREVIEW_CATALOG
 
 BLOCKS = {
+    "cursor_magnetic_click": (
+        "磁吸点击", "cursors", "assured", "medium", ("tap_glass", "select_pill"),
+        {"eyebrow": "Material library", "headline": "A closer look.", "cta_label": "Open collection",
+         "subcopy": "Explore the surface studies.", "accent_color": "#E1AA80"},
+    ),
+    "zoom_follows_click": (
+        "点击推焦", "cursors", "precise", "medium", ("click", "whoosh_micro"),
+        {"headline": "Look into the detail.", "callout_label": "Surface detail",
+         "target_x": 0.68, "target_y": 0.58},
+    ),
+    "browser_url_load": (
+        "浏览器载入", "interfaces", "editorial", "medium", ("type_soft_key", "nav_forward"),
+        {"url_text": "forma.example/library", "headline": "Inside the collection.", "badge": "Library",
+         "theme": "light", "backdrop_style": "editorial_studio"},
+    ),
     "chat_demo": (
         "对话演示",
         "interfaces",
         "conversational",
         "medium",
-        "select_tick",
+        ("select_tick",),
         {
             "messages": [
                 {"role": "user", "text": "Show my projects"},
@@ -21,7 +36,7 @@ BLOCKS = {
         "titles",
         "kinetic",
         "high",
-        "kinetic_thud",
+        ("kinetic_thud",),
         {"headline": "Move with purpose"},
     ),
     "ui_montage": (
@@ -29,7 +44,7 @@ BLOCKS = {
         "interfaces",
         "kinetic",
         "high",
-        "swoosh_cut",
+        ("swoosh_cut",),
         {"layout_mode": "rapid_cut"},
     ),
     "code_terminal": (
@@ -37,7 +52,7 @@ BLOCKS = {
         "code_terminal",
         "technical",
         "medium",
-        "select_tick",
+        ("select_tick",),
         MOTION_PREVIEW_CATALOG["code_terminal:typing_cli"],
     ),
     "logo_wall": (
@@ -45,7 +60,7 @@ BLOCKS = {
         "logos_partners",
         "confident",
         "medium",
-        "velvet_pass",
+        ("velvet_pass",),
         MOTION_PREVIEW_CATALOG["logo_wall:marquee_strip"],
     ),
     "device_mockup": (
@@ -53,7 +68,7 @@ BLOCKS = {
         "devices",
         "premium",
         "medium",
-        "whoosh",
+        ("whoosh",),
         {"layout": "split_focus", **MOTION_PREVIEW_CATALOG["device_mockup:split_focus"]},
     ),
     "flow_diagram": (
@@ -61,7 +76,7 @@ BLOCKS = {
         "agents_flows",
         "precise",
         "medium",
-        "toggle_on",
+        ("toggle_on",),
         {"nodes": [{"title": title} for title in ("Capture", "Review", "Publish")]},
     ),
     "split_compare": (
@@ -69,7 +84,7 @@ BLOCKS = {
         "interfaces",
         "analytical",
         "medium",
-        "velvet_pass",
+        ("velvet_pass",),
         {
             "left_heading": "Manual",
             "right_heading": "Assisted",
@@ -82,7 +97,7 @@ BLOCKS = {
         "agents_flows",
         "clear",
         "medium",
-        "select_tick",
+        ("select_tick",),
         {"steps": [{"title": title} for title in ("Outline", "Design", "Render")]},
     ),
     "bento_features": (
@@ -90,7 +105,7 @@ BLOCKS = {
         "galleries",
         "modern",
         "medium",
-        "soft_pop",
+        ("soft_pop",),
         {
             "cards": [
                 {"title": title, "detail": detail}
@@ -107,7 +122,7 @@ BLOCKS = {
         "charts_numbers",
         "analytical",
         "medium",
-        "metric_chime",
+        ("metric_chime",),
         {
             "title": "Weekly activity",
             "chart_type": "bar",
@@ -119,7 +134,7 @@ BLOCKS = {
         "testimonials",
         "reflective",
         "subtle",
-        "title_bloom",
+        ("title_bloom",),
         {"quote": "Every detail counts.", "author": "Studio notes"},
     ),
     "statement_hook": (
@@ -127,7 +142,7 @@ BLOCKS = {
         "titles",
         "bold",
         "high",
-        "impact",
+        ("impact",),
         {"headline": "Make the first second count."},
     ),
     "kinetic_title": (
@@ -135,7 +150,7 @@ BLOCKS = {
         "titles",
         "kinetic",
         "high",
-        "title_bloom",
+        ("title_bloom",),
         {"headline": "Made for motion"},
     ),
     "product_showcase": (
@@ -143,7 +158,7 @@ BLOCKS = {
         "interfaces",
         "premium",
         "medium",
-        "click",
+        ("click",),
         {"badge": "Workspace"},
     ),
     "metric_grid": (
@@ -151,7 +166,7 @@ BLOCKS = {
         "charts_numbers",
         "precise",
         "medium",
-        "metric_chime",
+        ("metric_chime",),
         {"items": [{"value": "12", "label": "Projects"}, {"value": "3", "label": "Teams"}]},
     ),
     "closing_cta": (
@@ -159,12 +174,15 @@ BLOCKS = {
         "endings_cta",
         "confident",
         "medium",
-        "confirm_chime",
+        ("confirm_chime",),
         {"brand_name": "Studio", "tagline": "Start creating."},
     ),
 }
 
 BLOCK_SUMMARIES = {
+    "cursor_magnetic_click": "A physical pointer draws a pill toward it, then a ring of light confirms the press.",
+    "zoom_follows_click": "A click anchors a damped camera push into one region of a pinned product screen.",
+    "browser_url_load": "A typed address and fine load indicator introduce a captured page in a brushed-metal frame.",
     "chat_demo": "Alternating messages reveal a real prompt, its work steps and a compact result.",
     "kinetic_beat": "Punchy typography hits, flips or scrolls on a short musical beat.",
     "ui_montage": "Pinned interface captures cut, fan out or cascade in quick succession.",

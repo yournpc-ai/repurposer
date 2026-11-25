@@ -3,14 +3,14 @@ import re
 from typing import Annotated, Any, Literal
 from uuid import UUID, uuid5
 
-from pydantic import WithJsonSchema, BaseModel, ConfigDict, Field, model_validator
+from pydantic import WithJsonSchema, BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic.json_schema import SkipJsonSchema
 from sqlalchemy import select
 
 from app.agents.tool_progress import current_call_id
-from app.editing.catalog import MotionBlockId
+from app.editing.catalog import MOTION_BLOCK_CATALOG, MotionBlockId
 from app.editing.edits import AddClip, AddScene, AddTrack, BindSource, SetTransition, apply_ops
-from app.editing.revisions import motion_block_ops, text_safe_layout
+from app.editing.revisions import coerce_motion_block_props, motion_block_ops, text_safe_layout
 from app.editing.caption_timing import build_motion_block_caption_phrases, detect_text_language
 from app.editing.schemas import (
     AudioObject,
@@ -29,6 +29,7 @@ from app.editing.schemas import (
     TransitionKind,
     VersionSettings,
     speech_text_digest,
+    validate_motion_block_props,
 )
 from app.editing.store import RequestMismatch, apply_composition_edits, snapshot_facts
 from app.editing.styles import CompositionStyle, StylePresetId, resolve_style_tokens
@@ -59,7 +60,7 @@ async def resolve_motion_block_resources(
     *,
     owner_id: UUID,
     project_id: UUID,
-    block_id: str,
+    block_id: MotionBlockId,
     props: dict[str, Any],
     resources: list[UUID] | None,
     view_id: str | None = None,
@@ -106,6 +107,9 @@ async def resolve_motion_block_resources(
             "snapshot_digest": snap.digest,
             "content_type": ctype,
         })
+    # Authoring inputs may refer to captured elements. Check the resolved props
+    # before preparing narration or using them to assemble a timeline.
+    validate_motion_block_props(block_id, coerce_motion_block_props(block_id, resolved_props))
     return resolved_props, resolved_resources
 
 
@@ -140,22 +144,31 @@ class FirstShot(CompositionSceneAuthoring):
     )
 
 
-class FirstMotionBlock(BaseModel):
+class SelectedMotionBlock(BaseModel):
     model_config = ConfigDict(extra="forbid")
     block_id: Annotated[MotionBlockId, WithJsonSchema({"type": "string"})] = Field(
-        description="Block ID selected with search_blocks.",
+        description="Choose a block with search_blocks and inspect its props with get_blocks.",
     )
+
+    props: dict[str, Any] = Field(description=(
+        "Props matching the schema returned by get_blocks. For metric_grid, include the unit in "
+        "items[].value and keep items[].label as the metric name."
+    ))
+
+    @field_validator("block_id", mode="before")
+    @classmethod
+    def reject_unknown_block(cls, value: Any) -> str:
+        if not isinstance(value, str) or value not in MOTION_BLOCK_CATALOG:
+            raise ValueError("Unknown block_id. Use search_blocks to select a block, then get_blocks for its props.")
+        return value
+
+
+class FirstMotionBlock(SelectedMotionBlock):
     duration_seconds: float = Field(
         gt=0,
         le=60,
         allow_inf_nan=False,
         description="Duration in seconds for this motion block act.",
-    )
-    props: dict[str, Any] = Field(
-        description=(
-            "Declarative props for the chosen motion block. For metric_grid, items[].value must "
-            "include its unit/symbol (e.g. '3s', '85%', '4.2×', '$1.8M'), keeping label strictly as the metric name."
-        ),
     )
     resources: list[UUID] | None = Field(
         default=None,

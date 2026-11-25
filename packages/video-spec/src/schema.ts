@@ -232,28 +232,57 @@ const logoProps = z.object({
   items:z.array(z.object({text:shortLabel, resource_index:z.number().int().min(0).max(15).nullish()}).strict()).min(1).max(12),
 }).strict();
 
+const screenStyleProps = {
+  theme: studioProps.theme,
+  backdrop_style: studioProps.backdrop_style,
+  show_backdrop: studioProps.show_backdrop,
+};
+const headline = z.string().trim().min(1).max(80);
+const detail = z.string().trim().min(1).max(120);
+const targetCoordinate = z.number().min(0.1).max(0.9);
+const interactiveProps = {
+  cursor_magnetic_click: z.object({
+    ...studioProps, eyebrow: shortLabel.nullish(), headline, cta_label: shortLabel, subcopy: detail.nullish(),
+  }).strict(),
+  zoom_follows_click: z.object({
+    ...screenStyleProps, headline: headline.nullish(), callout_label: shortLabel.nullish(),
+    target_x: targetCoordinate, target_y: targetCoordinate,
+    zoom_scale: z.number().min(1.3).max(2.6).optional(),
+    click_at_ratio: z.number().min(0.25).max(0.65).optional(),
+  }).strict(),
+  browser_url_load: z.object({
+    ...screenStyleProps, url_text: detail, headline: headline.nullish(), badge: shortLabel.nullish(),
+  }).strict(),
+};
+export type InteractiveBlockProps = {
+  [K in keyof typeof interactiveProps]: z.infer<(typeof interactiveProps)[K]>;
+};
+
+export const motionBlockIds = [
+  "kinetic_title",
+  "product_showcase",
+  "statement_hook",
+  "metric_grid",
+  "closing_cta",
+  "chat_demo",
+  "code_terminal", "logo_wall",
+  "cursor_magnetic_click", "zoom_follows_click", "browser_url_load",
+  "device_mockup",
+  "flow_diagram",
+  "split_compare",
+  "step_timeline",
+  "bento_features",
+  "data_chart",
+  "quote_proof",
+  "kinetic_beat",
+  "ui_montage",
+] as const;
+
 const motionBlockObjectSchema = z
   .object({
     kind: z.literal("motion_block"),
     object_id: z.string().min(1),
-    block_id: z.enum([
-      "kinetic_title",
-      "product_showcase",
-      "statement_hook",
-      "metric_grid",
-      "closing_cta",
-      "chat_demo",
-      "code_terminal", "logo_wall",
-      "device_mockup",
-      "flow_diagram",
-      "split_compare",
-      "step_timeline",
-      "bento_features",
-      "data_chart",
-      "quote_proof",
-      "kinetic_beat",
-      "ui_montage",
-    ]),
+    block_id: z.enum(motionBlockIds),
     block_version: z.literal(1),
     props: z.record(z.string(), z.unknown()),
     resources: z.array(motionBlockResourceSchema).max(16),
@@ -425,6 +454,18 @@ const clipSchema = z
     }
     if (clip.object.kind === "motion_block") {
       const block = clip.object;
+      if (block.block_id in interactiveProps) {
+        const schema = interactiveProps[block.block_id as keyof typeof interactiveProps];
+        const parsed = schema.safeParse(block.props);
+        if (!parsed.success) {
+          for (const issue of parsed.error.issues) {
+            ctx.addIssue({ ...issue, path: ["object", "props", ...issue.path] });
+          }
+        }
+        if (block.block_id !== "cursor_magnetic_click" && !block.resources.length) {
+          ctx.addIssue({ code: z.ZodIssueCode.custom, message: `${block.block_id} requires a pinned image` });
+        }
+      }
       if (block.block_id === "code_terminal" && !terminalProps.safeParse(block.props).success) {
         ctx.addIssue({code:z.ZodIssueCode.custom, message:"Invalid code_terminal props"});
       }

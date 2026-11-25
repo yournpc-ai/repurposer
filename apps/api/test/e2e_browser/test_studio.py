@@ -7,6 +7,7 @@ from playwright.async_api import expect
 import pytest
 from sqlalchemy import select
 
+from app.editing.catalog import MOTION_BLOCK_CATALOG
 from app.models.tables import Composition, CompositionVersion, SkillVersion
 from test.support.chat_http import tool
 from scripts.eval_chat_e2e import parse_sse_frames
@@ -191,7 +192,7 @@ async def test_visual_preset_galleries_and_citation(studio):
     await page.emulate_media(reduced_motion="no-preference")
     await open_preset_library(page)
     for kind, label, name, alternate, count, citation in (
-        ("blocks", "Blocks", "Logo Wall", "标志墙", 17, "block_id: logo_wall"),
+        ("blocks", "Blocks", "Logo Wall", "标志墙", len(MOTION_BLOCK_CATALOG), "block_id: logo_wall"),
         ("text", "Text", "Neon Pulse", "霓虹辉光", 24, "text_preset: neon_pulse"),
     ):
         if kind == "text":
@@ -211,3 +212,28 @@ async def test_visual_preset_galleries_and_citation(studio):
         composer = page.get_by_role("textbox")
         await expect(composer).to_contain_text(citation)
         await studio.capture(f"workbench-{kind}-gallery", card, composer)
+
+
+async def test_interactive_blocks_in_chinese_gallery(studio):
+    page = studio.page
+    await page.evaluate("document.cookie = 'repurposer-lang=zh;path=/'")
+    await page.reload()
+    await page.emulate_media(reduced_motion="no-preference")
+    presets = page.get_by_role("tab", name="预设库", exact=True)
+    if not await presets.is_visible():
+        await page.get_by_role("button", name="打开右侧看板", exact=True).click()
+    await presets.click()
+    await page.get_by_role("radio", name="动效块", exact=True).click()
+    gallery = page.get_by_role("region", name="动效块", exact=True)
+    for block_id, title, category in (
+        ("cursor_magnetic_click", "磁吸点击", "光标动效"),
+        ("zoom_follows_click", "点击推焦", "光标动效"),
+        ("browser_url_load", "浏览器载入", "界面"),
+    ):
+        card = gallery.get_by_role("article", name=title, exact=True)
+        await expect(card.get_by_text(category, exact=True)).to_be_visible()
+        await expect(card.locator("p").last).to_contain_text(re.compile(r"[\u4e00-\u9fff]"))
+        await card.hover()
+        await expect(card.get_by_role("button", name=f"暂停{title}")).to_be_visible()
+        await card.get_by_role("button", name="引用到对话").click()
+        await expect(page.get_by_role("textbox")).to_contain_text(f"block_id: {block_id}")

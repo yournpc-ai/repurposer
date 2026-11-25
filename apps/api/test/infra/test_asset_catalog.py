@@ -10,7 +10,7 @@ from app.catalog.search import BlockArgs, SearchArgs, catalog_details, search_ca
 from app.catalog.sfx_ingest import Recording, ingest_recording
 from app.config import settings
 from app.catalog.sync import ensure_builtin_catalog, sync_builtin_catalog
-from app.editing.catalog import SOUND_ACOUSTICS
+from app.editing.catalog import MOTION_BLOCK_CATALOG, SOUND_ACOUSTICS
 from app.models.tables import SoundEffect, User, VisualPreset
 from test.support.db_helpers import _user, full_api_client
 
@@ -33,7 +33,7 @@ async def test_catalog_sync_visibility_and_gallery(database):
                     select(VisualPreset.asset_kind, func.count()).group_by(VisualPreset.asset_kind)
                 )
             ).all()
-        ) == {"block": 17, "transition": 5, "text_preset": 24}
+        ) == {"block": len(MOTION_BLOCK_CATALOG), "transition": 5, "text_preset": 24}
         assert await db.scalar(select(func.count()).select_from(SoundEffect)) == 80
         assert not await db.scalar(select(func.count()).select_from(SoundEffect).where(
             SoundEffect.engine_kind == "dsp_recipe", func.jsonb_array_length(SoundEffect.waveform_peaks) != 0))

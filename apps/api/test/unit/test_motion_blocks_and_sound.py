@@ -1078,7 +1078,7 @@ def _skill_draft_for_blueprint(name: str, bp: SkillBlueprintV1) -> SkillDraft:
 
 
 @pytest.mark.parity
-def test_compile_all_17_motion_blocks_and_zod_video_spec_parity():
+def test_compile_all_20_motion_blocks_and_zod_video_spec_parity():
     bp = _make_all_13_blocks_blueprint()
     from typing import get_args
     from app.editing.catalog import MotionBlockId
@@ -1090,7 +1090,11 @@ def test_compile_all_17_motion_blocks_and_zod_video_spec_parity():
         BlueprintAct(act_id="act_17", block_id="logo_wall", role="partners", target_duration_s=2, min_duration_s=1),
         BlueprintAct(act_id="act_15", block_id="ui_montage", role="screens", target_duration_s=0.35, min_duration_s=0.2),
     ])
-    assert len(set(get_args(MotionBlockId))) == 17
+    for index, block in enumerate(("cursor_magnetic_click", "zoom_follows_click", "browser_url_load"), 18):
+        bp.acts.append(BlueprintAct(act_id=f"act_{index}", block_id=block, role="interaction",
+                                    target_duration_s=3, min_duration_s=1))
+    assert len(set(get_args(MotionBlockId))) == 20
+    assert set(MOTION_BLOCK_PROP_MODELS) == set(get_args(MotionBlockId))
     assert {a.block_id for a in bp.acts} == set(MOTION_BLOCK_CATALOG) == set(get_args(MotionBlockId)) == set(INHERITABLE_BLOCK_STYLE_KEYS)
 
     # Provide synthetic SFX snapshots for all 4 blueprint SFX cues
@@ -1124,7 +1128,7 @@ def test_compile_all_17_motion_blocks_and_zod_video_spec_parity():
 
             # Verify Pillow wireframe PNGs exist for product_showcase (16:9),
             # device_mockup dual (16:9 + 9:16), and chat_demo preview (16:9)
-            assert len(assets) == 7
+            assert len(assets) == 9
             assert sum(asset.width == 640 for asset in assets) == 3
             dims = [(a.width, a.height) for a in assets]
             assert (1280, 720) in dims
@@ -1136,7 +1140,7 @@ def test_compile_all_17_motion_blocks_and_zod_video_spec_parity():
 
             # Verify HUD track has 1 corner TextObject badge per act
             hud_track = next(t for t in spec["tracks"] if t["track_id"] == "trk_slot_hud")
-            assert len(hud_track["clips"]) == 17
+            assert len(hud_track["clips"]) == 20
             for clip in hud_track["clips"]:
                 assert clip["object"]["kind"] == "text"
                 assert clip["object"]["style"]["background_mode"] == "pill"
@@ -1166,11 +1170,11 @@ def test_compile_all_17_motion_blocks_and_zod_video_spec_parity():
     specs_to_validate.extend(build_motion_preview_spec(key) for key in MOTION_PREVIEW_CATALOG)
     # Verify exact parity against packages/video-spec Zod videoSpecSchema.parse!
     node_script = (
-        'import { videoSpecSchema } from "./src/index.ts";'
+        'import { videoSpecSchema, motionBlockIds } from "./src/index.ts";'
         'import fs from "node:fs";'
         'const specs = JSON.parse(fs.readFileSync(0, "utf-8"));'
         'for (const s of specs) { videoSpecSchema.parse(s); }'
-        'console.log("OK:" + specs.length);'
+        'console.log(JSON.stringify({count: specs.length, ids: motionBlockIds}));'
     )
     proc = subprocess.run(
         ["node", "--import", "tsx", "-e", node_script],
@@ -1181,7 +1185,9 @@ def test_compile_all_17_motion_blocks_and_zod_video_spec_parity():
         check=False,
     )
     assert proc.returncode == 0, f"Zod videoSpecSchema validation failed:\n{proc.stderr}\n{proc.stdout}"
-    assert f"OK:{len(specs_to_validate)}" in proc.stdout
+    validated = json.loads(proc.stdout)
+    assert validated["count"] == len(specs_to_validate)
+    assert set(validated["ids"]) == set(MOTION_BLOCK_CATALOG)
 
 
 def test_skill_saved_receipt_validation():
@@ -1225,3 +1231,81 @@ def test_montage_interval_contract(mode):
     assert UiMontageProps(layout_mode=mode, cut_interval_s=0.35).layout_mode == mode
     with pytest.raises(ValueError):
         UiMontageProps(layout_mode=mode, cut_interval_s=0.17)
+
+
+@pytest.mark.parametrize("name", ["create_video", "insert_motion_block", "update_motion_block"])
+def test_motion_tool_schema_discovers_blocks_at_call_time(name):
+    from app.agents.tool_loop import tool_spec
+    from app.chat.editor import EDITOR_TOOLS
+
+    tool = next(tool for tool in EDITOR_TOOLS if tool.name == name)
+    parameters = tool_spec(tool)["function"]["parameters"]
+    if name == "create_video":
+        item = parameters["properties"]["motion_blocks"]["items"]["$ref"].rsplit("/", 1)[1]
+        fields = parameters["$defs"][item]["properties"]
+    else:
+        fields = parameters["properties"]
+    if name == "update_motion_block":
+        assert set(fields) == {"clip_id", "props_patch"}
+    else:
+        assert fields["block_id"].get("type") == "string"
+        assert "enum" not in fields["block_id"]
+        bad = {"block_id": "unknown", "props": {}}
+        if name == "create_video":
+            arguments = {"name": "Test", "motion_blocks": [dict(bad, duration_seconds=2)]}
+        else:
+            arguments = dict(bad, start_seconds=0, end_seconds=2)
+        with pytest.raises(ValueError, match="search_blocks.*get_blocks"):
+            tool.params_model.model_validate(arguments)
+    assert all(f'"{block_id}"' not in json.dumps(parameters) for block_id in MOTION_BLOCK_CATALOG)
+
+
+@pytest.mark.parametrize(("block_id", "sfx"), [
+    ("cursor_magnetic_click", ["dsp_tap_glass", "dsp_select_pill"]),
+    ("zoom_follows_click", ["dsp_click", "dsp_whoosh_micro"]),
+    ("browser_url_load", ["dsp_type_soft_key", "dsp_nav_forward"]),
+])
+def test_interactive_catalog_and_blueprint_replacement(block_id, sfx):
+    from app.catalog.sync import builtin_rows
+    from app.skills.blueprint import extract_skill_draft_from_composition
+
+    visuals, sounds = builtin_rows()
+    row = next(row for row in visuals if row["preset_id"] == block_id)
+    assert row["recommended_sfx"] == sfx
+    assert set(sfx) <= {sound["slug"] for sound in sounds}
+    assert row["props_schema"]["additionalProperties"] is False
+    clip = row["preview_spec"]["tracks"][0]["clips"][0]
+    assert clip["source"] is None
+    assert bool(clip["object"]["resources"]) == (block_id != "cursor_magnetic_click")
+    props = row["example_props"]
+    with pytest.raises(ValueError, match="get_blocks"):
+        MotionBlockObject(kind="motion_block", object_id="bad", layout=BOX, block_id=block_id,
+                          props={**props, "unexpected": True})
+
+    content = CompositionContent(settings=VersionSettings(width=1280, height=720))
+    resources = []
+    if block_id != "cursor_magnetic_click":
+        resources = [dict(path="media/private.png", snapshot_id=str(uuid4()),
+                          snapshot_digest="a" * 64, content_type="image/png")]
+        with pytest.raises(ValueError, match="pinned image"):
+            MotionBlockObject(kind="motion_block", object_id="missing", layout=BOX,
+                              block_id=block_id, props=props)
+    ops = motion_block_ops(content, block_id=block_id, props=props, resources=resources,
+                           scene_id=None, clip_id="test", object_id="obj", start=0, end=180000)
+    bound = {UUID(r["snapshot_id"]): r["snapshot_digest"] for r in resources}
+    content = apply_ops(content, ops, bound_digests=bound)
+    _, bp = extract_skill_draft_from_composition(composition_id=uuid4(), version_number=1,
+            content=content, snapshot_origins={}, name="interactive", description="Product demo")
+    act = bp.acts[0]
+    copy = {"headline", "eyebrow", "subcopy", "cta_label", "callout_label", "url_text", "badge"} & props.keys()
+    assert copy <= set(act.required_slots + act.optional_slots)
+    assert all(props[key] not in bp.model_dump_json() for key in copy)
+    assert not {"target_x", "target_y"} & act.style_defaults.keys()
+    spec, slots, _, _ = build_slot_preview_video_spec(bp, skill_version_id=uuid4(), locale="en")
+    assert [slot.code for slot in slots] == [f"[{n:02d}]" for n in range(1, len(slots) + 1)]
+    assert copy <= {slot.slot_key for slot in slots}
+    obj = next(c["object"] for t in spec["tracks"] for c in t["clips"] if c["object"]["kind"] == "motion_block")
+    for slot in slots:
+        if slot.slot_key in copy:
+            assert slot.code in obj["props"][slot.slot_key]
+    assert len(obj["resources"]) == len(resources)
