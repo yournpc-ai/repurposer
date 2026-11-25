@@ -81,6 +81,10 @@ async def test_catalog_sync_visibility_and_gallery(database):
         assert (await catalog_details(db, owner, "sfx", [hidden.slug]))["items"][0][
             "storage_ready"
         ] is False
+        for kind, args in (("block", BlockArgs(query="logo_wall")), ("text_preset", SearchArgs(query="neon_pulse"))):
+            outline = (await search_catalog(db, owner, kind, args, gallery=False))["items"][0]
+            assert outline["id"] == args.query
+            assert {"preview_spec", "props_schema", "example_props"}.isdisjoint(outline)
         user = await db.get(User, owner)
     async with full_api_client(database, user) as client:
         for path, key in (
@@ -90,13 +94,22 @@ async def test_catalog_sync_visibility_and_gallery(database):
         ):
             r = await client.get(f"/api/v1/catalog/{path}", params={"query": key, "limit": 1})
             assert r.status_code == 200 and r.json()["items"][0]["id"] == key
+            item = r.json()["items"][0]
+            assert {"example_props", "props_schema", "params_schema"}.isdisjoint(item)
             if path == "sfx":
-                recipe = r.json()["items"][0]
-                assert recipe["waveform_peaks"] == SOUND_ACOUSTICS[recipe["recipe_id"]]["waveform_peaks"]
-            assert not (
-                {"preview_spec", "example_props", "props_schema", "params_schema"}
-                & r.json()["items"][0].keys()
-            )
+                assert "preview_spec" not in item
+                assert item["waveform_peaks"] == SOUND_ACOUSTICS[item["recipe_id"]]["waveform_peaks"]
+            else:
+                spec = item["preview_spec"]
+                assert item["name_zh"] and spec["width"] > 0 and spec["height"] > 0
+                assert spec["duration_frames"] * spec["fps"]["den"] / spec["fps"]["num"] == item["preview_duration_s"] > 0
+                obj = spec["tracks"][0]["clips"][0]["object"]
+                if path == "blocks":
+                    assert obj["kind"] == "motion_block" and obj["block_id"] == key
+                    assert item["recommended_sfx"] == ["dsp_velvet_pass"]
+                else:
+                    assert obj["kind"] == "text" and obj["text"] and spec["fonts"]
+                    assert "recommended_sfx" not in item
         r = await client.get("/api/v1/catalog/blocks", params={"category": "private"})
         assert [row["id"] for row in r.json()["items"]] == ["own"]
 

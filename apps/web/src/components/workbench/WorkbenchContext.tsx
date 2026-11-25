@@ -17,7 +17,7 @@ import {
   type WorkbenchData,
 } from "@/lib/workbench"
 
-export type WorkbenchTab = "player" | "inspector" | "slots" | "sounds"
+export type WorkbenchTab = "player" | "inspector" | "slots" | "presets" | "sounds"
 
 export type WorkbenchOpenTarget =
   | { tab: "player"; versionId?: string; outputId?: string }

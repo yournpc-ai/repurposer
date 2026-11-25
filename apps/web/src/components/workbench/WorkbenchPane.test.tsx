@@ -23,6 +23,9 @@ import { WorkbenchPane } from "@/components/workbench/WorkbenchPane"
 import type { ChatMention } from "@/lib/mentions"
 import type { WorkbenchData } from "@/lib/workbench"
 
+vi.mock("./VisualPresetGalleryPanel", () => ({ default: ({ kind }: { kind: string }) => <div>{kind}</div> }))
+vi.mock("./SoundLabPanel", () => ({ default: () => <div>Sound Lab</div> }))
+
 vi.mock("@/hooks/use-mobile", () => ({
   useIsMobile: () => false,
 }))
@@ -211,7 +214,7 @@ describe("Studio WorkbenchPane & Markdown artifact links", () => {
     expect(screen.getByTestId("wb-probe").getAttribute("data-asset")).toBe("asset-img-1")
   })
 
-  it("switches across all 3 tabs, cites inspected asset into composer, and closes cleanly", () => {
+  it("switches across four tabs, cites an asset and opens each preset library", async () => {
     const onCite = vi.fn<(mention: ChatMention) => void>()
     render(
       <WorkbenchProvider
@@ -242,6 +245,15 @@ describe("Studio WorkbenchPane & Markdown artifact links", () => {
     // Switch to Slots tab (renders EmptyState when no skills)
     fireEvent.click(screen.getByRole("tab", { name: /workbench\.tabs\.slots/ }))
     expect(screen.getByText("workbench.slots.emptyTitle")).toBeTruthy()
+
+    expect(screen.getAllByRole("tab")).toHaveLength(4)
+    fireEvent.click(screen.getByRole("tab", { name: "workbench.tabs.presets" }))
+    expect(await screen.findByText("block")).toBeTruthy()
+    fireEvent.click(screen.getByRole("radio", { name: "visualGallery.text" }))
+    expect(screen.getByText("text_preset")).toBeTruthy()
+    fireEvent.click(screen.getByRole("radio", { name: "visualGallery.sounds" }))
+    expect(await screen.findByText("Sound Lab")).toBeTruthy()
+    expect(screen.getByTestId("wb-probe").getAttribute("data-tab")).toBe("sounds")
 
     // Close pane
     fireEvent.click(screen.getByRole("button", { name: "workbench.close" }))

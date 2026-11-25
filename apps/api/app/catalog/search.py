@@ -103,6 +103,10 @@ async def search_catalog(db, owner_id, kind, args, *, offset=0, gallery=False):
         )
     if gallery and kind == "sfx":
         stmt = stmt.add_columns(model.name_zh, model.engine_kind, model.recipe_id, model.storage_key, model.waveform_peaks)
+    elif gallery and kind in ("block", "text_preset"):
+        stmt = stmt.add_columns(model.name_zh, model.preview_spec, model.preview_duration_s)
+        if kind == "block":
+            stmt = stmt.add_columns(model.recommended_sfx)
     rows = await db.execute(
         stmt.order_by(score.desc(), model.id.asc()).offset(offset).limit(args.limit)
     )

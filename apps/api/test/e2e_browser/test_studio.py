@@ -131,12 +131,17 @@ async def test_template_slot_preview(studio):
     await studio.capture("04-slot-preview", page.get_by_role("dialog"))
 
 
+async def open_preset_library(page):
+    presets = page.get_by_role("tab", name="Presets", exact=True)
+    if not await presets.is_visible():
+        await page.get_by_role("button", name="Open workbench", exact=True).click()
+    await presets.click()
+
+
 async def test_sound_lab_preview_and_citation(studio):
     page = studio.page
-    sounds = page.get_by_role("tab", name="Sounds")
-    if not await sounds.is_visible():
-        await page.get_by_role("button", name="Open workbench", exact=True).click()
-    await sounds.click()
+    await open_preset_library(page)
+    await page.get_by_role("radio", name="Sounds", exact=True).click()
     search = page.get_by_role("searchbox", name="Search sounds")
     await page.evaluate("""() => {
         const start = AudioBufferSourceNode.prototype.start;
@@ -178,3 +183,31 @@ async def test_sound_lab_preview_and_citation(studio):
     await studio.capture("05-sound-lab", page)
     await page.get_by_role("button", name="Cite in chat").click()
     await expect(page.get_by_role("textbox")).to_contain_text('"pitch_st":0.5')
+
+
+async def test_visual_preset_galleries_and_citation(studio):
+    page = studio.page
+    await page.set_viewport_size({"width": 1440, "height": 900})
+    await page.emulate_media(reduced_motion="no-preference")
+    await open_preset_library(page)
+    for kind, label, name, alternate, count, citation in (
+        ("blocks", "Blocks", "Logo Wall", "标志墙", 17, "block_id: logo_wall"),
+        ("text", "Text", "Neon Pulse", "霓虹辉光", 24, "text_preset: neon_pulse"),
+    ):
+        if kind == "text":
+            await page.emulate_media(reduced_motion="reduce")
+        await page.get_by_role("radio", name=label, exact=True).click()
+        gallery = page.get_by_role("region", name=label, exact=True)
+        await expect(gallery.get_by_role("article")).to_have_count(count)
+        card = gallery.get_by_role("article", name=name, exact=True)
+        await expect(card.get_by_text(alternate, exact=True)).to_be_visible()
+        await card.evaluate("(el) => el.scrollIntoView({block: 'start'})")
+        await card.hover()
+        if kind == "text":
+            await card.get_by_role("button", name=f"Play {name}").click()
+        await expect(card.get_by_role("button", name=f"Pause {name}")).to_be_visible()
+        await expect(gallery.locator(".__remotion-player")).to_have_count(1)
+        await card.get_by_role("button", name="Cite in chat").click()
+        composer = page.get_by_role("textbox")
+        await expect(composer).to_contain_text(citation)
+        await studio.capture(f"workbench-{kind}-gallery", card, composer)

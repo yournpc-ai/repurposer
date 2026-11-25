@@ -11,12 +11,10 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react"
 import {
-  AudioLines,
   Crop,
   Download,
   Film,
   Image as ImageIcon,
-  Layers,
   MessageSquarePlus,
   Play,
   RefreshCw,
@@ -56,6 +54,7 @@ const LazySlotPreviewContent = lazy(() =>
   })),
 )
 
+const VisualPresetGalleryPanel = lazy(() => import("./VisualPresetGalleryPanel"))
 const SoundLabPanel = lazy(() => import("./SoundLabPanel"))
 
 const WIDTH_STORAGE_KEY = "repurposer-workbench-width"
@@ -736,6 +735,7 @@ export function WorkbenchPane({
   const mobile = useIsMobile()
   const prefersReducedMotion = useReducedMotion()
   const { isOpen, closeWorkbench, activeTab, setActiveTab, workbench } = useWorkbench()
+  const [visualKind, setVisualKind] = useState<"block" | "text_preset">("block")
   const [width, setWidth] = useState(DEFAULT_WIDTH)
   const [resizing, setResizing] = useState(false)
 
@@ -803,28 +803,26 @@ export function WorkbenchPane({
           variant="tray"
           size="sm"
           aria-label={t("workbench.title")}
-          value={activeTab}
+          className="min-w-0"
+          value={activeTab === "sounds" ? "presets" : activeTab}
           onChange={setActiveTab}
           options={[
             {
               value: "player",
               label: t("workbench.tabs.player"),
-              icon: <Film className="size-3.5" />,
               count: versionsCount > 0 ? versionsCount : undefined,
             },
             {
               value: "inspector",
               label: t("workbench.tabs.inspector"),
-              icon: <Layers className="size-3.5" />,
               count: assetsCount > 0 ? assetsCount : undefined,
             },
             {
               value: "slots",
               label: t("workbench.tabs.slots"),
-              icon: <Sparkles className="size-3.5" />,
               count: slotsCount > 0 ? slotsCount : undefined,
             },
-            { value: "sounds", label: t("workbench.tabs.sounds"), icon: <AudioLines className="size-3.5" /> },
+            { value: "presets", label: t("workbench.tabs.presets") },
           ]}
         />
         <IconButton
@@ -841,7 +839,26 @@ export function WorkbenchPane({
         {activeTab === "player" ? <PlayerTabContent /> : null}
         {activeTab === "inspector" ? <InspectorTabContent /> : null}
         {activeTab === "slots" ? <SlotsTabContent /> : null}
-        {activeTab === "sounds" && <Suspense fallback={<Spinner />}><SoundLabPanel /></Suspense>}
+        {(activeTab === "presets" || activeTab === "sounds") && <>
+          <div className="shrink-0 border-b border-subtle px-3 py-2">
+            <SegmentedControl<"block" | "text_preset" | "sounds">
+              size="sm" variant="underline" aria-label={t("workbench.tabs.presets")}
+              value={activeTab === "sounds" ? "sounds" : visualKind}
+              onChange={kind => {
+                if (kind !== "sounds") setVisualKind(kind)
+                setActiveTab(kind === "sounds" ? "sounds" : "presets")
+              }}
+              options={[
+                { value: "block", label: t("visualGallery.blocks") },
+                { value: "text_preset", label: t("visualGallery.text") },
+                { value: "sounds", label: t("visualGallery.sounds") },
+              ]}
+            />
+          </div>
+          <Suspense fallback={<Spinner />}>
+            {activeTab === "sounds" ? <SoundLabPanel /> : <VisualPresetGalleryPanel key={visualKind} kind={visualKind} />}
+          </Suspense>
+        </>}
       </div>
     </div>
   )
