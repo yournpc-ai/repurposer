@@ -178,6 +178,9 @@ def builtin_rows():
 
 async def sync_builtin_catalog(db):
     visuals, sounds = builtin_rows()
+    await db.execute(
+        select(func.pg_advisory_xact_lock(func.hashtextextended("repurposer/builtin_catalog", 0)))
+    )
     for model, rows, keys in [
         (VisualPreset, visuals, ["asset_kind", "preset_id"]),
         (SoundEffect, sounds, ["slug"]),

@@ -1046,6 +1046,7 @@ export function AgentThread({
           await refreshPresentationRecovery()
           setPendingQuestion((prev) => prev ?? dockWorthyQuestion(q))
           void fetchAssets()
+          void workbench?.refresh()
           settleActivities("completed")
           setThinkingPhase(null)
           abortRef.current = null
@@ -1081,7 +1082,7 @@ export function AgentThread({
         }
       }
     },
-    [projectId, fetchPendingQuestion, refreshPresentationRecovery, fetchAssets, settleActivities, pacePersistedMessage, noteObservedSeq, t],
+    [projectId, fetchPendingQuestion, refreshPresentationRecovery, fetchAssets, workbench, settleActivities, pacePersistedMessage, noteObservedSeq, t],
   )
   const reconcileTurnRef = useRef(reconcileTurn)
   useEffect(() => {
@@ -2523,6 +2524,9 @@ export function AgentThread({
       if (!ownsTurn()) return
       setThinkingPhase(null)
       settleActivities("completed") // defensive twin of the server sweep
+      void fetchAssets()
+      void workbench?.refresh()
+      notifyConversationsChanged(projectId)
       noteObservedSeq(data.answered_question.seq)
       noteObservedSeq(data.follow_up?.seq)
       adoptTurnId(data.follow_up?.turn_id ?? data.answered_question.turn_id)

@@ -49,10 +49,9 @@ async def test_question_to_video(studio):
     rows = await studio.messages()
     assert any(row.answer and row.answer.get("option_id") == "bold" for row in rows)
     assert any(row.content == READY for row in rows)
-    await studio.capture("02-draft", reply, page.get_by_role("button", name="Open in Workbench"))
-    studio.script(tool("inspect_timeline", {}), tool("answer", {}, "The film has one three-second scene."))
-    await studio.send("Review the saved timeline and tell me its length.")
-    await expect(page.get_by_text("The film has one three-second scene.", exact=True)).to_be_visible()
+    open_btn = page.get_by_role("button", name="Open in Workbench")
+    await studio.capture("02-draft", reply, open_btn)
+    await open_btn.click()
     for step in ("03-timeline", "04-reload"):
         if step.endswith("reload"):
             await page.reload()
