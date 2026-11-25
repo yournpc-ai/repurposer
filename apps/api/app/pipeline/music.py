@@ -9,6 +9,7 @@ piece still referenced by any clip's ``render_spec.music``.
 
 import hashlib
 import io
+import math
 from dataclasses import dataclass
 from fractions import Fraction
 from typing import Any, TypedDict
@@ -16,8 +17,9 @@ from uuid import NAMESPACE_DNS, UUID, uuid4, uuid5
 
 import av
 import httpx
+import numpy as np
 import structlog
-from sqlalchemy import or_, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.providers.llm.base import LLMError
@@ -81,6 +83,50 @@ def probe_music_duration_seconds(data: bytes) -> int:
         return int(duration)
     finally:
         container.close()
+
+
+def measure_audio_lufs(data: bytes) -> float | None:
+    """Fast PyAV + NumPy integrated LUFS estimate (K-weighted RMS approximation).
+
+    Returns rounded dB LUFS (e.g. -14.2) or None when audio is silent or undecodable.
+    """
+    try:
+        chunks: list[np.ndarray] = []
+        with av.open(io.BytesIO(data), mode="r") as container:
+            if not container.streams.audio:
+                return None
+            resampler = av.AudioResampler(format="flt", layout="mono", rate=48000)
+            for frame in container.decode(audio=0):
+                for resampled in resampler.resample(frame):
+                    chunks.append(resampled.to_ndarray().reshape(-1))
+            for resampled in resampler.resample(None):
+                chunks.append(resampled.to_ndarray().reshape(-1))
+        if not chunks:
+            return None
+        pcm = np.concatenate(chunks).astype(np.float64, copy=False)
+        if pcm.size < 64:
+            return None
+        # Remove DC offset; gate 400 ms blocks (19,200 samples @ 48 kHz) per BS.1770 integrated loudness
+        centered = pcm - float(np.mean(pcm))
+        block = 19200
+        if centered.size >= block:
+            n_blocks = centered.size // block
+            energies = np.mean(centered[: n_blocks * block].reshape(n_blocks, block) ** 2, axis=1)
+            active = energies[energies > 1e-7]
+            if active.size == 0:
+                return None
+            mean_square = float(np.mean(active))
+        else:
+            mean_square = float(np.mean(centered**2))
+        if not math.isfinite(mean_square) or mean_square <= 1e-10:
+            return None
+        lufs = -0.691 + 10.0 * math.log10(mean_square)
+        if not math.isfinite(lufs):
+            return None
+        return round(float(lufs), 2)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("measure_audio_lufs_failed", error=str(exc))
+        return None
 
 
 def music_file_path(music_id: UUID) -> str:
@@ -260,14 +306,105 @@ def default_music_id(mood: str) -> UUID:
 
 
 async def list_music(db: AsyncSession, user_id: UUID | None = None) -> list[Music]:
-    """List public music pieces plus the caller's own private pieces."""
-    where_clause = Music.is_public.is_(True)
-    if user_id is not None:
-        where_clause = or_(where_clause, Music.generated_by_user_id == user_id)
+    """List visible music pieces (public/platform + caller's own, excluding archived)."""
+    public_clause = or_(Music.is_public.is_(True), Music.scope == "platform")
+    owner_clause = (
+        or_(public_clause, Music.generated_by_user_id == user_id)
+        if user_id is not None
+        else public_clause
+    )
+    where_clause = and_(Music.status != "archived", owner_clause)
     result = await db.execute(
         select(Music).where(where_clause).order_by(Music.created_at.desc())
     )
     return list(result.scalars().all())
+
+
+async def search_music_library(
+    db: AsyncSession,
+    *,
+    owner_id: UUID | None = None,
+    style_preset: str | None = None,
+    mood: str | None = None,
+    tags: list[str] | None = None,
+    query: str | None = None,
+    instrumental_only: bool = True,
+    limit: int = 20,
+) -> list[Music]:
+    """Multi-facet reuse-first search over the permanent music library."""
+    catalog = await list_music(db, user_id=owner_id)
+    style_norm = (style_preset or "").strip().lower()
+    mood_norm = (mood or "").strip().lower()
+    tag_norms = [str(t).strip().lower() for t in (tags or []) if str(t).strip()]
+    query_norm = (query or "").strip().lower()
+    query_terms = [t for t in query_norm.split() if t]
+
+    scored: list[tuple[tuple[int, int, int, int, float], Music]] = []
+    for row in catalog:
+        if instrumental_only and not bool(row.instrumental):
+            continue
+        meta = row.meta if isinstance(row.meta, dict) else {}
+        row_tags = [str(t).lower() for t in (row.tags or [])]
+        row_styles = [str(s).lower() for s in (row.compatible_styles or [])]
+        haystack = " ".join(
+            [
+                row.title or "",
+                row.mood or "",
+                row.prompt or "",
+                str(meta.get("style") or ""),
+                " ".join(row_tags),
+                " ".join(row_styles),
+            ]
+        ).lower()
+
+        score = 0
+        if style_norm:
+            if style_norm in row_styles:
+                score += 6
+            elif style_norm in haystack:
+                score += 2
+            else:
+                continue
+        if mood_norm:
+            if mood_norm == (row.mood or "").lower() or mood_norm in (row.mood or "").lower():
+                score += 5
+            elif mood_norm in haystack:
+                score += 3
+            else:
+                continue
+        if tag_norms:
+            matched_tags = sum(
+                1 for t in tag_norms if t in row_tags or any(t in rt for rt in row_tags) or t in haystack
+            )
+            if matched_tags == 0:
+                continue
+            score += matched_tags * 4
+        if query_terms:
+            matched_terms = sum(1 for term in query_terms if term in haystack)
+            if matched_terms == 0:
+                continue
+            score += matched_terms * 3
+
+        created_ts = row.created_at.timestamp() if row.created_at else 0.0
+        rank_key = (
+            score,
+            1 if row.is_favorite else 0,
+            1 if row.status == "curated" else 0,
+            int(row.use_count or 0),
+            created_ts,
+        )
+        scored.append((rank_key, row))
+
+    scored.sort(key=lambda item: item[0], reverse=True)
+    return [row for _, row in scored[: max(1, min(limit, 100))]]
+
+
+async def increment_music_use_count(db: AsyncSession, music_id: UUID) -> None:
+    """Increment ``use_count`` on a library music row when attached to a composition."""
+    row = await db.get(Music, music_id)
+    if row is not None:
+        row.use_count = int(row.use_count or 0) + 1
+        await db.flush()
 
 
 async def get_music(db: AsyncSession, music_id: UUID) -> Music | None:
@@ -276,9 +413,14 @@ async def get_music(db: AsyncSession, music_id: UUID) -> Music | None:
 
 
 async def get_music_by_mood(db: AsyncSession, mood: str) -> Music | None:
-    """Get a music piece by its unique mood natural key."""
-    result = await db.execute(select(Music).where(Music.mood == mood))
-    return result.scalar_one_or_none()
+    """Get the first music piece matching a mood key (mood is non-unique)."""
+    result = await db.execute(
+        select(Music)
+        .where(Music.mood == mood)
+        .order_by(Music.is_favorite.desc(), Music.created_at.asc())
+        .limit(1)
+    )
+    return result.scalars().first()
 
 
 async def resolve_bed_track(
@@ -322,30 +464,44 @@ async def create_music_from_generation(
     source_url: str | None = None,
     attribution: str | None = None,
     is_public: bool = True,
+    tags: list[str] | None = None,
+    compatible_styles: list[str] | None = None,
+    scope: str | None = None,
+    status: str | None = None,
+    instrumental: bool = True,
+    is_favorite: bool = False,
 ) -> Music:
     """Persist generated audio to object storage and create the DB row.
 
-    ``mood`` is the unique natural key; when omitted a ``custom-<short>`` key is
-    derived from the new id. A mood collision with an existing piece is
-    suffixed to keep the column unique.
+    Multiple tracks may share the same ``mood``; pieces are addressed by ``id``.
     """
     music_id = uuid4()
-    base_mood = (mood or f"custom-{music_id.hex[:8]}").strip().lower()
-    if await get_music_by_mood(db, base_mood) is not None:
-        base_mood = f"{base_mood}-{music_id.hex[:4]}"
+    base_mood = (mood or f"custom-{music_id.hex[:8]}").strip().lower()[:50]
     title = title or _default_title(prompt, base_mood)
+    eff_scope = scope or ("platform" if user_id is None else "user")
+    eff_status = status or ("curated" if eff_scope == "platform" else "ready")
 
     file_path, size_bytes = await persist_music(music_id, generated)
-    # 节拍网格 (ADR-121 B3): computed at birth from the bytes already in
-    # hand — the film cut snap reads ``meta.beats``; None = degrade-honest
-    # (no grid, no snap). Analysis failure never blocks the birth.
     from app.tools.music.beats import analyze_beat_grid  # deferred: import cycle
 
-    meta: dict[str, Any] | None = None
+    meta: dict[str, Any] = {
+        "content_sha256": hashlib.sha256(generated.audio_bytes).hexdigest(),
+    }
     try:
-        meta = analyze_beat_grid(generated.audio_bytes)
+        grid = analyze_beat_grid(generated.audio_bytes)
+        if grid is not None:
+            meta.update(grid)
     except Exception as e:  # noqa: BLE001 — analysis is best-effort
         logger.warning("beat_grid_birth_failed", music_id=str(music_id), error=str(e))
+
+    lufs = measure_audio_lufs(generated.audio_bytes)
+    duration_seconds = generated.duration_seconds
+    if duration_seconds is None:
+        try:
+            duration_seconds = probe_music_duration_seconds(generated.audio_bytes)
+        except Exception:  # noqa: BLE001
+            duration_seconds = None
+
     music = Music(
         id=music_id,
         mood=base_mood,
@@ -353,7 +509,7 @@ async def create_music_from_generation(
         ext=generated.ext,
         file_path=file_path,
         size_bytes=size_bytes,
-        duration_seconds=generated.duration_seconds,
+        duration_seconds=duration_seconds,
         prompt=prompt,
         model=generated.model,
         generation_id=generated.generation_id,
@@ -362,12 +518,27 @@ async def create_music_from_generation(
         attribution=attribution,
         is_public=is_public,
         generated_by_user_id=user_id,
+        scope=eff_scope,
+        status=eff_status,
+        tags=[str(t).strip().lower() for t in (tags or []) if str(t).strip()],
+        compatible_styles=[str(s).strip() for s in (compatible_styles or []) if str(s).strip()],
+        instrumental=instrumental,
+        lufs=lufs,
+        use_count=0,
+        is_favorite=is_favorite,
         meta=meta,
     )
     db.add(music)
     await db.commit()
     await db.refresh(music)
-    logger.info("music_created", music_id=str(music_id), mood=base_mood, user_id=str(user_id))
+    logger.info(
+        "music_created",
+        music_id=str(music_id),
+        mood=base_mood,
+        scope=eff_scope,
+        lufs=lufs,
+        user_id=str(user_id),
+    )
     return music
 
 
@@ -508,6 +679,7 @@ async def _reconcile_curated_music(db: AsyncSession) -> list[Music]:
             "original_filename": entry["original_filename"],
             "provenance": entry["provenance"],
         })
+        lufs_val = measure_audio_lufs(data) if data is not None else (row.lufs if row is not None else None)
         if row is None:
             if data is None or duration_seconds is None:
                 raise RuntimeError(f"curated music {mood} was not probed")
@@ -527,6 +699,12 @@ async def _reconcile_curated_music(db: AsyncSession) -> list[Music]:
                 attribution=entry["attribution"],
                 is_public=True,
                 generated_by_user_id=None,
+                scope="platform",
+                status="curated",
+                tags=[entry["style"].lower(), mood],
+                compatible_styles=[],
+                instrumental=True,
+                lufs=lufs_val,
                 meta=meta,
             )
             db.add(row)
@@ -545,8 +723,13 @@ async def _reconcile_curated_music(db: AsyncSession) -> list[Music]:
             "attribution": entry["attribution"],
             "is_public": True,
             "generated_by_user_id": None,
+            "scope": "platform",
+            "status": "curated",
+            "instrumental": True,
             "meta": meta,
         }
+        if lufs_val is not None:
+            updates["lufs"] = lufs_val
         if data is not None:
             updates["size_bytes"] = len(data)
             updates["duration_seconds"] = duration_seconds
@@ -616,10 +799,13 @@ __all__ = [
     "generate_music",
     "get_music",
     "get_music_by_mood",
+    "increment_music_use_count",
     "is_music_in_use",
     "list_music",
+    "measure_audio_lufs",
     "probe_music_duration_seconds",
     "resolve_bed_track",
+    "search_music_library",
     "seed_default_music",
     "update_music_metadata",
 ]

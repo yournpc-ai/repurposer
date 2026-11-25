@@ -1302,9 +1302,22 @@ def _resolve_text_style_for_insert(
         updates["secondary_line_scale"] = secondary_line_scale
     if updates:
         style = style.model_copy(update=updates)
+    if (
+        background is not None
+        and background_mode is None
+        and style.background_mode == "box"
+    ):
+        pill_updates: dict[str, Any] = {"background_mode": "pill"}
+        if style.background_padding == (0.0, 0.0):
+            pill_updates["background_padding"] = (20.0, 10.0)
+        if style.background_radius == 0.0:
+            pill_updates["background_radius"] = 10.0
+        if background_opacity is None and style.background_opacity == 1.0:
+            pill_updates["background_opacity"] = 0.78
+        style = style.model_copy(update=pill_updates)
     if background_mode in ("pill", "line") and style.background_padding == (0.0, 0.0):
-        default_pad = (24.0, 10.0) if background_mode == "pill" else (20.0, 8.0)
-        default_rad = 12.0 if background_mode == "pill" else 4.0
+        default_pad = (20.0, 10.0) if background_mode == "pill" else (20.0, 8.0)
+        default_rad = 10.0 if background_mode == "pill" else 4.0
         style = style.model_copy(
             update={
                 "background_padding": default_pad,
@@ -1997,11 +2010,26 @@ def edit_text_ops(
         new_style = obj.style.model_copy(update=style_updates) if style_updates else obj.style
         if (
             not clear_background
+            and background is not None
+            and background_mode is None
+            and new_style.background_mode == "box"
+            and (track.role == "caption" or obj.caption is not None or obj.style.background_mode == "box")
+        ):
+            pill_updates: dict[str, Any] = {"background_mode": "pill"}
+            if new_style.background_padding == (0.0, 0.0):
+                pill_updates["background_padding"] = (20.0, 10.0)
+            if new_style.background_radius == 0.0:
+                pill_updates["background_radius"] = 10.0
+            if background_opacity is None and new_style.background_opacity == 1.0:
+                pill_updates["background_opacity"] = 0.78
+            new_style = new_style.model_copy(update=pill_updates)
+        if (
+            not clear_background
             and background_mode in ("pill", "line")
             and new_style.background_padding == (0.0, 0.0)
         ):
-            default_pad = (24.0, 10.0) if background_mode == "pill" else (20.0, 8.0)
-            default_rad = 12.0 if background_mode == "pill" else 4.0
+            default_pad = (20.0, 10.0) if background_mode == "pill" else (20.0, 8.0)
+            default_rad = 10.0 if background_mode == "pill" else 4.0
             new_style = new_style.model_copy(
                 update={
                     "background_padding": default_pad,

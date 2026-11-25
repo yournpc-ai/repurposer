@@ -113,11 +113,119 @@ def clone_voice(audio_path: Path) -> str | None:
 
 
 @dataclass(frozen=True)
+class VoiceDesignResult:
+    voice_id: str
+    trial_audio: bytes
+    trace_id: str | None
+
+
+@dataclass(frozen=True)
 class T2AResult:
     audio: bytes
     subtitle_file: str | None
     usage_characters: int
     trace_id: str | None
+
+
+def design_voice(
+    prompt: str,
+    preview_text: str,
+    *,
+    voice_id: str | None = None,
+    sample_rate: int = 32000,
+    bitrate: int = 128000,
+    fmt: str = "mp3",
+) -> VoiceDesignResult:
+    """Design a custom MiniMax voiceprint from a text description via ``/voice_design``."""
+    if not settings.minimax_api_key:
+        raise VoiceError("MINIMAX_API_KEY not configured")
+    clean_prompt = (prompt or "").strip()
+    clean_preview = (preview_text or "").strip()
+    if not clean_prompt:
+        raise VoiceError("Voice design prompt must not be empty")
+    if not clean_preview:
+        raise VoiceError("Voice design preview_text must not be empty")
+    payload: dict = {
+        "prompt": clean_prompt,
+        "preview_text": clean_preview,
+        "audio_setting": {
+            "sample_rate": sample_rate,
+            "bitrate": bitrate,
+            "format": fmt,
+            "channel": 1,
+        },
+    }
+    if voice_id:
+        payload["voice_id"] = voice_id
+    try:
+        with httpx.Client(timeout=180) as client:
+            resp = client.post(
+                f"{settings.minimax_base_url}/voice_design",
+                headers={**_headers(), "Content-Type": "application/json"},
+                json=payload,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        base_resp = data.get("base_resp") or {}
+        if base_resp.get("status_code") != 0:
+            raise VoiceError(
+                f"MiniMax voice design failed: {base_resp.get('status_msg')} "
+                f"(code {base_resp.get('status_code')})"
+            )
+        inner = data.get("data") if isinstance(data.get("data"), dict) else {}
+        returned_voice_id = data.get("voice_id") or inner.get("voice_id") or voice_id
+        if not returned_voice_id or not isinstance(returned_voice_id, str):
+            raise VoiceError("MiniMax voice design returned no voice_id")
+        trial_hex = data.get("trial_audio") or inner.get("trial_audio")
+        if not trial_hex or not isinstance(trial_hex, str):
+            raise VoiceError("MiniMax voice design returned no trial_audio")
+        try:
+            trial_bytes = binascii.unhexlify(trial_hex)
+        except (binascii.Error, ValueError) as exc:
+            raise VoiceError(f"MiniMax voice design returned invalid trial_audio hex: {exc}") from exc
+        if not trial_bytes:
+            raise VoiceError("MiniMax voice design returned empty trial_audio")
+        return VoiceDesignResult(
+            voice_id=returned_voice_id,
+            trial_audio=trial_bytes,
+            trace_id=data.get("trace_id"),
+        )
+    except VoiceError:
+        raise
+    except Exception as e:  # noqa: BLE001
+        logger.error("voice_design_failed", error=str(e))
+        raise VoiceError(f"Voice design failed: {e}") from e
+
+
+def is_voice_expired_error(exc: Exception) -> bool:
+    """Return True when a VoiceError indicates a designed/cloned voice_id expired or is missing on MiniMax."""
+    if not isinstance(exc, VoiceError):
+        return False
+    msg = str(exc).lower()
+    if any(
+        needle in msg
+        for needle in (
+            "voice not found",
+            "voice_id not found",
+            "voice does not exist",
+            "voice_id does not exist",
+            "voice expired",
+            "voice_id expired",
+            "invalid voice",
+            "invalid voice_id",
+            "timbre not found",
+            "voice_id is invalid",
+            "音色不存在",
+            "音色已过期",
+            "code 2054",
+            "code 2055",
+            "code 1042",
+        )
+    ):
+        return True
+    return ("voice" in msg or "timbre" in msg) and any(
+        token in msg for token in ("not found", "expired", "deleted", "invalid", "not exist", "code 2013")
+    )
 
 
 def _synthesize_t2a(

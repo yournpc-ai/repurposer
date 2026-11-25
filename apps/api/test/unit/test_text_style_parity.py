@@ -442,11 +442,8 @@ def test_bilingual_cinema_theme_awareness_and_py_ts_resolver_parity():
             timeline=Timeline(tracks=[Track(track_id="trk_main", kind="visual", role="main", order=0, clips=[])]),
         )
 
-    # 1. insert_text with bilingual_cinema on light themes -> dark ink + light canvas halo + shadow=None
-    for preset_id, expected_ink, expected_bg in (
-        ("vox_editorial", "#141413", "#F4EFE2"),
-        ("swiss_paper", "#111820", "#F6F5F0"),
-    ):
+    # 1. insert_text with bilingual_cinema on light themes -> crisp tight dark-ink pill (zero edge bleed)
+    for preset_id in ("vox_editorial", "swiss_paper"):
         base = _make_content(CompositionStyle(preset_id=preset_id))
         ops, _ = insert_text_ops(
             base,
@@ -460,15 +457,19 @@ def test_bilingual_cinema_theme_awareness_and_py_ts_resolver_parity():
         )
         updated = apply_ops(base, ops, {})
         st = next(c for t in updated.timeline.tracks for c in t.clips if c.clip_id == "clp_bi").object.style
-        assert st.color == expected_ink
-        assert st.stroke == TextStroke(color=expected_bg, width=3.5)
+        assert st.color == "#F8FAFC"
+        assert st.background == "#111318"
+        assert st.background_mode == "pill"
+        assert st.background_opacity == 0.82
+        assert st.background_padding == (20.0, 10.0)
+        assert st.background_radius == 10.0
+        assert st.stroke is None
         assert st.shadow is None
         assert st.weight == 700
-        assert st.background is None
-        assert st.secondary_line_scale == 0.72
-        assert st.secondary_line_opacity == 0.86
+        assert st.secondary_line_scale == 0.74
+        assert st.secondary_line_opacity == 0.88
 
-        # edit_text produces the exact same light-theme bilingual_cinema style
+        # edit_text produces the exact same light-theme bilingual_cinema tight pill style
         re_styled, _ = edit_text(
             updated, scope="clip", clip_id="clp_bi", preset_id="clean_broadcast"
         )
@@ -476,11 +477,16 @@ def test_bilingual_cinema_theme_awareness_and_py_ts_resolver_parity():
             re_styled, scope="clip", clip_id="clp_bi", preset_id="bilingual_cinema"
         )
         st2 = next(c for t in re_bi.timeline.tracks for c in t.clips if c.clip_id == "clp_bi").object.style
-        assert st2.color == expected_ink
-        assert st2.stroke == TextStroke(color=expected_bg, width=3.5)
+        assert st2.color == "#F8FAFC"
+        assert st2.background == "#111318"
+        assert st2.background_mode == "pill"
+        assert st2.background_opacity == 0.82
+        assert st2.background_padding == (20.0, 10.0)
+        assert st2.background_radius == 10.0
+        assert st2.stroke is None
         assert st2.shadow is None
 
-    # 2. Dark theme and style=None keep white ink + dark halo + soft shadow
+    # 2. Dark theme and style=None keep white ink + tight dark-ink pill + subtle shadow
     for style in (CompositionStyle(preset_id="institutional_dark"), None):
         base = _make_content(style)
         ops, _ = insert_text_ops(
@@ -496,12 +502,65 @@ def test_bilingual_cinema_theme_awareness_and_py_ts_resolver_parity():
         updated = apply_ops(base, ops, {})
         st = next(c for t in updated.timeline.tracks for c in t.clips if c.clip_id == "clp_bi_dark").object.style
         assert st.color == "#FFFFFF"
-        assert st.stroke == TextStroke(color="#0A0F16", width=3.5)
-        assert st.shadow == TextShadow(color="#0A0F16", offset=(0.0, 2.0), blur=10.0)
-        assert st.secondary_line_scale == 0.72
-        assert st.secondary_line_opacity == 0.86
+        assert st.background == "#111318"
+        assert st.background_mode == "pill"
+        assert st.background_opacity == 0.76
+        assert st.background_padding == (20.0, 10.0)
+        assert st.background_radius == 10.0
+        assert st.stroke is None
+        assert st.shadow == TextShadow(color="#0A0F16", offset=(0.0, 1.0), blur=4.0)
+        assert st.secondary_line_scale == 0.74
+        assert st.secondary_line_opacity == 0.88
 
-    # 3. Verify Python <-> TS zero drift for resolve_text_preset_token across styles
+    # 3. Guardrail: setting background on a caption/box clip without explicit background_mode='box' auto-upgrades to tight pill
+    base_dark = _make_content(CompositionStyle(preset_id="institutional_dark"))
+    ins_ops, _ = insert_text_ops(
+        base_dark,
+        text="Clean caption with auto-upgraded pill",
+        start=0,
+        end=180000,
+        clip_id="clp_guard_ins",
+        object_id="obj_guard_ins",
+        role="caption",
+        preset_id="clean_broadcast",
+        background="#000000",
+    )
+    ins_updated = apply_ops(base_dark, ins_ops, {})
+    ins_style = next(c for t in ins_updated.timeline.tracks for c in t.clips if c.clip_id == "clp_guard_ins").object.style
+    assert ins_style.background == "#000000"
+    assert ins_style.background_mode == "pill"
+    assert ins_style.background_padding == (20.0, 10.0)
+    assert ins_style.background_radius == 10.0
+    assert ins_style.background_opacity == 0.78
+
+    # edit_text on a clean_broadcast clip (which has background_mode='box', background=None) upgrades to tight pill
+    raw_ops, _ = insert_text_ops(
+        base_dark,
+        text="Caption edited to add dark backing",
+        start=0,
+        end=180000,
+        clip_id="clp_guard_edit",
+        object_id="obj_guard_edit",
+        role="caption",
+        preset_id="clean_broadcast",
+    )
+    raw_updated = apply_ops(base_dark, raw_ops, {})
+    edited_pill, _ = edit_text(raw_updated, scope="clip", clip_id="clp_guard_edit", background="#111318")
+    ed_style = next(c for t in edited_pill.timeline.tracks for c in t.clips if c.clip_id == "clp_guard_edit").object.style
+    assert ed_style.background == "#111318"
+    assert ed_style.background_mode == "pill"
+    assert ed_style.background_padding == (20.0, 10.0)
+    assert ed_style.background_radius == 10.0
+    assert ed_style.background_opacity == 0.78
+
+    # Explicit background_mode='box' is still respected when deliberately requested
+    edited_box, _ = edit_text(
+        raw_updated, scope="clip", clip_id="clp_guard_edit", background="#111318", background_mode="box"
+    )
+    box_style = next(c for t in edited_box.timeline.tracks for c in t.clips if c.clip_id == "clp_guard_edit").object.style
+    assert box_style.background_mode == "box"
+
+    # 4. Verify Python <-> TS zero drift for resolve_text_preset_token across styles
     cases = [
         ("bilingual_cinema", None),
         ("bilingual_cinema", resolve_style_tokens(CompositionStyle(preset_id="vox_editorial"))),

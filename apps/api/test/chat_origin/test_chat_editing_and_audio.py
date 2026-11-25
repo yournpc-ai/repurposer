@@ -1076,7 +1076,8 @@ async def test_edit_text_content_position_clear_background_protection_and_observ
         c4 = content_of(v4)
         cap_zh_v4 = next(c for t in c4.timeline.tracks for c in t.clips if c.clip_id == "clp_cap_zh")
         assert cap_zh_v4.object.caption.state == "independent"
-        assert cap_zh_v4.object.style.secondary_line_scale == 0.72
+        assert cap_zh_v4.object.style.secondary_line_scale == 0.74
+        assert cap_zh_v4.object.style.background_mode == "pill"
         assert cap_zh_v4.animations == []
 
         # 4. Switch all_derived_captions to cinema_glass -> updates clp_cap_en only (skips both independent captions!)
@@ -1147,8 +1148,9 @@ async def test_edit_text_content_position_clear_background_protection_and_observ
     assert tl_data["composition_style"]["preset_id"] == "institutional_dark"
     by_id = {c["clip_id"]: c for c in tl_data["clips"]}
     assert by_id["clp_cap_zh"]["caption_state"] == "independent"
-    assert by_id["clp_cap_zh"]["style"]["secondary_line_scale"] == 0.72
-    assert by_id["clp_cap_zh"]["style"]["has_stroke"] is True
+    assert by_id["clp_cap_zh"]["style"]["secondary_line_scale"] == 0.74
+    assert by_id["clp_cap_zh"]["style"]["background_mode"] == "pill"
+    assert by_id["clp_cap_zh"]["style"]["has_stroke"] is False
     assert by_id["clp_cap_zh"]["karaoke_active"] is False
     assert by_id["clp_title"]["caption_state"] is None
     assert by_id["clp_vo"]["has_gain_automation"] is True

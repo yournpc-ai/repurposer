@@ -329,9 +329,24 @@ async def prepare_original_narration(
             if before_submit is not None:
                 await before_submit()
             try:
-                result = await asyncio.to_thread(
-                    synthesize_detailed, normalized, speech.voice_id, speech.language, 1.0
-                )
+                from app.editing.catalog import VERIFIED_VOICE_IDS
+                from app.models.database import AsyncSessionLocal
+                from app.pipeline.voices import synthesize_with_voice_resilience
+
+                if speech.voice_id in VERIFIED_VOICE_IDS:
+                    result = await asyncio.to_thread(
+                        synthesize_detailed, normalized, speech.voice_id, speech.language, 1.0
+                    )
+                else:
+                    async with AsyncSessionLocal() as voice_db:
+                        result, _ = await synthesize_with_voice_resilience(
+                            voice_db,
+                            text=normalized,
+                            voice_ref=speech.voice_id,
+                            language=speech.language,
+                            speed=1.0,
+                            owner_id=user_id,
+                        )
                 generated = True
             except Exception as exc:
                 await mark_outcome_unknown(

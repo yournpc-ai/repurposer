@@ -86,7 +86,46 @@ class GenerateVoiceArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     text: str = Field(min_length=1, max_length=9000)
     language: Literal["en", "zh", "fr", "de", "es", "it"]
-    voice_id: VoiceId = "presenter_male"
+    voice_id: str = Field(
+        default="presenter_male",
+        min_length=1,
+        max_length=120,
+        description="Permanent library voice_id UUID (from search_voices/design_voice), provider_voice_id, or verified stock voice ID.",
+    )
+
+
+class DesignVoiceArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    name: str = Field(min_length=1, max_length=160, description="Reusable display name for this custom voiceprint.")
+    prompt: str = Field(
+        min_length=4,
+        max_length=2000,
+        description="Detailed acoustic/timbre description for MiniMax /voice_design (age, gender, cadence, warmth, register).",
+    )
+    preview_text: str = Field(
+        min_length=4,
+        max_length=500,
+        description="Short natural preview sentence spoken to synthesize and persist the permanent reference audio.",
+    )
+    languages: list[str] = Field(
+        default_factory=lambda: ["en"],
+        min_length=1,
+        max_length=8,
+        description="Supported ISO language codes (e.g. ['en'], ['zh'], ['en', 'zh']).",
+    )
+    tone_tags: list[str] = Field(
+        default_factory=list,
+        max_length=12,
+        description="Discovery tone tags (e.g. ['warm', 'founder', 'editorial']).",
+    )
+    compatible_styles: list[str] = Field(
+        default_factory=list,
+        max_length=8,
+        description="Compatible CompositionStyle presets (e.g. ['vox_editorial', 'institutional_dark']).",
+    )
+    gender: str | None = Field(default=None, max_length=24)
+    age_band: str | None = Field(default=None, max_length=32)
+    description: str | None = Field(default=None, max_length=500)
 
 
 class GenerateSfxArgs(BaseModel):
@@ -605,13 +644,19 @@ EDITOR_TOOLS = (
     ),
     _editor_tool(
         "generate_voice",
-        "Record the exact script at original speed. Return playable audio, measured duration and alignment status.",
+        "Record the exact script at original speed using a permanent library voice_id (from search_voices/design_voice) or stock voice. Return playable audio, measured duration and alignment status.",
         GenerateVoiceArgs,
         "recordVoice",
     ),
     _editor_tool(
+        "design_voice",
+        "Design a new custom MiniMax voiceprint via /voice_design and persist it permanently into the user's voices library with reference audio backup. Call search_voices first and reuse an existing voice whenever suitable.",
+        DesignVoiceArgs,
+        "recordVoice",
+    ),
+    _editor_tool(
         "generate_music",
-        "Generate a playable electronic instrumental of the requested length. Returns measured audio for later editing.",
+        "Generate instrumental BGM (via MiniMax /music_generation when prompt is provided and MiniMax is configured, saving permanently into the music library with tags/style/BPM/LUFS, or local programmatic synth fallback). Call search_music first to reuse existing tracks.",
         GenerateMusicArgs,
         "musicPrepare",
     ),
@@ -1788,6 +1833,54 @@ async def execute_editor(turn, name, args):
             )
         except ValueError as exc:
             return ToolObservation(str(exc), ok=False, user_error=str(exc))
+    if name == "design_voice":
+        from app.chat.editor_create import voice_generation_forbidden
+        from app.pipeline.voices import design_and_save_voice
+        from app.providers.voice import VoiceError
+
+        if not turn.project:
+            return ToolObservation("A project is required to design and save a voice.", ok=False)
+        if voice_generation_forbidden(getattr(turn, "text", "")):
+            return ToolObservation(
+                "The user explicitly disallowed voice generation.",
+                ok=False,
+                user_error="The user explicitly disallowed voice generation.",
+            )
+        async with AsyncSessionLocal() as db:
+            try:
+                voice_row = await design_and_save_voice(
+                    db,
+                    owner_id=turn.project.user_id,
+                    name=args.name,
+                    prompt=args.prompt,
+                    preview_text=args.preview_text,
+                    languages=args.languages,
+                    tone_tags=args.tone_tags,
+                    compatible_styles=args.compatible_styles,
+                    gender=args.gender,
+                    age_band=args.age_band,
+                    scope="user",
+                    status="ready",
+                    description=args.description,
+                )
+            except (ValueError, VoiceError) as exc:
+                return ToolObservation(str(exc), ok=False, user_error=str(exc))
+        return ToolObservation(
+            json.dumps(
+                {
+                    "voice_id": str(voice_row.id),
+                    "provider_voice_id": voice_row.provider_voice_id,
+                    "name": voice_row.name,
+                    "languages": list(voice_row.languages or []),
+                    "tone_tags": list(voice_row.tone_tags or []),
+                    "compatible_styles": list(voice_row.compatible_styles or []),
+                    "scope": voice_row.scope,
+                    "status": voice_row.status,
+                    "preview_url": f"/api/v1/voices/{voice_row.id}/audio",
+                    "saved_to_library": True,
+                }
+            )
+        )
     if name == "create_video":
         from app.chat.editor_create import create_video
         from app.chat.editor_recovery import editor_lock_key

@@ -42,6 +42,7 @@ from app.chat.perception.executes import (
     ListProjectMediaParams,
     SearchMusicParams,
     SearchTranscriptParams,
+    SearchVoicesParams,
     SearchWebParams,
 )
 from app.models.schemas import GetVideoVersionParams
@@ -89,10 +90,19 @@ PERCEPTION_TOOLS: dict[str, PerceptionTool] = {
         PerceptionTool(
             name="search_music",
             description=(
-                "按情绪或关键词查询 Music 曲库 ID，留空则列出全库。用于直接应用点名的曲目、情绪或克制的默认配乐。元数据查询没有播放卡，也不构成试听证据。需要试听或比较时用 show_music_candidates。"
+                "按风格、情绪、标签或关键词复用优先检索永久 Music 曲库（含平台与用户自有曲目），留空列出全库。返回可复用的 music_id（非 Asset ID），可直接传给 create_video 的 music_id 或 prepare_video_materials 的 material_music_ids。需要试听比较时用 show_music_candidates。"
             ),
             params_model=SearchMusicParams,
             execute=executes.search_music,
+            activity_key="chat.inspecting.music",
+        ),
+        PerceptionTool(
+            name="search_voices",
+            description=(
+                "按语言、风格预设、音色气质或关键词复用优先检索永久音色库（voices 表与已验证系统音色）。配音或设计新音色前先调用，优先复用已有 voice_id；无合适音色时再调用 design_voice。"
+            ),
+            params_model=SearchVoicesParams,
+            execute=executes.search_voices,
             activity_key="chat.inspecting.music",
         ),
         PerceptionTool(

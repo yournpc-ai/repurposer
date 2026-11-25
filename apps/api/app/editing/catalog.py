@@ -982,9 +982,14 @@ def catalog_prompt_index() -> dict[str, Any]:
             for v in VOICE_CATALOG
         ],
         "mixing_guidelines": {
-            "bgm_under_dialogue_db": [-26, -24],
+            "bgm_under_dialogue_db": [-26, -22],
             "sfx_normalized_peak_dbfs": -2.0,
             "sfx_typical_gain_db": [-14, -10],
             "sfx_restraint": "Place SFX only on genuine visual kinetic beats (title entrances, scene cuts, card pops); omit SFX on static stretches.",
+        },
+        "directing_guidelines": {
+            "audio_reuse_first": "Call search_voices and search_music before design_voice or generate_music so saved voiceprints and BGM tracks compound across projects.",
+            "commercial_pacing_60s": "Aim for 8-10 tight voice-driven acts (4.5-7.5s each) rather than slow 10s static slides; declare 12-22 EN words or 22-38 ZH chars of spoken narration per act directly on create_video.motion_blocks with voice_id and music_id.",
+            "anti_ppt_motion": "Never stack 3+ static text-card blocks consecutively without dynamic visual motion (product_showcase with zoom_scale 1.15-1.28, chat_demo, metric_grid count-up, data_chart) and alternate energetic transitions (whip_pan, zoom_through, wipe_reveal).",
         },
     }

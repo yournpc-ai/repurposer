@@ -182,10 +182,35 @@ def _fraction(value: str) -> Fraction:
 
 class GenerateMusicArgs(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    duration_seconds: float = Field(ge=0.25, le=MAX_SCORE_SECONDS, multiple_of=0.001)
-    style: Literal["light_electronic", "ambient", "driving_electronic"]
+    duration_seconds: float = Field(default=60.0, ge=0.25, le=MAX_SCORE_SECONDS, multiple_of=0.001)
+    style: Literal["light_electronic", "ambient", "driving_electronic"] = "light_electronic"
     bpm: int = Field(default=100, ge=40, le=200)
     name: str = Field(default="Electronic instrumental", min_length=1, max_length=120)
+    provider: Literal["auto", "minimax", "programmatic"] = Field(
+        default="auto",
+        description="Use 'minimax' (or 'auto' with prompt when MiniMax is configured) to generate a rich BGM track into the permanent music library; use 'programmatic' for deterministic local synth fallback.",
+    )
+    prompt: str | None = Field(
+        default=None,
+        min_length=3,
+        max_length=1000,
+        description="Optional musical style/instrumentation prompt for MiniMax /music_generation.",
+    )
+    mood: str | None = Field(
+        default=None,
+        max_length=50,
+        description="Optional mood label stored on the permanent music library row (e.g. 'editorial-warm', 'tech-pulse').",
+    )
+    tags: list[str] = Field(
+        default_factory=list,
+        max_length=12,
+        description="Optional reusable discovery tags for the permanent music library.",
+    )
+    compatible_styles: list[str] = Field(
+        default_factory=list,
+        max_length=8,
+        description="Optional compatible CompositionStyle presets (e.g. ['vox_editorial', 'swiss_paper']).",
+    )
 
 
 def instrumental_score(request: GenerateMusicArgs) -> ScoreSpec:

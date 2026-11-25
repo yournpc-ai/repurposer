@@ -22,18 +22,37 @@ MAX_ATTEMPTS = 3
 KINDS = ("generate_voice", "generate_music", "generate_image")
 
 
+def _uses_minimax_music(params: dict) -> bool:
+    from app.config import settings
+
+    provider = params.get("provider", "auto")
+    if provider == "programmatic":
+        return False
+    if provider == "minimax":
+        return True
+    return bool(params.get("prompt") and settings.minimax_api_key)
+
+
 async def media_quote(db, kind, params, *, project):
     units = {}
     if kind == "generate_voice":
+        from app.pipeline.voices import resolve_voice_id
         from app.tools.video.narration import (
             narration_original_request_key,
             narration_original_quote_characters,
         )
 
+        resolved_voice, _ = await resolve_voice_id(
+            db,
+            voice_ref=str(params.get("voice_id") or "presenter_male"),
+            owner_id=project.user_id,
+            increment_use=False,
+        )
+        voice_params = {**params, "voice_id": resolved_voice}
         aligning = await db.scalar(
             select(VideoNarration.id).where(
                 VideoNarration.user_id == project.user_id,
-                VideoNarration.content_hash == narration_original_request_key(**params),
+                VideoNarration.content_hash == narration_original_request_key(**voice_params),
                 VideoNarration.status == "aligning",
                 VideoNarration.audio_digest.is_not(None),
                 VideoNarration.storage_key.is_not(None),
@@ -41,7 +60,7 @@ async def media_quote(db, kind, params, *, project):
         )
         if aligning is None:
             units["tts_chars"] = await narration_original_quote_characters(
-                user_id=project.user_id, **params
+                user_id=project.user_id, **voice_params
             )
     elif kind == "generate_image":
         from app.tools.video.visual_assets import cached_visual_asset
@@ -57,7 +76,10 @@ async def media_quote(db, kind, params, *, project):
             )
             prices = [await credits_for_cost(db, usd) for usd in bounds]
             return PlanEstimate(total=prices, per_task=[prices])
-    elif kind != "generate_music":
+    elif kind == "generate_music":
+        if _uses_minimax_music(params):
+            units = {"music_pieces": 1}
+    else:
         raise ValueError("Unsupported media request")
     credits = await _unit_credits(db, units)
     return PlanEstimate(total=[credits, credits], per_task=[[credits, credits]])
@@ -318,10 +340,22 @@ async def _image(job, project, token):
 
 
 async def _voice(job, project, token):
+    from app.pipeline.voices import resolve_voice_id
     from app.tools.video.alignment_store import request_alignment
     from app.tools.video.preparation import snapshot_narration_original
 
-    speech = SpeechObject(kind="speech", object_id="obj_prepare_narration", **job.request)
+    req = dict(job.request)
+    async with AsyncSessionLocal() as voice_db:
+        resolved_voice, matched_row = await resolve_voice_id(
+            voice_db,
+            voice_ref=str(req.get("voice_id") or "presenter_male"),
+            owner_id=project.user_id,
+            increment_use=True,
+        )
+        if matched_row is not None:
+            await voice_db.commit()
+    req["voice_id"] = resolved_voice
+    speech = SpeechObject(kind="speech", object_id="obj_prepare_narration", **req)
     limit = narration_billable_upper_bound(" ".join(speech.text.split()))
     original, _ = await prepare_original_narration(
         speech,
@@ -350,7 +384,7 @@ async def _voice(job, project, token):
 async def execute_media(job_id, token):
     from app.chat.editor_media import _record_audio, _record_image
     from app.tools.music.score import GenerateMusicArgs, instrumental_score
-    from app.tools.video.music_preparation import prepare_programmatic_music
+    from app.tools.video.music_preparation import prepare_minimax_music, prepare_programmatic_music
 
     beat = asyncio.create_task(_heartbeat(job_id, token))
     try:
@@ -367,13 +401,22 @@ async def execute_media(job_id, token):
                     result, image_credits = await _image(job, project, token)
                 else:
                     args = GenerateMusicArgs.model_validate(job.request)
-                    result = await prepare_programmatic_music(
-                        project=project,
-                        score=instrumental_score(args),
-                        name=args.name,
-                        execution_id=str(job.id),
-                    )
-                    units = {}
+                    if _uses_minimax_music(job.request):
+                        await _start_provider(job.id, token)
+                        result = await prepare_minimax_music(
+                            project=project,
+                            args=args,
+                            execution_id=str(job.id),
+                        )
+                        units = {"music_pieces": 1}
+                    else:
+                        result = await prepare_programmatic_music(
+                            project=project,
+                            score=instrumental_score(args),
+                            name=args.name,
+                            execution_id=str(job.id),
+                        )
+                        units = {}
                 async with AsyncSessionLocal() as db:
                     job = await db.scalar(
                         select(MediaJob).where(*_authority(job_id, token)).with_for_update()

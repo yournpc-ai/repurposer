@@ -410,7 +410,7 @@ PLAN_READ_TOOLS = [
     UPDATE_FOCUS_TOOL,
     UPDATE_STEPS_TOOL,
     *perception_chat_tools(
-        "get_understanding", "get_asset", "search_music", "search_transcript",
+        "get_understanding", "get_asset", "search_music", "search_voices", "search_transcript",
         "get_segment", "get_web_page", "search_web", "list_project_media",
     ),
     *_video_project_tools(),

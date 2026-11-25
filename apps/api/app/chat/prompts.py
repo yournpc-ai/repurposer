@@ -91,6 +91,11 @@ def _native_creation_tools(tools, *, facts):
                     shot = parameters["$defs"]["FirstShot"]
                     for field in hidden:
                         shot["properties"].pop(field, None)
+                if voice_excluded:
+                    if "FirstMotionBlock" in (parameters.get("$defs") or {}):
+                        parameters["$defs"]["FirstMotionBlock"]["properties"].pop("narration", None)
+                    for field in ("voice_id", "narration_language"):
+                        (parameters.get("properties") or {}).pop(field, None)
                 parameters = prune_wire_parameters(parameters, set())
                 if not external:
                     description += "未绑定外部 Skill，不使用 skill_resource。"
@@ -254,16 +259,16 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
         names = set(EDITOR_NAMES) | {
             "update_focus", "update_steps", "read_conversation_context", "answer", "ask_user", "list_project_media",
             "review_video", "align_recording", "get_narration_alignment", "annotate_narration",
-            "search_music", "show_music_candidates", "select_music",
+            "search_music", "search_voices", "show_music_candidates", "select_music",
         }
         from app.chat.editor_create import media_generation_forbidden, voice_generation_forbidden
         from app.editing.catalog import catalog_prompt_index
 
         context["creative_catalog"] = catalog_prompt_index()
         if media_generation_forbidden(user_text):
-            names.difference_update({"generate_voice", "generate_music", "generate_image", "generate_sfx"})
+            names.difference_update({"generate_voice", "design_voice", "generate_music", "generate_image", "generate_sfx"})
         elif voice_generation_forbidden(user_text):
-            names.discard("generate_voice")
+            names.difference_update({"generate_voice", "design_voice"})
         if not native_creation:
             names.discard("create_video")
             names.discard("instantiate_skill_blueprint")

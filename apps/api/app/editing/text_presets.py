@@ -224,17 +224,17 @@ TEXT_STYLE_PRESETS: dict[TextStylePresetId, TextStylePresetToken] = {
     "bilingual_cinema": {
         "color": "#FFFFFF",
         "weight": 700,
-        "background": None,
-        "background_mode": "box",
-        "background_opacity": 1.0,
-        "background_padding": [0.0, 0.0],
-        "background_radius": 0.0,
+        "background": "#111318",
+        "background_mode": "pill",
+        "background_opacity": 0.76,
+        "background_padding": [20.0, 10.0],
+        "background_radius": 10.0,
         "border": None,
-        "stroke": {"color": "#0A0F16", "width": 3.5},
-        "shadow": {"color": "#0A0F16", "offset": [0.0, 2.0], "blur": 10.0},
+        "stroke": None,
+        "shadow": {"color": "#0A0F16", "offset": [0.0, 1.0], "blur": 4.0},
         "text_transform": "none",
-        "secondary_line_scale": 0.72,
-        "secondary_line_opacity": 0.86,
+        "secondary_line_scale": 0.74,
+        "secondary_line_opacity": 0.88,
     },
 }
 
@@ -305,7 +305,7 @@ TEXT_STYLE_PRESET_CATALOG: dict[TextStylePresetId, dict[str, Any]] = {
         "id": "bilingual_cinema",
         "name": "Bilingual Cinema",
         "use_for": "Dual-language subtitles in a single Clip (primary line + '\\n' + secondary translation line)",
-        "visual_signature": "700 white primary line with 0.72x / 0.86-opacity secondary line, 3.5px halo and soft shadow",
+        "visual_signature": "700 white primary with 0.74x / 0.88-opacity secondary line inside a tight 76%-opacity dark-ink pill (20x10 padding, 10px radius, zero full-width bar)",
     },
 }
 
@@ -348,8 +348,13 @@ def resolve_text_preset_token(
     if preset_id == "lower_third_tag" and token["border"] is not None:
         token["border"]["color"] = style_tokens["accent"]
     elif preset_id == "bilingual_cinema" and style_tokens.get("theme") == "light":
-        token["color"] = style_tokens["ink"]
-        token["stroke"] = {"color": style_tokens["canvas_bg"], "width": 3.5}
+        token["color"] = "#F8FAFC"
+        token["background"] = "#111318"
+        token["background_mode"] = "pill"
+        token["background_opacity"] = 0.82
+        token["background_padding"] = [20.0, 10.0]
+        token["background_radius"] = 10.0
+        token["stroke"] = None
         token["shadow"] = None
     return token
 

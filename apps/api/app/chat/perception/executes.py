@@ -83,8 +83,44 @@ class ListProjectMediaParams(BaseModel):
 class SearchMusicParams(BaseModel):
     query: str | None = Field(
         default=None,
-        description="用于匹配曲目情绪或标题的关键词，例如 calm 或 upbeat。null 或空字符串表示整个曲库。",
+        description="用于匹配曲目标题、标签、情绪或提示词的关键词。null 或空字符串表示按复用优先级列出可用曲库。",
     )
+    style_preset: str | None = Field(
+        default=None,
+        description="可选的视觉风格预设（institutional_dark, swiss_paper, vox_editorial, kinetic_anime），优先匹配兼容配乐。",
+    )
+    mood: str | None = Field(
+        default=None,
+        description="可选的曲目情绪标签（如 editorial-warm, tech-pulse, calm, cinematic）。",
+    )
+    tags: list[str] | None = Field(
+        default=None,
+        description="可选的配乐标签列表（如 ['piano', 'warm', 'modern']）。",
+    )
+    instrumental_only: bool = Field(
+        default=True,
+        description="默认 true（只搜索无人声纯音乐，避免与旁白打架）。",
+    )
+
+
+class SearchVoicesParams(BaseModel):
+    language: str | None = Field(
+        default=None,
+        description="目标配音语言代码（如 'en', 'zh', 'fr', 'de', 'es', 'it'）。",
+    )
+    style_preset: str | None = Field(
+        default=None,
+        description="可选的视觉风格预设（institutional_dark, swiss_paper, vox_editorial, kinetic_anime）。",
+    )
+    tone: str | None = Field(
+        default=None,
+        description="可选音色气质标签（如 'warm', 'authoritative', 'crisp', 'founder', 'documentary'）。",
+    )
+    query: str | None = Field(
+        default=None,
+        description="自由关键词（匹配名称、描述、设计提示词或标签）。留空列出当前可用音色库。",
+    )
+    limit: int = Field(default=12, ge=1, le=50)
 
 
 class GetWebPageParams(BaseModel):
@@ -424,36 +460,104 @@ async def get_understanding(db: AsyncSession, project: Project, params) -> str:
 
 
 async def search_music(db: AsyncSession, project: Project, params: SearchMusicParams) -> str:
-    """The music library catalog read — 「加个 bgm，有推荐的吗？」's factual
-    substrate. The catalog is the public library (platform defaults + shared
-    generated pieces); a private-upload axis has no seat yet."""
-    from app.pipeline.music import list_music  # deferred: pipeline weight
+    """Reuse-first search over the permanent music library (platform + owner's tracks)."""
+    from app.pipeline.music import list_music, search_music_library
 
-    catalog = await list_music(db)
-    if not catalog:
-        return "The music library is empty right now — no track can be recommended."
-    query = (getattr(params, "query", None) or "").strip().lower()
-    matches = [
-        m
-        for m in catalog
-        if not query or query in f"{m.mood} {m.title}".lower()
-    ]
+    query = (getattr(params, "query", None) or "").strip()
+    style_preset = (getattr(params, "style_preset", None) or "").strip() or None
+    mood = (getattr(params, "mood", None) or "").strip() or None
+    tags = getattr(params, "tags", None) or None
+    instrumental_only = bool(getattr(params, "instrumental_only", True))
+
+    matches = await search_music_library(
+        db,
+        owner_id=project.user_id,
+        style_preset=style_preset,
+        mood=mood,
+        tags=tags,
+        query=query or None,
+        instrumental_only=instrumental_only,
+        limit=12,
+    )
     if not matches:
+        catalog = await list_music(db, user_id=project.user_id)
+        if not catalog:
+            return "The music library is empty right now — generate a reusable BGM track via generate_music."
         moods = ", ".join(sorted({m.mood for m in catalog})[:10])
         return (
-            f"No track matches \"{query}\". Available moods include: {moods}. "
-            "Call with no query (or one of these moods) for the catalog."
+            f"No track matches those filters. Available moods include: {moods}. "
+            "Call with no filters to inspect all available tracks, or call generate_music to save a new permanent track."
         )
-    shown = matches[:8]
+    shown = matches[:10]
     header = (
-        f"Music library — {len(matches)} match(es) for \"{query}\""
-        if query
-        else f"Music library — the full catalog ({len(matches)} tracks)"
+        f"Music library — {len(matches)} match(es)"
+        if (query or style_preset or mood or tags)
+        else f"Music library — {len(matches)} reusable track(s)"
     )
-    lines = [header + (", first 8:" if len(matches) > 8 else ":")]
+    lines = [header + (", top 10:" if len(matches) > 10 else ":")]
     for m in shown:
         duration = f"{m.duration_seconds}s" if m.duration_seconds else "?s"
-        lines.append(f"- {m.title} — mood: {m.mood} · {duration} · music_id={m.id} (Music library, not Asset)")
+        tag_str = f" · tags={','.join(m.tags)}" if m.tags else ""
+        style_str = f" · styles={','.join(m.compatible_styles)}" if m.compatible_styles else ""
+        lufs_str = f" · {m.lufs:.1f} LUFS" if m.lufs is not None else ""
+        lines.append(
+            f"- {m.title} — mood: {m.mood} · {duration}{tag_str}{style_str}{lufs_str} · uses={int(m.use_count or 0)} · music_id={m.id} (Music library, not Asset)"
+        )
+    return "\n".join(lines)
+
+
+async def search_voices(db: AsyncSession, project: Project, params: SearchVoicesParams) -> str:
+    """Reuse-first search over the permanent voiceprint library + verified stock voices."""
+    from app.editing.catalog import VOICE_CATALOG
+    from app.pipeline.voices import search_voices as query_voices
+
+    language = (getattr(params, "language", None) or "").strip() or None
+    style_preset = (getattr(params, "style_preset", None) or "").strip() or None
+    tone = (getattr(params, "tone", None) or "").strip() or None
+    query = (getattr(params, "query", None) or "").strip() or None
+    limit = int(getattr(params, "limit", 12) or 12)
+
+    library_rows = await query_voices(
+        db,
+        owner_id=project.user_id,
+        language=language,
+        style_preset=style_preset,
+        tone=tone,
+        query=query,
+        limit=limit,
+    )
+
+    lines: list[str] = []
+    if library_rows:
+        lines.append(f"Permanent voice library — {len(library_rows)} match(es) (reuse-first):")
+        for v in library_rows:
+            langs = ",".join(v.languages or []) or "multi"
+            tags = f" · tones={','.join(v.tone_tags)}" if v.tone_tags else ""
+            styles = f" · styles={','.join(v.compatible_styles)}" if v.compatible_styles else ""
+            lines.append(
+                f"- {v.name} — voice_id={v.id} · provider_voice_id={v.provider_voice_id} · langs={langs} · scope={v.scope}{tags}{styles} · uses={int(v.use_count or 0)}"
+            )
+    else:
+        lines.append("Permanent voice library — 0 saved custom/curated matches for these filters.")
+
+    lang_norm = (language or "").lower()
+    stock_matches = [
+        item
+        for item in VOICE_CATALOG
+        if (not lang_norm or lang_norm in item["languages"])
+        and (
+            not query
+            or query.lower() in f"{item['voice_id']} {item['style']} {' '.join(item['languages'])}".lower()
+        )
+        and (not tone or tone.lower() in item["style"].lower())
+    ]
+    if stock_matches:
+        lines.append("Verified stock voices (fallback when no saved voiceprint matches):")
+        for item in stock_matches[:6]:
+            lines.append(
+                f"- {item['voice_id']} — langs={','.join(item['languages'])} · {item['style']}"
+            )
+    lines.append("Tip: Reuse an existing voice_id first; call design_voice only when no existing voice fits the brand timbre.")
     return "\n".join(lines)
 
 

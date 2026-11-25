@@ -9,23 +9,40 @@ from sqlalchemy import select
 
 from app.agents.tool_progress import current_call_id
 from app.editing.catalog import MotionBlockId
-from app.editing.edits import AddScene, SetTransition, apply_ops
-from app.editing.revisions import motion_block_ops
+from app.editing.edits import AddClip, AddScene, AddTrack, BindSource, SetTransition, apply_ops
+from app.editing.revisions import motion_block_ops, text_safe_layout
 from app.editing.schemas import (
+    AudioObject,
+    CaptionDerivation,
+    Clip,
+    ClipSource,
     CompositionContent,
     ProductShowcaseProps,
     Scene,
+    SpeechObject,
+    TextObject,
     TimeRange,
     Track,
     Transition,
     TransitionKind,
     VersionSettings,
+    speech_text_digest,
 )
 from app.editing.store import RequestMismatch, apply_composition_edits, snapshot_facts
 from app.editing.styles import CompositionStyle, StylePresetId, resolve_style_tokens
-from app.editing.timing import seconds_to_ticks
+from app.editing.text_presets import (
+    TextStylePresetId,
+    default_caption_text_style,
+    resolve_text_preset_token,
+    text_style_from_token,
+)
+from app.editing.timing import (
+    output_ticks_to_source_ticks,
+    seconds_to_ticks,
+    source_ticks_to_output_ticks,
+)
 from app.models.schemas import canonical_json_hash
-from app.models.tables import Asset, Composition, CompositionVersion, Message, Project, SourceSnapshot
+from app.models.tables import Asset, Composition, CompositionVersion, Message, Music, Project, SourceSnapshot
 from app.tools.video.design import (
     CompositionSceneAuthoring,
     CompositionScenePlan,
@@ -159,6 +176,18 @@ class FirstMotionBlock(BaseModel):
         allow_inf_nan=False,
         description="Centered transition duration in seconds when transition_after is set.",
     )
+    narration: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=2000,
+        description="Optional spoken voiceover script for this motion block act (concise 12-22 EN words or 22-38 ZH chars per act).",
+    )
+    caption_text: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=600,
+        description="Optional explicit display/bilingual caption text override (e.g. '中文主句\\nEnglish subtitle') aligned to this act's speech window.",
+    )
 
 
 class CreateVideoArgs(BaseModel):
@@ -176,7 +205,7 @@ class CreateVideoArgs(BaseModel):
             "Ordered native declarative motion-graphics acts (statement_hook, product_showcase, "
             "device_mockup, chat_demo, flow_diagram, step_timeline, split_compare, bento_features, "
             "metric_grid, data_chart, quote_proof, kinetic_title, closing_cta) built sequentially "
-            "with optional act transitions."
+            "with optional narration, caption_text, resources, and act transitions."
         ),
     )
     aspect: Literal["16:9", "9:16", "1:1"] = "16:9"
@@ -193,6 +222,37 @@ class CreateVideoArgs(BaseModel):
         exclude_if=lambda v: v is None,
         description="Optional hex accent override paired with style_preset.",
     )
+    voice_id: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=120,
+        exclude_if=lambda v: v is None,
+        description="Optional voice reference (permanent voices.id UUID from search_voices/design_voice, provider_voice_id, or stock voice ID). Defaults to persona/house voice.",
+    )
+    narration_language: str | None = Field(
+        default=None,
+        min_length=2,
+        max_length=16,
+        exclude_if=lambda v: v is None,
+        description="Optional narration ISO language code (e.g. 'en', 'zh'). Auto-detected when omitted.",
+    )
+    music_id: UUID | None = Field(
+        default=None,
+        exclude_if=lambda v: v is None,
+        description="Optional permanent music library ID (from search_music/generate_music) attached as full-length BGM with smooth fades and voiceover ducking.",
+    )
+    bgm_gain_db: float = Field(
+        default=-21.0,
+        ge=-40.0,
+        le=0.0,
+        allow_inf_nan=False,
+        description="Optional BGM gain in dB when music_id is provided (defaults to -22 dB under narration, -14 dB without narration).",
+    )
+    caption_preset: TextStylePresetId | None = Field(
+        default=None,
+        exclude_if=lambda v: v is None,
+        description="Optional caption text style preset override (e.g. 'bilingual_cinema', 'cinema_glass', 'vox_label').",
+    )
     pending_disposition: Literal["answer", "skip", "none"] = Field(
         default="none",
         description=(
@@ -206,6 +266,103 @@ class CreateVideoArgs(BaseModel):
         if not self.shots and not self.motion_blocks:
             raise ValueError("Provide at least one entry in shots or motion_blocks.")
         return self
+
+
+def _infer_narration_language(text: str, explicit: str | None) -> str:
+    if explicit and explicit.strip():
+        return explicit.strip().lower()
+    if any(0x4E00 <= ord(ch) <= 0x9FFF or 0x3400 <= ord(ch) <= 0x4DBF for ch in text):
+        return "zh"
+    return "en"
+
+
+def _resolve_create_caption_style(
+    settings_obj: VersionSettings,
+    *,
+    caption_preset: TextStylePresetId | None,
+    is_bilingual: bool,
+):
+    font_size = max(28, round(settings_obj.width * 38 / 1920))
+    style_tokens = (
+        resolve_style_tokens(settings_obj.style)
+        if settings_obj.style is not None
+        else None
+    )
+    if caption_preset is not None:
+        token = resolve_text_preset_token(caption_preset, style_tokens)
+        style = text_style_from_token(token, font_size=font_size, align="center", line_height=1.3)
+    elif is_bilingual:
+        token = resolve_text_preset_token("bilingual_cinema", style_tokens)
+        style = text_style_from_token(token, font_size=font_size, align="center", line_height=1.3)
+    else:
+        style = default_caption_text_style(
+            settings_obj, font_size=font_size, align="center", line_height=1.3
+        )
+    if style.background is not None and style.background_mode == "box":
+        style = style.model_copy(
+            update={
+                "background_mode": "pill",
+                "background_padding": style.background_padding if style.background_padding != (0.0, 0.0) else (20.0, 10.0),
+                "background_radius": style.background_radius or 10.0,
+                "background_opacity": 0.78 if style.background_opacity == 1.0 else style.background_opacity,
+            }
+        )
+    return style
+
+
+async def _prepare_motion_block_narration(
+    db,
+    *,
+    project: Project,
+    text: str,
+    provider_voice_id: str,
+    language: str,
+    execution_id: str,
+    scene_id: str,
+) -> dict[str, Any]:
+    """Synthesize or reuse a speed-1.0 narration original for a motion block act.
+
+    Uses cached ``video_narrations`` originals first; synthesizes via MiniMax when
+    configured; otherwise degrades cleanly to a pending ``SpeechObject`` plan so
+    offline/deterministic runs work without live API calls.
+    """
+    from app.config import settings
+    from app.tools.video.narration import (
+        narration_billable_upper_bound,
+        prepare_original_narration,
+    )
+    from app.tools.video.narration_store import peek_original
+    from app.tools.video.params import narration_original_policy
+    from app.tools.video.preparation import snapshot_narration_original
+
+    speech = SpeechObject(
+        kind="speech",
+        object_id=f"obj_mb_speech_{scene_id}",
+        text=text,
+        voice_id=provider_voice_id,
+        language=language,
+    )
+    original = await peek_original(project.user_id, speech)
+    if original is None and settings.minimax_api_key:
+        budget = narration_billable_upper_bound(" ".join(text.split())) * 2
+        original, _ = await prepare_original_narration(
+            speech,
+            user_id=project.user_id,
+            execution_id=execution_id,
+            policy=narration_original_policy(budget),
+        )
+    if original is not None:
+        _, snap = await snapshot_narration_original(
+            db, project, text=text, original=original, scene_id=scene_id
+        )
+        await db.flush()
+        return {
+            "mode": "prepared",
+            "snapshot": snap,
+            "duration_s": float(original["duration_s"]),
+            "cues": list(original.get("cues") or []),
+        }
+    return {"mode": "pending"}
 
 
 def _creation_context(db, turn):
@@ -293,7 +450,10 @@ async def create_video(db, turn, args: CreateVideoArgs):
         total_acts = len(args.shots) + len(args.motion_blocks)
         if required.get("scene_count") is not None and total_acts != required["scene_count"]:
             raise ValueError(f"The user fixed {required['scene_count']} shots; received {total_acts}.")
-        if any(shot.narration is not None for shot in args.shots) and voice_generation_forbidden(getattr(turn, "text", "")):
+        has_any_narration = any(shot.narration is not None for shot in args.shots) or any(
+            mb.narration is not None for mb in args.motion_blocks
+        )
+        if has_any_narration and voice_generation_forbidden(getattr(turn, "text", "")):
             raise ValueError("The user explicitly disallowed narration generation. Use existing sources or native text instead.")
         if required.get("target_seconds") is not None:
             ticks = seconds_to_ticks(required["target_seconds"])
@@ -382,6 +542,23 @@ async def create_video(db, turn, args: CreateVideoArgs):
                 for b in comp_content.sources
                 if b.snapshot_digest
             }
+
+            has_mb_narration = any(mb.narration is not None for mb in args.motion_blocks)
+            resolved_provider_voice_id: str | None = None
+            if has_mb_narration:
+                from app.pipeline.voices import resolve_voice_id
+                from app.platform.project_context import resolve_persona
+                from app.tools.video.narration import DEFAULT_VIDEO_VOICE_ID, resolve_video_voice
+
+                raw_voice_ref = args.voice_id
+                if not raw_voice_ref:
+                    persona = await resolve_persona(db, turn.project)
+                    raw_voice_ref = resolve_video_voice(persona.voice if persona else None) or DEFAULT_VIDEO_VOICE_ID
+                resolved_provider_voice_id, _ = await resolve_voice_id(
+                    db, voice_ref=raw_voice_ref, owner_id=owner, increment_use=True
+                )
+
+            deferred_captions: list[tuple[str, int, int, str, Any, Any]] = []
             for idx, mb in enumerate(args.motion_blocks):
                 resolved_props, resolved_resources = await resolve_motion_block_resources(
                     db,
@@ -394,14 +571,44 @@ async def create_video(db, turn, args: CreateVideoArgs):
                 )
                 for res in resolved_resources:
                     bound_digests[UUID(res["snapshot_id"])] = res["snapshot_digest"]
-                dur_ticks = seconds_to_ticks(mb.duration_seconds, rate)
+
+                scene_index += 1
+                scene_id = f"scene_{scene_index}"
+                eff_duration_s = mb.duration_seconds
+                narr_prep: dict[str, Any] | None = None
+                eff_lang = (
+                    _infer_narration_language(mb.narration, args.narration_language)
+                    if mb.narration is not None
+                    else None
+                )
+                if mb.narration is not None:
+                    assert resolved_provider_voice_id is not None and eff_lang is not None
+                    narr_prep = await _prepare_motion_block_narration(
+                        db,
+                        project=turn.project,
+                        text=mb.narration,
+                        provider_voice_id=resolved_provider_voice_id,
+                        language=eff_lang,
+                        execution_id=identity,
+                        scene_id=scene_id,
+                    )
+                    if narr_prep["mode"] == "prepared" and required.get("target_seconds") is None:
+                        measured_s = float(narr_prep["duration_s"])
+                        has_visual_callout = bool(resolved_props.get("callout_steps"))
+                        if has_visual_callout:
+                            eff_duration_s = max(mb.duration_seconds, measured_s + 0.45)
+                        else:
+                            eff_duration_s = max(
+                                measured_s + 0.45,
+                                min(mb.duration_seconds, measured_s + 1.5),
+                            )
+
+                dur_ticks = seconds_to_ticks(eff_duration_s, rate)
                 if dur_ticks <= 0:
                     raise ValueError("Motion block duration must be at least one composition tick.")
                 start = cursor_ticks
                 end = start + dur_ticks
                 cursor_ticks = end
-                scene_index += 1
-                scene_id = f"scene_{scene_index}"
                 intent_label = str(
                     resolved_props.get("headline")
                     or resolved_props.get("title")
@@ -422,6 +629,137 @@ async def create_video(db, turn, args: CreateVideoArgs):
                     start=start,
                     end=end,
                 )
+
+                scene_speech_ids: list[str] = []
+                extra_audio_ops: list[Any] = []
+                if mb.narration is not None and narr_prep is not None:
+                    dialogue_track = next(
+                        (t for t in comp_content.timeline.tracks if t.kind == "audio" and t.role == "dialogue"),
+                        None,
+                    )
+                    if dialogue_track is None:
+                        dialogue_track = Track(
+                            track_id="trk_dialogue",
+                            kind="audio",
+                            role="dialogue",
+                            order=max((t.order for t in comp_content.timeline.tracks if t.kind == "audio"), default=-1) + 1,
+                            clips=[],
+                        )
+                        extra_audio_ops.append(AddTrack(op="add_track", track=dialogue_track))
+
+                    caption_display = mb.caption_text or mb.narration
+                    caption_style = _resolve_create_caption_style(
+                        comp_content.settings,
+                        caption_preset=args.caption_preset,
+                        is_bilingual="\n" in caption_display,
+                    )
+
+                    if narr_prep["mode"] == "prepared":
+                        snap: SourceSnapshot = narr_prep["snapshot"]
+                        bound_digests[snap.id] = snap.digest
+                        if snap.id not in {b.snapshot_id for b in comp_content.sources}:
+                            extra_audio_ops.append(BindSource(op="bind_source", snapshot_id=snap.id))
+                        lead = seconds_to_ticks(0.15, rate)
+                        audio_out_ticks = source_ticks_to_output_ticks(snap.duration_ticks, rate)
+                        if start + lead + audio_out_ticks <= end:
+                            speech_start = start + lead
+                        else:
+                            speech_start = start
+                        avail_out = max(1, end - speech_start)
+                        used_src_ticks = min(
+                            snap.duration_ticks,
+                            output_ticks_to_source_ticks(min(audio_out_ticks, avail_out), rate),
+                        )
+                        speech_end = speech_start + source_ticks_to_output_ticks(used_src_ticks, rate)
+                        if speech_end > end:
+                            used_src_ticks = max(1, used_src_ticks - 1)
+                            speech_end = speech_start + source_ticks_to_output_ticks(used_src_ticks, rate)
+                        extra_audio_ops.append(
+                            AddClip(
+                                op="add_clip",
+                                track_id=dialogue_track.track_id,
+                                clip=Clip(
+                                    clip_id=f"clp_vo_{scene_id}",
+                                    range=TimeRange(start=speech_start, end=speech_end),
+                                    scene_id=scene_id,
+                                    source=ClipSource(
+                                        snapshot_id=snap.id,
+                                        snapshot_digest=snap.digest,
+                                        source_range=TimeRange(start=0, end=used_src_ticks),
+                                    ),
+                                    object=AudioObject(
+                                        kind="audio",
+                                        object_id=f"obj_vo_{scene_id}",
+                                        gain_db=0.0,
+                                    ),
+                                    animations=[],
+                                ),
+                            )
+                        )
+                        cues = narr_prep.get("cues") or []
+                        if mb.caption_text is not None or not cues:
+                            deferred_captions.append(
+                                (scene_id, speech_start, speech_end, caption_display, caption_style, None)
+                            )
+                        else:
+                            prev_end = speech_start
+                            for cue in cues:
+                                cue_text = str(cue.get("text") or "").strip()
+                                if not cue_text:
+                                    continue
+                                cs = max(
+                                    prev_end,
+                                    speech_start + seconds_to_ticks(float(cue["time_begin"]) / 1000.0, rate),
+                                )
+                                ce = min(
+                                    speech_end,
+                                    speech_start + seconds_to_ticks(float(cue["time_end"]) / 1000.0, rate),
+                                )
+                                if ce <= cs:
+                                    continue
+                                deferred_captions.append(
+                                    (scene_id, cs, ce, cue_text, caption_style, None)
+                                )
+                                prev_end = ce
+                    else:
+                        assert resolved_provider_voice_id is not None and eff_lang is not None
+                        speech_clip_id = f"clp_speech_{scene_id}"
+                        speech_obj_id = f"obj_speech_{scene_id}"
+                        scene_speech_ids.append(speech_clip_id)
+                        extra_audio_ops.append(
+                            AddClip(
+                                op="add_clip",
+                                track_id=dialogue_track.track_id,
+                                clip=Clip(
+                                    clip_id=speech_clip_id,
+                                    range=TimeRange(start=start, end=end),
+                                    scene_id=scene_id,
+                                    source=None,
+                                    object=SpeechObject(
+                                        kind="speech",
+                                        object_id=speech_obj_id,
+                                        text=mb.narration,
+                                        voice_id=resolved_provider_voice_id,
+                                        language=eff_lang,
+                                        gain_db=0.0,
+                                    ),
+                                    animations=[],
+                                ),
+                            )
+                        )
+                        derivation: CaptionDerivation | None = None
+                        primary_line = caption_display.split("\n", 1)[0]
+                        if caption_display == mb.narration or primary_line == mb.narration:
+                            derivation = CaptionDerivation(
+                                speech_object_id=speech_obj_id,
+                                state="derived",
+                                source_text_digest=speech_text_digest(mb.narration),
+                                alignment="minimax-t2a-v2-sentence-v1",
+                            )
+                        deferred_captions.append(
+                            (scene_id, start, end, caption_display, caption_style, derivation)
+                        )
+
                 comp_content = apply_ops(
                     comp_content,
                     [
@@ -431,9 +769,11 @@ async def create_video(db, turn, args: CreateVideoArgs):
                                 scene_id=scene_id,
                                 range=TimeRange(start=start, end=end),
                                 intent=intent_label,
+                                speech_clip_ids=scene_speech_ids,
                             ),
                         ),
                         *block_ops,
+                        *extra_audio_ops,
                     ],
                     bound_digests,
                 )
@@ -446,6 +786,48 @@ async def create_video(db, turn, args: CreateVideoArgs):
                     "",
                 )
                 placed_blocks.append((clip_id, landed_track_id, start, end, mb))
+
+            if deferred_captions:
+                caption_ops: list[Any] = []
+                cap_track = next(
+                    (t for t in comp_content.timeline.tracks if t.kind == "visual" and t.role == "caption"),
+                    None,
+                )
+                if cap_track is None:
+                    cap_track = Track(
+                        track_id="trk_caption",
+                        kind="visual",
+                        role="caption",
+                        order=max((t.order for t in comp_content.timeline.tracks if t.kind == "visual"), default=-1) + 1,
+                        clips=[],
+                    )
+                    caption_ops.append(AddTrack(op="add_track", track=cap_track))
+                cap_layout = text_safe_layout(
+                    comp_content.settings.width, comp_content.settings.height, "bottom", role="caption"
+                )
+                for cap_idx, (c_scene_id, c_start, c_end, c_text, c_style, c_deriv) in enumerate(deferred_captions, start=1):
+                    caption_ops.append(
+                        AddClip(
+                            op="add_clip",
+                            track_id=cap_track.track_id,
+                            clip=Clip(
+                                clip_id=f"clp_cap_{cap_idx}",
+                                range=TimeRange(start=c_start, end=c_end),
+                                scene_id=c_scene_id,
+                                source=None,
+                                object=TextObject(
+                                    kind="text",
+                                    object_id=f"obj_cap_{cap_idx}",
+                                    text=c_text,
+                                    layout=cap_layout,
+                                    style=c_style,
+                                    caption=c_deriv,
+                                ),
+                                animations=[],
+                            ),
+                        )
+                    )
+                comp_content = apply_ops(comp_content, caption_ops, bound_digests)
 
             transition_ops = []
             for idx in range(len(placed_blocks) - 1):
@@ -474,6 +856,75 @@ async def create_video(db, turn, args: CreateVideoArgs):
             if transition_ops:
                 comp_content = apply_ops(comp_content, transition_ops, bound_digests)
             content = comp_content.model_dump(mode="json")
+
+        if args.music_id is not None:
+            from app.skills.blueprint import music_clips_for_window
+            from app.tools.video.preparation import snapshot_music_track
+
+            comp_content = CompositionContent.model_validate(content)
+            track_row = await db.get(Music, args.music_id)
+            if track_row is None or track_row.status == "archived" or not (
+                track_row.is_public or track_row.scope == "platform" or track_row.generated_by_user_id == owner
+            ):
+                raise ValueError(f"Music {args.music_id} is unavailable.")
+            bgm_snap = await snapshot_music_track(db, track_row, owner_id=owner)
+            if bgm_snap.origin_project_id is None:
+                bgm_snap.origin_project_id = project
+            track_row.use_count = int(track_row.use_count or 0) + 1
+            await db.flush()
+
+            total_ticks = max(
+                (clip.range.end for trk in comp_content.timeline.tracks for clip in trk.clips),
+                default=0,
+            )
+            if total_ticks > 0:
+                has_dialogue = any(
+                    trk.kind == "audio" and trk.role == "dialogue" and trk.clips
+                    for trk in comp_content.timeline.tracks
+                )
+                eff_bgm_gain = (
+                    args.bgm_gain_db
+                    if "bgm_gain_db" in args.model_fields_set
+                    else (-22.0 if has_dialogue else -14.0)
+                )
+                bgm_clips = music_clips_for_window(
+                    settings=comp_content.settings,
+                    start=0,
+                    end=total_ticks,
+                    source_id=bgm_snap.id,
+                    digest=bgm_snap.digest,
+                    source_ticks=bgm_snap.duration_ticks,
+                    id_stem="create_bgm",
+                    gain_db=eff_bgm_gain,
+                    fade_in_seconds=0.8,
+                    fade_out_seconds=1.5,
+                )
+                bgm_ops: list[Any] = []
+                bound_digests_bgm = {
+                    b.snapshot_id: b.snapshot_digest
+                    for b in comp_content.sources
+                    if b.snapshot_digest
+                }
+                bound_digests_bgm[bgm_snap.id] = bgm_snap.digest
+                if bgm_snap.id not in {b.snapshot_id for b in comp_content.sources}:
+                    bgm_ops.append(BindSource(op="bind_source", snapshot_id=bgm_snap.id))
+                music_track = next(
+                    (t for t in comp_content.timeline.tracks if t.kind == "audio" and t.role == "music"),
+                    None,
+                )
+                if music_track is None:
+                    music_track = Track(
+                        track_id="trk_music",
+                        kind="audio",
+                        role="music",
+                        order=max((t.order for t in comp_content.timeline.tracks if t.kind == "audio"), default=-1) + 1,
+                        clips=[],
+                    )
+                    bgm_ops.append(AddTrack(op="add_track", track=music_track))
+                for bc in bgm_clips:
+                    bgm_ops.append(AddClip(op="add_clip", track_id=music_track.track_id, clip=bc))
+                comp_content = apply_ops(comp_content, bgm_ops, bound_digests_bgm)
+                content = comp_content.model_dump(mode="json")
         if generator_resources:
             provenance["skill_generator_resources"] = generator_resources
         if required.get("target_seconds") is not None:
@@ -551,5 +1002,27 @@ async def create_video(db, turn, args: CreateVideoArgs):
             for track in saved.timeline["tracks"]
             for clip in track["clips"]
             if clip["object"]["kind"] == "motion_block"
+        ],
+        "narration_clips": [
+            {
+                "clip_id": clip["clip_id"],
+                "kind": clip["object"]["kind"],
+                "start_seconds": clip["range"]["start"] / rate_saved,
+                "end_seconds": clip["range"]["end"] / rate_saved,
+            }
+            for track in saved.timeline["tracks"]
+            if track["kind"] == "audio" and track["role"] == "dialogue"
+            for clip in track["clips"]
+        ],
+        "bgm_clips": [
+            {
+                "clip_id": clip["clip_id"],
+                "gain_db": clip["object"].get("gain_db"),
+                "start_seconds": clip["range"]["start"] / rate_saved,
+                "end_seconds": clip["range"]["end"] / rate_saved,
+            }
+            for track in saved.timeline["tracks"]
+            if track["kind"] == "audio" and track["role"] == "music"
+            for clip in track["clips"]
         ],
     }

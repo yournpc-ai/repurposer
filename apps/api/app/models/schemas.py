@@ -2684,6 +2684,14 @@ class MusicResponse(BaseModel):
     source_url: str | None = None
     attribution: str | None = None
     is_public: bool
+    scope: str = "platform"
+    status: str = "curated"
+    tags: list[str] = Field(default_factory=list)
+    compatible_styles: list[str] = Field(default_factory=list)
+    instrumental: bool = True
+    lufs: float | None = None
+    use_count: int = 0
+    is_favorite: bool = False
     created_at: datetime
 
 
@@ -2696,6 +2704,8 @@ class MusicGenerateRequest(BaseModel):
     mood: str | None = None
     title: str | None = None
     is_instrumental: bool = True
+    tags: list[str] = Field(default_factory=list)
+    compatible_styles: list[str] = Field(default_factory=list)
 
 
 class MusicMetadataUpdate(BaseModel):
@@ -2708,6 +2718,49 @@ class MusicMetadataUpdate(BaseModel):
     source_url: str | None = None
     attribution: str | None = None
     is_public: bool | None = None
+
+
+class VoiceResponse(BaseModel):
+    """A permanent voiceprint library entry (metadata + preview audio URL)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    owner_id: UUID | None = None
+    scope: str
+    status: str
+    source_kind: str
+    name: str
+    description: str | None = None
+    design_prompt: str | None = None
+    languages: list[str] = Field(default_factory=list)
+    gender: str | None = None
+    age_band: str | None = None
+    tone_tags: list[str] = Field(default_factory=list)
+    compatible_styles: list[str] = Field(default_factory=list)
+    provider: str
+    provider_voice_id: str
+    preview_url: str | None = None
+    use_count: int = 0
+    is_favorite: bool = False
+    created_at: datetime
+    updated_at: datetime
+
+
+class VoiceDesignRequest(BaseModel):
+    """Request body for designing and persisting a new custom voiceprint."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    name: str = Field(min_length=1, max_length=160)
+    prompt: str = Field(min_length=4, max_length=2000)
+    preview_text: str = Field(min_length=4, max_length=500)
+    languages: list[str] = Field(default_factory=lambda: ["en"], min_length=1, max_length=8)
+    tone_tags: list[str] = Field(default_factory=list, max_length=12)
+    compatible_styles: list[str] = Field(default_factory=list, max_length=8)
+    gender: str | None = Field(default=None, max_length=24)
+    age_band: str | None = Field(default=None, max_length=32)
+    description: str | None = Field(default=None, max_length=500)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
