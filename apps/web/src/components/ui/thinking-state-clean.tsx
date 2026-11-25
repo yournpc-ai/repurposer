@@ -233,13 +233,13 @@ const css = /* css */ `
   --ui-tkc-rail: var(--aui-border, rgba(0, 0, 0, 0.08));
   --ui-tkc-fill: rgba(0, 0, 0, 0.06);
   --ui-tkc-wash: var(--aui-subtle, rgba(0, 0, 0, 0.03));
-  --ui-tkc-accent: rgba(0, 96, 226, 0.765);
+  --ui-tkc-accent: var(--aui-ink, rgba(0, 0, 0, 0.84));
   --ui-tkc-shine: rgba(255, 255, 255, 0.82);
   /* Strokes are shadows: a 0.5px hairline plus a soft lift */
   --ui-tkc-shadow: var(--aui-shadow-card, 0 0 0 0.5px rgba(0, 0, 0, 0.06), 0 1px 1px -1px rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.05));
   --ui-tkc-shadow-pop: 0 0 0 0.5px rgba(0, 0, 0, 0.08), 0 12px 28px -10px rgba(0, 0, 0, 0.16), 0 1px 2px 0 rgba(0, 0, 0, 0.05);
   --ui-tkc-ring: 0 0 0 0.5px rgba(0, 0, 0, 0.1);
-  --ui-tkc-focus: var(--aui-focus, rgba(0, 96, 226, 0.7));
+  --ui-tkc-focus: var(--aui-focus, rgba(0, 0, 0, 0.72));
   --ui-tkc-ease: var(--aui-ease, cubic-bezier(0.22, 1, 0.36, 1));
 
   position: relative;
@@ -381,7 +381,7 @@ const css = /* css */ `
   transition: stroke-dashoffset 280ms var(--ui-tkc-ease), stroke 200ms ease;
 }
 .ui-thinkc__steps-badge[data-tone="done"] .ui-thinkc__ring-arc {
-  stroke: #16a34a;
+  stroke: var(--ui-tkc-ink);
 }
 .ui-thinkc__steps-badge[data-tone="error"] .ui-thinkc__ring-arc {
   stroke: var(--aui-danger, #dc2626);
@@ -424,13 +424,13 @@ const css = /* css */ `
   height: 14px;
 }
 .ui-thinkc__plan-check circle {
-  fill: rgba(22, 163, 74, 0.14);
-  stroke: #16a34a;
+  fill: var(--ui-tkc-fill);
+  stroke: var(--ui-tkc-muted);
   stroke-width: 1.25;
 }
 .ui-thinkc__plan-check path {
   fill: none;
-  stroke: #16a34a;
+  stroke: var(--ui-tkc-ink);
   stroke-width: 1.5;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -440,7 +440,7 @@ const css = /* css */ `
   height: 7px;
   border-radius: 999px;
   background: var(--ui-tkc-accent);
-  box-shadow: 0 0 0 3px rgba(79, 176, 254, 0.22);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ui-tkc-accent) 22%, transparent);
   animation: ui-thinkc-pulse 1.1s ease-in-out infinite;
 }
 .ui-thinkc__plan-pending {
@@ -553,7 +553,7 @@ const css = /* css */ `
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-/* A finished step is a small gray dot, the running one a blue pixel that pulses */
+/* A finished step is a small gray dot, the running one a monochrome pixel that pulses */
 .ui-thinkc__dot {
   width: 5px;
   height: 5px;
@@ -636,7 +636,7 @@ const css = /* css */ `
 }
 .ui-thinkc__check path {
   fill: none;
-  stroke: #fff;
+  stroke: var(--aui-on-primary, #fff);
   stroke-width: 1.4;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -874,12 +874,12 @@ a.ui-thinkc__source:hover {
   --ui-tkc-rail: var(--aui-border, rgba(255, 255, 255, 0.1));
   --ui-tkc-fill: rgba(255, 255, 255, 0.08);
   --ui-tkc-wash: var(--aui-subtle, rgba(255, 255, 255, 0.04));
-  --ui-tkc-accent: var(--aui-blue, #4fb0fe);
+  --ui-tkc-accent: var(--aui-ink, rgba(255, 255, 255, 0.88));
   --ui-tkc-shine: #ffffff;
   --ui-tkc-shadow: var(--aui-shadow-card, 0 0 0 0.5px rgba(255, 255, 255, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.4));
   --ui-tkc-shadow-pop: 0 0 0 0.5px rgba(255, 255, 255, 0.12), 0 12px 28px -10px rgba(0, 0, 0, 0.6);
   --ui-tkc-ring: 0 0 0 0.5px rgba(255, 255, 255, 0.14);
-  --ui-tkc-focus: var(--aui-focus, rgba(77, 141, 255, 0.8));
+  --ui-tkc-focus: var(--aui-focus, rgba(255, 255, 255, 0.75));
 }
 :where(.dark, [data-theme="dark"]) .ui-thinkc__tip {
   background: #232326;

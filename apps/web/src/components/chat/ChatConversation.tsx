@@ -495,7 +495,7 @@ export function ChatConversation({
       <ScrollerSendBridge apiRef={scrollerSendRef} />
       <MessageScroller className="h-full">
         <ScrollerTurnMinimap turns={minimapTurns} />
-        <MessageScrollerViewport className="scroll-fade-y thin-scroll">
+        <MessageScrollerViewport className="ui-th-lane scroll-fade-y thin-scroll">
           <MessageScrollerContent
             className="ui-th-col"
             data-has-minimap={minimapTurns.length >= 3 || undefined}

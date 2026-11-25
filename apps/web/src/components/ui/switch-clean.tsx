@@ -80,7 +80,7 @@ const css = /* css */ `
   --ui-swc-on-hover: rgba(0, 0, 0, 0.78);
   --ui-swc-thumb: #ffffff;
   --ui-swc-thumb-shadow: 0 1px 2px rgba(0, 0, 0, 0.18), 0 0 0 0.5px rgba(0, 0, 0, 0.04);
-  --ui-swc-focus: var(--aui-focus, rgba(0, 96, 226, 0.7));
+  --ui-swc-focus: var(--aui-focus, rgba(0, 0, 0, 0.72));
   --ui-swc-ease: cubic-bezier(0.22, 1, 0.36, 1);
 
   /* The track: --w × --h, the thumb --h minus 4px */
@@ -158,7 +158,7 @@ const css = /* css */ `
   --ui-swc-on: var(--aui-primary, rgba(255, 255, 255, 0.9));
   --ui-swc-on-hover: rgba(255, 255, 255, 0.8);
   --ui-swc-thumb: #ffffff;
-  --ui-swc-focus: var(--aui-focus, rgba(77, 141, 255, 0.8));
+  --ui-swc-focus: var(--aui-focus, rgba(255, 255, 255, 0.75));
 }
 :where(.dark, [data-theme="dark"]) .ui-swc__input:checked + .ui-swc__track .ui-swc__thumb { background: #161618; box-shadow: none; }
 `;

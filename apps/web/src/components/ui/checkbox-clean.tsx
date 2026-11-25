@@ -119,7 +119,7 @@ const css = /* css */ `
   --ui-chkc-card-shadow-on: 0 0 0 0.5px rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.05);
   --ui-chkc-card-wash: rgba(0, 0, 0, 0.025);
   --ui-chkc-danger: var(--aui-danger, #c4320a);
-  --ui-chkc-focus: var(--aui-focus, rgba(0, 96, 226, 0.7));
+  --ui-chkc-focus: var(--aui-focus, rgba(0, 0, 0, 0.72));
   --ui-chkc-ease: cubic-bezier(0.22, 1, 0.36, 1);
 
   display: flex;
@@ -214,6 +214,6 @@ const css = /* css */ `
   --ui-chkc-card-shadow-on: 0 0 0 0.5px rgba(255, 255, 255, 0.18), 0 1px 2px 0 rgba(0, 0, 0, 0.4);
   --ui-chkc-card-wash: rgba(255, 255, 255, 0.045);
   --ui-chkc-danger: var(--aui-danger, #ff8a7a);
-  --ui-chkc-focus: var(--aui-focus, rgba(77, 141, 255, 0.8));
+  --ui-chkc-focus: var(--aui-focus, rgba(255, 255, 255, 0.75));
 }
 `;

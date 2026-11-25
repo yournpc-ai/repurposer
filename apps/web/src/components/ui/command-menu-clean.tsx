@@ -661,9 +661,9 @@ const css = /* css */ `
   --ui-cmc-active: var(--aui-subtle, rgba(0, 0, 0, 0.06));
   --ui-cmc-tile: #ffffff;
   --ui-cmc-tile-ring: rgba(0, 0, 0, 0.1);
-  --ui-cmc-mark: rgba(0, 96, 226, 0.12);
-  --ui-cmc-accent: rgba(0, 96, 226, 0.765);
-  --ui-cmc-ok: var(--aui-success, #1e8a4f);
+  --ui-cmc-mark: rgba(0, 0, 0, 0.08);
+  --ui-cmc-accent: var(--aui-ink, #202020);
+  --ui-cmc-ok: var(--aui-success, #202020);
   /* Strokes are shadows: a 0.5px hairline plus a soft lift, like a popover */
   --ui-cmc-shadow: var(--aui-shadow-popover, 0 0 0 0.5px var(--aui-border, rgba(0, 0, 0, 0.08)), 0 12px 28px -10px rgba(0, 0, 0, 0.16), 0 1px 2px 0 rgba(0, 0, 0, 0.05));
   --ui-cmc-ease: var(--aui-ease, cubic-bezier(0.22, 1, 0.36, 1));
@@ -816,9 +816,9 @@ const css = /* css */ `
   --ui-cmc-active: var(--aui-subtle, rgba(255, 255, 255, 0.08));
   --ui-cmc-tile: #2a2a2d;
   --ui-cmc-tile-ring: rgba(255, 255, 255, 0.12);
-  --ui-cmc-mark: rgba(77, 141, 255, 0.24);
-  --ui-cmc-accent: var(--aui-blue, #4fb0fe);
-  --ui-cmc-ok: var(--aui-green, #5fc88a);
+  --ui-cmc-mark: rgba(255, 255, 255, 0.12);
+  --ui-cmc-accent: var(--aui-ink, #ededed);
+  --ui-cmc-ok: var(--aui-success, #d4d4d8);
   --ui-cmc-shadow: var(--aui-shadow-popover, 0 0 0 0.5px var(--aui-border, rgba(255, 255, 255, 0.1)), 0 1px 2px 0 rgba(0, 0, 0, 0.4));
 }
 `;

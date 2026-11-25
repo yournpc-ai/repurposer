@@ -198,7 +198,7 @@ const css = /* css */ `
   --ui-btnc-danger-bg-hover: color-mix(in srgb, var(--aui-red, #f04438) 12%, transparent);
   --ui-btnc-shine: rgba(255, 255, 255, 0.82);
   --ui-btnc-shine-on-solid: #ffffff;
-  --ui-btnc-focus: var(--aui-focus, rgba(0, 96, 226, 0.7));
+  --ui-btnc-focus: var(--aui-focus, rgba(0, 0, 0, 0.72));
   --ui-btnc-ease: cubic-bezier(0.22, 1, 0.36, 1);
   --ui-btnc-load: 650ms;
 
@@ -474,7 +474,7 @@ const css = /* css */ `
   --ui-btnc-danger-bg: color-mix(in srgb, var(--aui-red, #ff6b5f) 14%, transparent);
   --ui-btnc-danger-bg-hover: color-mix(in srgb, var(--aui-red, #ff6b5f) 20%, transparent);
   --ui-btnc-shine: #ffffff;
-  --ui-btnc-focus: var(--aui-focus, rgba(77, 141, 255, 0.8));
+  --ui-btnc-focus: var(--aui-focus, rgba(255, 255, 255, 0.75));
 }
 
 /* Hover of the primary button follows its fill – also a brand color from --aui-primary. Browsers without

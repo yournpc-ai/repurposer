@@ -100,7 +100,7 @@ const css = /* css */ `
   --ui-icbc-solid: var(--aui-primary, rgba(0, 0, 0, 0.88));
   --ui-icbc-solid-hover: rgba(0, 0, 0, 0.8);
   --ui-icbc-on-solid: var(--aui-on-primary, #fcfcfc);
-  --ui-icbc-focus: var(--aui-focus, rgba(0, 96, 226, 0.7));
+  --ui-icbc-focus: var(--aui-focus, rgba(0, 0, 0, 0.72));
   --ui-icbc-ease: cubic-bezier(0.22, 1, 0.36, 1);
 
   --size: 28px;
@@ -231,7 +231,7 @@ const css = /* css */ `
   --ui-icbc-solid: var(--aui-primary, rgba(255, 255, 255, 0.9));
   --ui-icbc-solid-hover: rgba(255, 255, 255, 0.82);
   --ui-icbc-on-solid: var(--aui-on-primary, #161618);
-  --ui-icbc-focus: var(--aui-focus, rgba(77, 141, 255, 0.8));
+  --ui-icbc-focus: var(--aui-focus, rgba(255, 255, 255, 0.75));
 }
 
 /* Hover of the dark chip follows its fill – also a brand color from --aui-primary */

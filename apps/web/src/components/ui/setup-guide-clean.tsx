@@ -229,9 +229,9 @@ const css = /* css */ `
   --ui-sgdc-ring: var(--aui-border-strong, rgba(0, 0, 0, 0.2));
   --ui-sgdc-wash: var(--aui-subtle, rgba(0, 0, 0, 0.03));
   --ui-sgdc-open: rgba(0, 0, 0, 0.025);
-  --ui-sgdc-accent: rgba(0, 96, 226, 0.765);
-  --ui-sgdc-on-accent: #ffffff;
-  --ui-sgdc-focus: var(--aui-focus, rgba(0, 96, 226, 0.7));
+  --ui-sgdc-accent: var(--aui-primary, #202020);
+  --ui-sgdc-on-accent: var(--aui-on-primary, #ffffff);
+  --ui-sgdc-focus: var(--aui-focus, rgba(0, 0, 0, 0.72));
   /* Strokes are shadows: a 0.5px hairline plus a soft lift */
   --ui-sgdc-shadow: var(--aui-shadow-card, 0 0 0 0.5px rgba(0, 0, 0, 0.06), 0 1px 1px -1px rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.05));
   --ui-sgdc-ease: var(--aui-ease, cubic-bezier(0.22, 1, 0.36, 1));
@@ -502,9 +502,9 @@ const css = /* css */ `
   --ui-sgdc-ring: var(--aui-border-strong, rgba(255, 255, 255, 0.26));
   --ui-sgdc-wash: var(--aui-subtle, rgba(255, 255, 255, 0.04));
   --ui-sgdc-open: rgba(255, 255, 255, 0.03);
-  --ui-sgdc-accent: var(--aui-blue, #4fb0fe);
-  --ui-sgdc-on-accent: #ffffff;
-  --ui-sgdc-focus: var(--aui-focus, rgba(77, 141, 255, 0.8));
+  --ui-sgdc-accent: var(--aui-primary, #e8e8ea);
+  --ui-sgdc-on-accent: var(--aui-on-primary, #161618);
+  --ui-sgdc-focus: var(--aui-focus, rgba(255, 255, 255, 0.75));
   --ui-sgdc-shadow: var(--aui-shadow-card, 0 0 0 0.5px rgba(255, 255, 255, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.4));
 }
 `;

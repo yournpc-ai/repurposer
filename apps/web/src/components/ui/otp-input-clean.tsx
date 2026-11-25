@@ -490,13 +490,13 @@ const css = /* css */ `
   --ui-otpc-fill: rgba(0, 0, 0, 0.06);
   --ui-otpc-wash: var(--aui-subtle, rgba(0, 0, 0, 0.03));
   --ui-otpc-shine: rgba(255, 255, 255, 0.82);
-  --ui-otpc-accent: rgba(0, 96, 226, 0.765);
-  --ui-otpc-focus: var(--aui-focus, rgba(0, 96, 226, 0.7));
-  --ui-otpc-halo: rgba(0, 96, 226, 0.35);
+  --ui-otpc-accent: var(--aui-ink, #202020);
+  --ui-otpc-focus: var(--aui-focus, rgba(0, 0, 0, 0.72));
+  --ui-otpc-halo: rgba(0, 0, 0, 0.18);
   --ui-otpc-danger: var(--aui-red, #f04438);
-  --ui-otpc-success: var(--aui-success, #1e8a4f);
+  --ui-otpc-success: var(--aui-success, #202020);
   --ui-otpc-danger-tint: color-mix(in srgb, var(--aui-red, #f04438) 8%, transparent);
-  --ui-otpc-success-tint: color-mix(in srgb, var(--aui-green, #5fc88a) 8%, transparent);
+  --ui-otpc-success-tint: var(--aui-success-soft, rgba(0, 0, 0, 0.06));
   /* Strokes are shadows: a 0.5px hairline plus a soft lift */
   --ui-otpc-lift: 0 1px 1px -1px rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.05);
   --ui-otpc-shadow: var(--aui-shadow-card, 0 0 0 0.5px var(--ui-otpc-line), var(--ui-otpc-lift));
@@ -753,13 +753,13 @@ const css = /* css */ `
   --ui-otpc-fill: rgba(255, 255, 255, 0.08);
   --ui-otpc-wash: var(--aui-subtle, rgba(255, 255, 255, 0.03));
   --ui-otpc-shine: rgba(255, 255, 255, 0.1);
-  --ui-otpc-accent: var(--aui-blue, #4fb0fe);
-  --ui-otpc-focus: var(--aui-focus, rgba(77, 141, 255, 0.8));
-  --ui-otpc-halo: rgba(77, 141, 255, 0.5);
+  --ui-otpc-accent: var(--aui-ink, #ededed);
+  --ui-otpc-focus: var(--aui-focus, rgba(255, 255, 255, 0.75));
+  --ui-otpc-halo: rgba(255, 255, 255, 0.25);
   --ui-otpc-danger: var(--aui-red, #ff6b5f);
-  --ui-otpc-success: var(--aui-green, #5fc88a);
+  --ui-otpc-success: var(--aui-success, #d4d4d8);
   --ui-otpc-danger-tint: color-mix(in srgb, var(--aui-red, #ff6b5f) 14%, transparent);
-  --ui-otpc-success-tint: color-mix(in srgb, var(--aui-green, #7dcf9f) 14%, transparent);
+  --ui-otpc-success-tint: var(--aui-success-soft, rgba(255, 255, 255, 0.09));
   --ui-otpc-lift: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
 }
 `;

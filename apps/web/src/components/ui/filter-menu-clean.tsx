@@ -350,9 +350,9 @@ const css = /* css */ `
   --ui-fmc-fill-strong: rgba(0, 0, 0, 0.1);
   --ui-fmc-wash: var(--aui-subtle, rgba(0, 0, 0, 0.03));
   --ui-fmc-box-ring: var(--aui-border-strong, rgba(0, 0, 0, 0.22));
-  --ui-fmc-accent: rgba(0, 96, 226, 0.765);
-  --ui-fmc-check: #ffffff;
-  --ui-fmc-focus: var(--aui-focus, rgba(0, 96, 226, 0.7));
+  --ui-fmc-accent: var(--aui-primary, #202020);
+  --ui-fmc-check: var(--aui-on-primary, #ffffff);
+  --ui-fmc-focus: var(--aui-focus, rgba(0, 0, 0, 0.72));
   /* Strokes are shadows: a 0.5px hairline plus a soft lift */
   --ui-fmc-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.06), 0 1px 1px -1px rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.05);
   --ui-fmc-ease: var(--aui-ease, cubic-bezier(0.22, 1, 0.36, 1));
@@ -596,9 +596,9 @@ const css = /* css */ `
   --ui-fmc-fill-strong: rgba(255, 255, 255, 0.13);
   --ui-fmc-wash: var(--aui-subtle, rgba(255, 255, 255, 0.04));
   --ui-fmc-box-ring: var(--aui-border-strong, rgba(255, 255, 255, 0.28));
-  --ui-fmc-accent: var(--aui-blue, #4fb0fe);
-  --ui-fmc-check: #ffffff;
-  --ui-fmc-focus: var(--aui-focus, rgba(77, 141, 255, 0.8));
+  --ui-fmc-accent: var(--aui-primary, #e8e8ea);
+  --ui-fmc-check: var(--aui-on-primary, #161618);
+  --ui-fmc-focus: var(--aui-focus, rgba(255, 255, 255, 0.75));
   --ui-fmc-shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.4);
 }
 `;

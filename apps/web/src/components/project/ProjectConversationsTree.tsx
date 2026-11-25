@@ -204,7 +204,7 @@ export function ProjectConversationsTree({
                     {conv.has_active_job ? (
                       <span
                         title={t("conversations.activeJob")}
-                        className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-sky-500 ring-2 ring-background motion-safe:animate-pulse"
+                        className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-foreground/85 ring-2 ring-background motion-safe:animate-pulse"
                       />
                     ) : null}
                   </span>

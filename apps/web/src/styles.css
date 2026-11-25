@@ -548,11 +548,15 @@ dialog.login-modal button[type="submit"] { --h: 44px; }
   --aui-subtle: #f5f5f5;
   --aui-border: rgb(0 0 0 / 8%);
   --aui-border-strong: rgb(0 0 0 / 16%);
-  --aui-focus: #0060e2;
+  --aui-focus: #202020;
+  --aui-blue: #202020;
+  --aui-info: #202020;
+  --aui-info-soft: rgb(0 0 0 / 6%);
+  --aui-green: #202020;
   --aui-danger: #c4320a;
-  --aui-success: #16794d;
+  --aui-success: #202020;
   --aui-warning: #925900;
-  --aui-success-soft: #eaf7ef;
+  --aui-success-soft: rgb(0 0 0 / 6%);
   --aui-shadow-card: 0 0 0 .5px var(--aui-border), 0 1px 2px rgb(0 0 0 / 5%);
   --aui-shadow-popover: 0 0 0 1px var(--aui-border), 0 8px 24px rgb(0 0 0 / 10%);
 
@@ -609,11 +613,15 @@ dialog.login-modal button[type="submit"] { --h: 44px; }
   --aui-subtle: #29292c;
   --aui-border: rgb(255 255 255 / 10%);
   --aui-border-strong: rgb(255 255 255 / 22%);
-  --aui-focus: #72a7ff;
-  --aui-danger: #ff8a7a;
-  --aui-success: #77d9a3;
+  --aui-focus: #ededed;
+  --aui-blue: #ededed;
+  --aui-info: #e4e4e7;
+  --aui-info-soft: rgb(255 255 255 / 10%);
+  --aui-green: #d4d4d8;
+  --aui-danger: #e07a6d;
+  --aui-success: #d4d4d8;
   --aui-warning: #ffce80;
-  --aui-success-soft: #24392c;
+  --aui-success-soft: rgb(255 255 255 / 9%);
   --aui-shadow-card: 0 0 0 .5px var(--aui-border), 0 1px 2px rgb(0 0 0 / 40%);
   --aui-shadow-popover: 0 0 0 1px var(--aui-border), 0 8px 24px rgb(0 0 0 / 40%);
   --landing-background: oklch(0.12 0 0);

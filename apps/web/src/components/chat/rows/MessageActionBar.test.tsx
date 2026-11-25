@@ -59,6 +59,10 @@ describe("MessageActionBar", () => {
     await waitFor(() => {
       expect(navigator.clipboard.writeText).toHaveBeenCalledWith("# Hello video")
     })
+    const copiedBtn = screen.getByRole("button", { name: "chat.feedback.copied" })
+    const checkSvg = copiedBtn.querySelector("svg")
+    expect(checkSvg?.getAttribute("class") ?? "").toContain("text-foreground")
+    expect(checkSvg?.getAttribute("class") ?? "").not.toMatch(/text-(emerald|green|sky|blue)-/)
     expect(screen.getByText("notifications.minutesAgo:2")).toBeTruthy()
   })
 

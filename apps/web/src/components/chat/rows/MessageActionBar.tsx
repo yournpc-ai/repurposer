@@ -177,7 +177,7 @@ export function MessageActionBar({
       <IconButton
         size="sm"
         variant="ghost"
-        icon={copied ? <Check className="size-3.5 text-emerald-500" /> : <Copy className="size-3.5" />}
+        icon={copied ? <Check className="size-3.5 text-foreground" /> : <Copy className="size-3.5" />}
         label={copied ? t("chat.feedback.copied") : t("chat.feedback.copy")}
         onClick={() => { void handleCopy() }}
       />

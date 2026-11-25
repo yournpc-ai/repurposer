@@ -408,10 +408,10 @@ const css = /* css */ `
   --ui-seg-soft: var(--aui-muted, #737373);
   --ui-seg-muted: var(--aui-muted, #8f8f8f);
   --ui-seg-count: rgba(0, 0, 0, 0.06);
-  --ui-seg-accent: var(--aui-blue, #4fb0fe);
-  --ui-seg-accent-soft: color-mix(in srgb, var(--aui-blue, #0190fe) 10%, transparent);
+  --ui-seg-accent: var(--aui-ink, #202020);
+  --ui-seg-accent-soft: rgba(0, 0, 0, 0.07);
   --ui-seg-pill-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.08), 0 2px 8px -2px rgba(0, 0, 0, 0.06);
-  --ui-seg-focus: var(--aui-focus, rgba(0, 96, 226, 0.7));
+  --ui-seg-focus: var(--aui-focus, rgba(0, 0, 0, 0.72));
   --ui-seg-ease: var(--aui-ease, cubic-bezier(0.22, 1, 0.36, 1));
   /* Size: md */
   --ui-seg-h: 30px;
@@ -591,9 +591,9 @@ const css = /* css */ `
   --ui-seg-soft: var(--aui-muted, #8b8b92);
   --ui-seg-muted: var(--aui-muted, #8b8b92);
   --ui-seg-count: rgba(255, 255, 255, 0.08);
-  --ui-seg-accent: var(--aui-blue, #4fb0fe);
-  --ui-seg-accent-soft: color-mix(in srgb, var(--aui-blue, #4fb0fe) 14%, transparent);
+  --ui-seg-accent: var(--aui-ink, #ededed);
+  --ui-seg-accent-soft: rgba(255, 255, 255, 0.1);
   --ui-seg-pill-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 1px 2px rgba(0, 0, 0, 0.4);
-  --ui-seg-focus: var(--aui-focus, rgba(77, 141, 255, 0.8));
+  --ui-seg-focus: var(--aui-focus, rgba(255, 255, 255, 0.75));
 }
 `;

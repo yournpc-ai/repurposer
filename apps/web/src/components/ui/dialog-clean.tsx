@@ -526,7 +526,7 @@ const css = /* css */ `
   --ui-dlgc-danger: var(--aui-danger, #c4320a);
   --ui-dlgc-danger-bg: rgba(240, 68, 56, 0.08);
   --ui-dlgc-danger-bg-hover: rgba(240, 68, 56, 0.13);
-  --ui-dlgc-focus: var(--aui-focus, rgba(0, 96, 226, 0.7));
+  --ui-dlgc-focus: var(--aui-focus, rgba(0, 0, 0, 0.72));
   --ui-dlgc-ease: var(--aui-ease, cubic-bezier(0.22, 1, 0.36, 1));
 
   /* The layer: the whole window (or its frame when contained), dimmed, the card in the middle */
@@ -768,7 +768,7 @@ const css = /* css */ `
   --ui-dlgc-danger: var(--aui-danger, #ff8a7a);
   --ui-dlgc-danger-bg: rgba(255, 107, 95, 0.14);
   --ui-dlgc-danger-bg-hover: rgba(255, 107, 95, 0.2);
-  --ui-dlgc-focus: var(--aui-focus, rgba(77, 141, 255, 0.8));
+  --ui-dlgc-focus: var(--aui-focus, rgba(255, 255, 255, 0.75));
   color-scheme: dark;
 }
 

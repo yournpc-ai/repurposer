@@ -6019,13 +6019,12 @@ const artifactCss = /* css */ `
   --asw-wire-soft: rgba(0, 0, 0, 0.07);
   --asw-grid: rgba(0, 0, 0, 0.08);
   --asw-rim: rgba(0, 0, 0, 0.025);
-  /* Selection in a sheet or a folder – the only place the accent tints anything */
-  --asw-sel-bg: rgba(0, 96, 226, 0.07);
-  --asw-sel-head: rgba(0, 96, 226, 0.1);
+  /* Selection in a sheet or a folder – neutral monochrome tint */
+  --asw-sel-bg: rgba(0, 0, 0, 0.06);
+  --asw-sel-head: rgba(0, 0, 0, 0.09);
   --asw-err: var(--aui-danger, #c4320a);
-  /* File glyphs by type: documents blue, sheets green, code orange, folders amber, images pink */
-  --asw-file-doc: var(--aui-blue, #0190fe);
-  --asw-file-sheet: var(--aui-green, #5fc88a);
+  --asw-file-doc: var(--aui-ink, #202020);
+  --asw-file-sheet: var(--aui-muted, #626262);
   --asw-file-code: var(--aui-orange, #f28a2e);
   --asw-file-folder: var(--aui-amber, #e8b000);
   --asw-file-image: var(--aui-pink, #ee3e9e);
@@ -6036,11 +6035,11 @@ const artifactCss = /* css */ `
   --asw-wire-soft: rgba(255, 255, 255, 0.08);
   --asw-grid: rgba(255, 255, 255, 0.09);
   --asw-rim: rgba(255, 255, 255, 0.03);
-  --asw-sel-bg: color-mix(in srgb, var(--aui-blue, #4fb0fe) 13%, transparent);
-  --asw-sel-head: color-mix(in srgb, var(--aui-blue, #4fb0fe) 20%, transparent);
+  --asw-sel-bg: rgba(255, 255, 255, 0.09);
+  --asw-sel-head: rgba(255, 255, 255, 0.14);
   --asw-err: var(--aui-red, #ff6b5f);
-  --asw-file-doc: var(--aui-blue, #4fb0fe);
-  --asw-file-sheet: var(--aui-green, #7dcf9f);
+  --asw-file-doc: var(--aui-ink, #ededed);
+  --asw-file-sheet: var(--aui-muted, #aaa9ad);
   --asw-file-code: var(--aui-orange, #f2a15c);
   --asw-file-folder: var(--aui-amber, #e6c24d);
   --asw-file-image: var(--aui-pink, #f06db5);
@@ -6448,11 +6447,11 @@ const css = /* css */ `
   --chip: var(--aui-subtle, rgba(0, 0, 0, 0.04));
   --chip-hover: rgba(0, 0, 0, 0.06);
   --hover: rgba(0, 0, 0, 0.03);
-  --accent: var(--aui-info, #0070d6);
-  --ui-au-shell-focus: var(--aui-focus, rgba(0, 96, 226, 0.7));
+  --accent: var(--aui-info, #202020);
+  --ui-au-shell-focus: var(--aui-focus, rgba(0, 0, 0, 0.72));
   --button: var(--aui-primary, rgba(0, 0, 0, 0.88));
   --button-hover: rgba(0, 0, 0, 0.78);
-  --accent-soft: rgba(0, 96, 226, 0.08);
+  --accent-soft: var(--aui-info-soft, rgba(0, 0, 0, 0.06));
   --shadow: 0 1px 1px -1px rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.05);
   /* A card: a 0.5px hairline and a soft drop; the frame around previews is a faint gray with the same hairline */
   --card-shadow: var(--aui-shadow-card, 0 0 0 0.5px var(--aui-border, rgba(0, 0, 0, 0.06)), 0 1px 1px -1px rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.05));
@@ -6496,11 +6495,11 @@ const css = /* css */ `
   --chip: var(--aui-subtle, rgba(255, 255, 255, 0.06));
   --chip-hover: rgba(255, 255, 255, 0.09);
   --hover: rgba(255, 255, 255, 0.05);
-  --accent: var(--aui-info, #4fb0fe);
-  --ui-au-shell-focus: var(--aui-focus, rgba(77, 141, 255, 0.8));
+  --accent: var(--aui-info, #e4e4e7);
+  --ui-au-shell-focus: var(--aui-focus, rgba(255, 255, 255, 0.75));
   --button: var(--aui-primary, #f4f4f5);
   --button-hover: #ffffff;
-  --accent-soft: color-mix(in srgb, var(--aui-blue, #4fb0fe) 16%, transparent);
+  --accent-soft: var(--aui-info-soft, rgba(255, 255, 255, 0.1));
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
   --card-shadow: var(--aui-shadow-card, 0 0 0 0.5px var(--aui-border, rgba(255, 255, 255, 0.1)), 0 1px 2px rgba(0, 0, 0, 0.4));
   --card-shadow-hover: 0 0 0 0.5px var(--aui-border-strong, rgba(255, 255, 255, 0.16)), 0 2px 6px rgba(0, 0, 0, 0.4);
@@ -6513,7 +6512,7 @@ const css = /* css */ `
   --ink-hover: #d4d4d8;
   --select: rgba(255, 255, 255, 0.08);
   --toggle-off: #3a3a3f;
-  --switch-on: var(--aui-blue, #4fb0fe);
+  --switch-on: var(--aui-primary, #e8e8ea);
   --logo-bg: #2a2a2e;
   color-scheme: dark;
 }
@@ -7313,8 +7312,8 @@ div.ui-au-shell-empty:where([data-bare]) { margin-top: 0; }
 
 /* File illustration: a small white page with hairline rows, a colored type tag over its lower left corner */
 .ui-au-shell-doc {
-  --doc-tag: var(--aui-blue, #4fb0fe);
-  --doc-tag-shade: 30, 64, 175;
+  --doc-tag: var(--aui-ink, #202020);
+  --doc-tag-shade: 32, 32, 32;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -7323,7 +7322,7 @@ div.ui-au-shell-empty:where([data-bare]) { margin-top: 0; }
   background: var(--card);
 }
 .ui-au-shell-doc[data-color="rose"] { --doc-tag: var(--aui-red, #f04438); --doc-tag-shade: 159, 18, 57; }
-.ui-au-shell-doc[data-color="emerald"] { --doc-tag: var(--aui-teal, #13b3a0); --doc-tag-shade: 6, 95, 70; }
+.ui-au-shell-doc[data-color="emerald"] { --doc-tag: var(--aui-muted, #626262); --doc-tag-shade: 64, 64, 64; }
 /* Moved right by what the tag adds on the left, so the drawing sits in the middle */
 .ui-au-shell-doc__art { position: relative; display: block; width: 52px; translate: 4px 0; }
 

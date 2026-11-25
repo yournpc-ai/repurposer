@@ -313,8 +313,8 @@ const css = /* css */ `
   --ui-tfc-danger: var(--aui-danger, #c4320a);
   --ui-tfc-danger-edge: color-mix(in srgb, var(--aui-red, #f04438) 55%, transparent);
   --ui-tfc-danger-edge-focus: rgba(229, 72, 77, 0.8);
-  --ui-tfc-success: var(--aui-success, #1e8a4f);
-  --ui-tfc-focus: var(--aui-focus, rgba(0, 96, 226, 0.7));
+  --ui-tfc-success: var(--aui-success, #202020);
+  --ui-tfc-focus: var(--aui-focus, rgba(0, 0, 0, 0.72));
   --ui-tfc-ease: cubic-bezier(0.22, 1, 0.36, 1);
 
   --h: 32px;
@@ -521,8 +521,8 @@ const css = /* css */ `
   --ui-tfc-danger: var(--aui-danger, #ff8a7a);
   --ui-tfc-danger-edge: color-mix(in srgb, var(--aui-red, #ff6b5f) 50%, transparent);
   --ui-tfc-danger-edge-focus: rgba(255, 99, 105, 0.75);
-  --ui-tfc-success: var(--aui-success, #7dcf9f);
-  --ui-tfc-focus: var(--aui-focus, rgba(77, 141, 255, 0.8));
+  --ui-tfc-success: var(--aui-success, #d4d4d8);
+  --ui-tfc-focus: var(--aui-focus, rgba(255, 255, 255, 0.75));
 }
 :where(.dark, [data-theme="dark"]) .ui-tfc[data-readonly] .ui-tfc__box,
 :where(.dark, [data-theme="dark"]) .ui-tfc[data-disabled] .ui-tfc__box { box-shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.12); }

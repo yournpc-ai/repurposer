@@ -408,9 +408,9 @@ const css = /* css */ `
   --ui-segc-track: var(--aui-subtle, rgba(0, 0, 0, 0.04));
   --ui-segc-card: var(--aui-surface, #ffffff);
   --ui-segc-card-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.06), 0 1px 1px -1px rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  --ui-segc-accent: rgba(0, 96, 226, 0.765);
-  --ui-segc-accent-soft: rgba(0, 96, 226, 0.08);
-  --ui-segc-focus: var(--aui-focus, rgba(0, 96, 226, 0.7));
+  --ui-segc-accent: var(--aui-ink, rgba(0, 0, 0, 0.88));
+  --ui-segc-accent-soft: var(--aui-subtle, rgba(0, 0, 0, 0.06));
+  --ui-segc-focus: var(--aui-focus, rgba(0, 0, 0, 0.72));
   --ui-segc-ease: cubic-bezier(0.25, 0.9, 0.3, 1);
   /* Size: md – 28px chips, 4px 10px */
   --ui-segc-h: 28px;
@@ -609,9 +609,9 @@ const css = /* css */ `
   --ui-segc-track: var(--aui-subtle, rgba(255, 255, 255, 0.05));
   --ui-segc-card: var(--aui-surface, #2c2c2f);
   --ui-segc-card-shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.1), 0 1px 2px rgba(0, 0, 0, 0.4);
-  --ui-segc-accent: var(--aui-blue, #4fb0fe);
-  --ui-segc-accent-soft: rgba(77, 141, 255, 0.14);
-  --ui-segc-focus: var(--aui-focus, rgba(77, 141, 255, 0.8));
+  --ui-segc-accent: var(--aui-ink, #ededed);
+  --ui-segc-accent-soft: rgba(255, 255, 255, 0.1);
+  --ui-segc-focus: var(--aui-focus, rgba(255, 255, 255, 0.75));
 }
 :where(.dark, [data-theme="dark"]) .ui-segc__icon { color: var(--aui-muted, rgba(255, 255, 255, 0.46)); }
 :where(.dark, [data-theme="dark"]) .ui-segc__opt[data-active] .ui-segc__icon { color: var(--ui-segc-ink); }

@@ -101,7 +101,14 @@
 
 /* Agent Thread screen, transcript and composer owned by the project. */
 .ui-th-body { position: relative; display: flex; flex: 1; flex-direction: column; min-height: 0; }
+.ui-th-lane {
+  container-type: inline-size;
+  container-name: ui-th-lane;
+  overflow-x: clip;
+}
 .ui-th-col {
+  --ui-th-table-gutter: 48px;
+  --ui-th-table-shift: 0px;
   display: flex;
   flex-direction: column;
   gap: 24px;
@@ -116,11 +123,81 @@
   .ui-th-col { gap: 20px; padding: 12px 16px 24px; }
 }
 @media (min-width: 768px) {
-  .ui-th-col[data-has-minimap] { padding-left: 48px; }
+  .ui-th-col[data-has-minimap] {
+    --ui-th-table-gutter: 96px;
+    --ui-th-table-shift: -12px;
+    padding-left: 48px;
+  }
 }
 
 /* Message anatomy from affectUI Agent Thread. */
 .ui-th-message { display: flex; flex-direction: column; min-width: 0; gap: 8px; overflow-wrap: anywhere; }
+
+/* Wide Markdown breakout tables: normal prose stays in .ui-th-col (48rem),
+   while tables expand symmetrically inside ui-th-lane up to 72rem minus safe gutters. */
+.ui-th-table-breakout {
+  margin-block: 0.875rem;
+  width: 100%;
+}
+@container ui-th-lane (min-width: 50rem) {
+  .ui-th-table-breakout {
+    --_breakout-w: min(72rem, calc(100cqi - var(--ui-th-table-gutter, 48px)));
+    width: max(100%, var(--_breakout-w));
+    margin-left: calc((100% - max(100%, var(--_breakout-w))) / 2 + var(--ui-th-table-shift, 0px));
+  }
+}
+.ui-th-table-frame {
+  width: fit-content;
+  min-width: min(100%, 45rem);
+  max-width: 100%;
+  margin-inline: auto;
+  overflow-x: auto;
+  border: 1px solid var(--aui-border);
+  border-radius: var(--aui-radius-lg);
+  background: var(--aui-surface);
+}
+.ui-th-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: left;
+  color: var(--aui-ink);
+  overflow-wrap: break-word;
+}
+.ui-th-table__head {
+  background: var(--aui-subtle);
+  border-bottom: 1px solid var(--aui-border);
+}
+.ui-th-table__th {
+  padding: 10px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--aui-muted);
+  white-space: nowrap;
+  text-align: left;
+  overflow-wrap: normal;
+}
+.ui-th-table__body .ui-th-table__row {
+  border-bottom: 1px solid var(--aui-border);
+  transition: background-color 120ms ease;
+}
+.ui-th-table__body .ui-th-table__row:last-child {
+  border-bottom: 0;
+}
+.ui-th-table__body .ui-th-table__row:hover {
+  background: color-mix(in srgb, var(--aui-subtle) 55%, transparent);
+}
+.ui-th-table__td {
+  padding: 10px 14px;
+  color: var(--aui-ink);
+  vertical-align: top;
+  min-width: 6.5rem;
+  overflow-wrap: break-word;
+}
+.ui-th-table__td:first-child {
+  font-weight: 500;
+}
 .ui-th-user { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
 .ui-th-user__bubble { max-width: 80%; margin: 0; padding: 8px 14px; border-radius: calc(var(--aui-radius-lg) + 6px); background: var(--aui-subtle); color: var(--aui-ink); white-space: pre-wrap; overflow-wrap: anywhere; }
 .ui-th-user__files { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; max-width: 80%; margin: 0; padding: 0; list-style: none; }

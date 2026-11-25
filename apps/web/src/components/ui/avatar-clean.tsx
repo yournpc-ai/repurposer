@@ -254,15 +254,15 @@ const css = /* css */ `
   --ui-avtc-edge: rgba(0, 0, 0, 0.08);
   /* The ring that cuts each avatar out of the one before – set it to the background the group sits on */
   --ui-avtc-ring: var(--aui-surface, #ffffff);
-  --ui-avtc-mark: rgba(0, 96, 226, 0.78);
-  --ui-avtc-online: var(--aui-green, #5fc88a);
+  --ui-avtc-mark: var(--aui-ink, rgba(0, 0, 0, 0.78));
+  --ui-avtc-online: var(--aui-success, #202020);
   --ui-avtc-away: var(--aui-amber, #e8b000);
   --ui-avtc-busy: var(--aui-red, #f04438);
-  /* The soft colors behind initials: lightness and saturation of the tint and of the letters */
-  --ui-avtc-bg-l: 93%;
-  --ui-avtc-bg-s: 70%;
-  --ui-avtc-fg-l: 36%;
-  --ui-avtc-fg-s: 48%;
+  /* Monochrome neutral tones behind initials */
+  --ui-avtc-bg-l: 92%;
+  --ui-avtc-bg-s: 0%;
+  --ui-avtc-fg-l: 22%;
+  --ui-avtc-fg-s: 0%;
 
   --s: 32px;
   --fs: 12px;
@@ -437,13 +437,13 @@ const css = /* css */ `
   --ui-avtc-tile: var(--aui-surface, #1c1c1e);
   --ui-avtc-edge: rgba(255, 255, 255, 0.1);
   --ui-avtc-ring: var(--aui-surface, #1c1c1e);
-  --ui-avtc-mark: rgba(77, 141, 255, 0.85);
-  --ui-avtc-online: var(--aui-green, #7dcf9f);
+  --ui-avtc-mark: var(--aui-ink, rgba(255, 255, 255, 0.85));
+  --ui-avtc-online: var(--aui-success, #d4d4d8);
   --ui-avtc-away: var(--aui-amber, #e6c24d);
   --ui-avtc-busy: var(--aui-red, #ff6b5f);
-  --ui-avtc-bg-l: 24%;
-  --ui-avtc-bg-s: 28%;
-  --ui-avtc-fg-l: 80%;
-  --ui-avtc-fg-s: 60%;
+  --ui-avtc-bg-l: 22%;
+  --ui-avtc-bg-s: 0%;
+  --ui-avtc-fg-l: 86%;
+  --ui-avtc-fg-s: 0%;
 }
 `;

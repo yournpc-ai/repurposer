@@ -681,7 +681,7 @@ const css = /* css */ `
   --ui-dmc-danger: var(--aui-red, #f04438);
   --ui-dmc-danger-glow: color-mix(in srgb, var(--aui-red, #f04438) 8%, transparent);
   --ui-dmc-shadow: var(--aui-shadow-popover, 0 0 0 0.5px var(--aui-border-strong, rgba(0, 0, 0, 0.1)), 0 12px 32px -8px rgba(0, 0, 0, 0.16));
-  --ui-dmc-focus: var(--aui-focus, rgba(0, 96, 226, 0.7));
+  --ui-dmc-focus: var(--aui-focus, rgba(0, 0, 0, 0.72));
   --ui-dmc-ease: var(--aui-ease, cubic-bezier(0.22, 1, 0.36, 1));
   --ui-dmc-radius: calc(var(--aui-radius-lg, 10px) + 2px);
   --ui-dmc-row-radius: calc(var(--aui-radius-sm, 5px) + 3px);
@@ -834,7 +834,7 @@ const css = /* css */ `
   --ui-dmc-danger: var(--aui-red, #ff6b5f);
   --ui-dmc-danger-glow: color-mix(in srgb, var(--aui-red, #ff6b5f) 14%, transparent);
   --ui-dmc-shadow: var(--aui-shadow-popover, 0 0 0 0.5px var(--aui-border-strong, rgba(255, 255, 255, 0.14)), 0 12px 32px -8px rgba(0, 0, 0, 0.6));
-  --ui-dmc-focus: var(--aui-focus, rgba(77, 141, 255, 0.8));
+  --ui-dmc-focus: var(--aui-focus, rgba(255, 255, 255, 0.75));
   color-scheme: dark;
 }
 `;

@@ -277,7 +277,7 @@ const css = /* css */ `
   --ui-tac-danger: var(--aui-danger, #c4320a);
   --ui-tac-danger-edge: color-mix(in srgb, var(--aui-red, #f04438) 55%, transparent);
   --ui-tac-danger-edge-focus: rgba(229, 72, 77, 0.8);
-  --ui-tac-focus: var(--aui-focus, rgba(0, 96, 226, 0.7));
+  --ui-tac-focus: var(--aui-focus, rgba(0, 0, 0, 0.72));
   --ui-tac-ease: cubic-bezier(0.22, 1, 0.36, 1);
 
   --fs: 13px;
@@ -429,7 +429,7 @@ const css = /* css */ `
   --ui-tac-danger: var(--aui-danger, #ff8a7a);
   --ui-tac-danger-edge: color-mix(in srgb, var(--aui-red, #ff6b5f) 50%, transparent);
   --ui-tac-danger-edge-focus: rgba(255, 99, 105, 0.75);
-  --ui-tac-focus: var(--aui-focus, rgba(77, 141, 255, 0.8));
+  --ui-tac-focus: var(--aui-focus, rgba(255, 255, 255, 0.75));
 }
 :where(.dark, [data-theme="dark"]) .ui-tac[data-readonly] .ui-tac__box,
 :where(.dark, [data-theme="dark"]) .ui-tac[data-disabled] .ui-tac__box { box-shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.12); }

@@ -98,7 +98,7 @@ const css = /* css */ `
   --ui-crdc-shadow-hover: 0 0 0 0.5px var(--aui-border-strong, rgba(0, 0, 0, 0.1)), 0 2px 6px -1px rgba(0, 0, 0, 0.08), 0 1px 2px 0 rgba(0, 0, 0, 0.05);
   --ui-crdc-selected: color-mix(in srgb, var(--ui-crdc-ink) 3.5%, var(--ui-crdc-surface));
   --ui-crdc-shadow-selected: 0 0 0 0.5px var(--aui-border-strong, rgba(0, 0, 0, 0.14)), 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  --ui-crdc-focus: var(--aui-focus, rgba(0, 96, 226, 0.7));
+  --ui-crdc-focus: var(--aui-focus, rgba(0, 0, 0, 0.72));
   --ui-crdc-radius: var(--aui-radius-lg, 10px);
   --ui-crdc-pad: 16px;
 
@@ -201,6 +201,6 @@ const css = /* css */ `
   --ui-crdc-shadow-hover: 0 0 0 0.5px var(--aui-border-strong, rgba(255, 255, 255, 0.16)), 0 2px 6px rgba(0, 0, 0, 0.4);
   --ui-crdc-selected: color-mix(in srgb, var(--ui-crdc-ink) 6%, var(--ui-crdc-surface));
   --ui-crdc-shadow-selected: 0 0 0 0.5px var(--aui-border-strong, rgba(255, 255, 255, 0.2)), 0 1px 2px rgba(0, 0, 0, 0.4);
-  --ui-crdc-focus: var(--aui-focus, rgba(77, 141, 255, 0.8));
+  --ui-crdc-focus: var(--aui-focus, rgba(255, 255, 255, 0.75));
 }
 `;

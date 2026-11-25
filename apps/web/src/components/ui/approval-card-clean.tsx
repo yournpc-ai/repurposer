@@ -63,7 +63,7 @@ const css = /* css */ `
   --ui-apc-kbd: rgba(0, 0, 0, 0.055);
   --ui-apc-box: var(--aui-border-strong, #d4d4d4);
   --ui-apc-box-hover: #b5b5b5;
-  --ui-apc-focus: var(--aui-focus, rgba(0, 96, 226, 0.7));
+  --ui-apc-focus: var(--aui-focus, rgba(0, 0, 0, 0.72));
   --ui-apc-timer-low: var(--aui-warning, #b25e00);
   --ui-apc-low-bg: #f2f2f2;
   --ui-apc-low-ink: #6b6b6b;
@@ -71,8 +71,8 @@ const css = /* css */ `
   --ui-apc-med-ink: #8f6c00;
   --ui-apc-high-bg: #fdedeb;
   --ui-apc-high-ink: var(--aui-danger, #c4320a);
-  --ui-apc-ok-bg: #e9f6ee;
-  --ui-apc-ok-ink: var(--aui-success, #1e8a4f);
+  --ui-apc-ok-bg: var(--aui-success-soft, rgba(0, 0, 0, 0.06));
+  --ui-apc-ok-ink: var(--aui-success, #202020);
   --ui-apc-no-bg: #f2f2f2;
   --ui-apc-no-ink: #6b6b6b;
   --ui-apc-ease: var(--aui-ease, cubic-bezier(0.22, 1, 0.36, 1));
@@ -232,16 +232,16 @@ const css = /* css */ `
   --ui-apc-kbd: rgba(255, 255, 255, 0.07);
   --ui-apc-box: var(--aui-border-strong, rgba(255, 255, 255, 0.2));
   --ui-apc-box-hover: rgba(255, 255, 255, 0.32);
-  --ui-apc-focus: var(--aui-focus, rgba(77, 141, 255, 0.8));
+  --ui-apc-focus: var(--aui-focus, rgba(255, 255, 255, 0.75));
   --ui-apc-timer-low: var(--aui-amber, #e6c24d);
   --ui-apc-low-bg: rgba(255, 255, 255, 0.07);
   --ui-apc-low-ink: #a1a1a1;
   --ui-apc-med-bg: color-mix(in srgb, var(--aui-amber, #e6c24d) 12%, transparent);
   --ui-apc-med-ink: var(--aui-amber, #e6c24d);
   --ui-apc-high-bg: color-mix(in srgb, var(--aui-red, #ff6b5f) 12%, transparent);
-  --ui-apc-high-ink: var(--aui-danger, #ff8a7a);
-  --ui-apc-ok-bg: color-mix(in srgb, var(--aui-green, #7dcf9f) 13%, transparent);
-  --ui-apc-ok-ink: var(--aui-green, #5fc88a);
+  --ui-apc-high-ink: var(--aui-danger, #e07a6d);
+  --ui-apc-ok-bg: var(--aui-success-soft, rgba(255, 255, 255, 0.09));
+  --ui-apc-ok-ink: var(--aui-success, #d4d4d8);
   --ui-apc-no-bg: rgba(255, 255, 255, 0.07);
   --ui-apc-no-ink: #a1a1a1;
 }
