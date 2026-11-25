@@ -103,6 +103,7 @@ async def generate_music_endpoint(
             data.prompt,
             model=USER_MODEL,
             is_instrumental=data.is_instrumental,
+            compatible_styles=data.compatible_styles,
         )
     except LLMError as e:
         raise HTTPException(

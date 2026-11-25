@@ -156,6 +156,43 @@ async def search_voices(
     return [row for _, row in scored[: max(1, min(limit, 100))]]
 
 
+def _select_curated_stock_voice(
+    *,
+    languages: list[str],
+    gender: str | None,
+    prompt: str,
+    tone_tags: list[str] | None,
+    compatible_styles: list[str] | None,
+) -> str:
+    """Choose the best live MiniMax ``speech-2.6-hd`` system voice when ``/voice_design`` is gated."""
+    langs = [str(item).strip().lower() for item in (languages or []) if str(item).strip()]
+    primary_lang = langs[0] if langs else "en"
+    text = " ".join(
+        [
+            prompt or "",
+            gender or "",
+            " ".join(tone_tags or []),
+            " ".join(compatible_styles or []),
+        ]
+    ).lower()
+    is_female = (gender or "").strip().lower() == "female" or any(
+        tok in text for tok in ("female", "woman", "lady", "女声", "女性")
+    )
+    if primary_lang.startswith("zh"):
+        if is_female:
+            return "Chinese (Mandarin)_News_Anchor"
+        if any(tok in text for tok in ("energetic", "vox_editorial", "tech", "launch", "现代", "青年", "发布", "活力")):
+            return "male-qn-jingying-jingpin"
+        return "Chinese (Mandarin)_Male_Announcer"
+    if is_female:
+        if any(tok in text for tok in ("british", "bbc", "documentary", "science", "swiss_paper", "editorial", "nature")):
+            return "English_Graceful_Lady"
+        return "English_CalmWoman"
+    if any(tok in text for tok in ("british", "baritone", "institutional", "institutional_dark", "boardroom", "deep", "authoritative")):
+        return "English_Deep-VoicedGentleman"
+    return "English_Trustworthy_Man"
+
+
 async def design_and_save_voice(
     db: AsyncSession,
     *,
@@ -173,7 +210,13 @@ async def design_and_save_voice(
     description: str | None = None,
     voice_id: str | None = None,
 ) -> Voice:
-    """Design a new MiniMax voiceprint, persist reference audio to storage, and save a Voice row."""
+    """Design a new MiniMax voiceprint, persist reference audio to storage, and save a Voice row.
+
+    Calls MiniMax ``/voice_design`` first; if the configured API plan does not
+    entitle ``/voice_design`` (e.g. code 2061), cleanly matches a live MiniMax
+    ``speech-2.6-hd`` stock voice, synthesizes the real preview MP3 via
+    ``/t2a_v2``, and persists it honestly as ``source_kind='minimax_stock'``.
+    """
     _enforce_voice_privacy(source_kind="minimax_design", scope=scope, owner_id=owner_id)
     if status not in VOICE_STATUSES:
         raise ValueError(f"Unsupported voice status: {status!r}")
@@ -182,22 +225,59 @@ async def design_and_save_voice(
         raise ValueError("Voice name must not be empty.")
     clean_langs = [str(lang).strip().lower() for lang in (languages or []) if str(lang).strip()] or ["en"]
 
-    result = await asyncio.to_thread(
-        voice_provider.design_voice,
-        prompt,
-        preview_text,
-        voice_id=voice_id,
-    )
+    source_kind = "minimax_design"
+    extra_meta: dict[str, Any] = {}
+    try:
+        result = await asyncio.to_thread(
+            voice_provider.design_voice,
+            prompt,
+            preview_text,
+            voice_id=voice_id,
+        )
+        provider_vid = result.voice_id
+        preview_bytes = result.trial_audio
+        trace_id = result.trace_id
+    except voice_provider.VoiceError as exc:
+        if not voice_provider.is_voice_design_unsupported_error(exc):
+            raise
+        matched_vid = _select_curated_stock_voice(
+            languages=clean_langs,
+            gender=gender,
+            prompt=prompt,
+            tone_tags=tone_tags,
+            compatible_styles=compatible_styles,
+        )
+        logger.warning(
+            "voice_design_plan_unsupported_falling_back_to_stock",
+            reason=str(exc),
+            matched_voice_id=matched_vid,
+        )
+        t2a = await asyncio.to_thread(
+            voice_provider.synthesize_preview_mp3,
+            preview_text.strip(),
+            matched_vid,
+            clean_langs[0],
+        )
+        source_kind = "minimax_stock"
+        provider_vid = matched_vid
+        preview_bytes = t2a.audio
+        trace_id = t2a.trace_id
+        extra_meta = {
+            "fallback_from": "minimax_design",
+            "fallback_reason": str(exc),
+            "tts_model": voice_provider.tts_model(),
+        }
+
     row_id = uuid4()
     ref_key = voice_reference_key(row_id)
-    await storage.save(ref_key, result.trial_audio, content_type="audio/mpeg")
+    await storage.save(ref_key, preview_bytes, content_type="audio/mpeg")
 
     row = Voice(
         id=row_id,
         owner_id=owner_id if scope == "user" else None,
         scope=scope,
         status=status,
-        source_kind="minimax_design",
+        source_kind=source_kind,
         name=clean_name[:160],
         description=(description.strip() if description else None),
         design_prompt=prompt.strip(),
@@ -207,15 +287,16 @@ async def design_and_save_voice(
         tone_tags=[str(t).strip().lower() for t in (tone_tags or []) if str(t).strip()],
         compatible_styles=[str(s).strip() for s in (compatible_styles or []) if str(s).strip()],
         provider="minimax",
-        provider_voice_id=result.voice_id,
+        provider_voice_id=provider_vid,
         reference_audio_key=ref_key,
         preview_audio_key=ref_key,
         use_count=0,
         is_favorite=False,
         meta={
-            "trace_id": result.trace_id,
+            "trace_id": trace_id,
             "preview_text": preview_text.strip(),
-            "audio_bytes": len(result.trial_audio),
+            "audio_bytes": len(preview_bytes),
+            **extra_meta,
         },
     )
     db.add(row)

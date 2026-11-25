@@ -228,6 +228,32 @@ def is_voice_expired_error(exc: Exception) -> bool:
     )
 
 
+def is_voice_design_unsupported_error(exc: Exception) -> bool:
+    """Return True when MiniMax rejects ``/voice_design`` due to plan/model entitlement (e.g. code 2061)."""
+    if not isinstance(exc, VoiceError):
+        return False
+    msg = str(exc).lower()
+    return any(
+        needle in msg
+        for needle in (
+            "code 2061",
+            "token plan not support",
+            "plan does not support",
+            "not support model",
+            "voice_design not supported",
+        )
+    )
+
+
+def synthesize_preview_mp3(
+    text: str,
+    voice_id: str,
+    language: str = "en",
+) -> T2AResult:
+    """Synthesize a clean speed-1.0 MP3 preview clip for a permanent library voice."""
+    return _synthesize_t2a(text, voice_id, language, 1.0, subtitles=False)
+
+
 def _synthesize_t2a(
     text: str,
     voice_id: str,

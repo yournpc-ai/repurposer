@@ -48,6 +48,7 @@ class GeneratedMusic:
     size_bytes: int
     model: str
     generation_id: str | None
+    extra_meta: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -159,26 +160,77 @@ async def music_disk_path(music_id: UUID) -> bool:
 USER_MODEL = "music-2.6-free"
 
 
+def is_minimax_music_unavailable_error(exc: Exception) -> bool:
+    """Return True when MiniMax rejects ``/music_generation`` due to account deprecation/plan gating (e.g. code 2153/2061)."""
+    msg = str(exc).lower()
+    return any(
+        needle in msg
+        for needle in (
+            "no longer available to new users",
+            "music api is no longer available",
+            "code 2153",
+            "2153",
+            "token plan not support",
+            "code 2061",
+        )
+    )
+
+
 async def generate_music(
     prompt: str,
     *,
     model: str = USER_MODEL,
     is_instrumental: bool = True,
+    compatible_styles: list[str] | None = None,
+    allow_synth_fallback: bool = True,
+    duration_seconds: int = 64,
 ) -> GeneratedMusic:
     """Generate a music piece via MiniMax and download the bytes.
 
-    The native ``/v1/music_generation`` call (see ``providers/llm/minimax.py``)
-    returns a short-lived audio URL, so the bytes are downloaded immediately.
-
-    Raises ``LLMError`` on any API/download failure.
+    Calls MiniMax ``/v1/music_generation`` first. If the account is gated by
+    MiniMax Music API deprecation or plan limits (e.g. code 2153/2061) and
+    ``allow_synth_fallback=True``, cleanly falls back to the built-in stereo
+    48 kHz studio underscore synthesizer so permanent music library generation
+    never dead-ends.
     """
-    result = await minimax_client.generate_music(
-        prompt,
-        model=model,
-        is_instrumental=is_instrumental,
-        output_format="url",
-        audio_format=AUDIO_EXT,
-    )
+    try:
+        result = await minimax_client.generate_music(
+            prompt,
+            model=model,
+            is_instrumental=is_instrumental,
+            output_format="url",
+            audio_format=AUDIO_EXT,
+        )
+    except LLMError as exc:
+        if not (allow_synth_fallback and is_minimax_music_unavailable_error(exc)):
+            raise
+        import asyncio
+        from app.tools.music.score import synthesize_commercial_underscore_mp3
+
+        logger.warning(
+            "minimax_music_unavailable_falling_back_to_studio_synth",
+            reason=str(exc),
+            compatible_styles=compatible_styles,
+        )
+        mp3_bytes, dur_s, synth_meta = await asyncio.to_thread(
+            synthesize_commercial_underscore_mp3,
+            prompt,
+            compatible_styles=compatible_styles,
+            duration_seconds=duration_seconds,
+        )
+        return GeneratedMusic(
+            audio_bytes=mp3_bytes,
+            ext=AUDIO_EXT,
+            duration_seconds=dur_s,
+            size_bytes=len(mp3_bytes),
+            model="studio-synth-v2",
+            generation_id=f"synth-{uuid4().hex[:12]}",
+            extra_meta={
+                "fallback_from": "minimax_music",
+                "fallback_reason": str(exc),
+                **synth_meta,
+            },
+        )
     if not result.audio_url:
         raise LLMError("MiniMax music generation returned no audio URL")
     await record_media_usage({"music_pieces": 1.0})
@@ -188,21 +240,21 @@ async def generate_music(
         dl.raise_for_status()
         audio_bytes = dl.content
 
-    duration_seconds = (
+    duration_seconds_measured = (
         int(result.duration_ms // 1000) if result.duration_ms is not None else None
     )
     size = result.size_bytes if result.size_bytes else len(audio_bytes)
     logger.info(
         "music_generated",
         model=model,
-        duration_seconds=duration_seconds,
+        duration_seconds=duration_seconds_measured,
         size_bytes=size,
         generation_id=result.generation_id,
     )
     return GeneratedMusic(
         audio_bytes=audio_bytes,
         ext=AUDIO_EXT,
-        duration_seconds=duration_seconds,
+        duration_seconds=duration_seconds_measured,
         size_bytes=size,
         model=model,
         generation_id=result.generation_id,
@@ -486,6 +538,7 @@ async def create_music_from_generation(
 
     meta: dict[str, Any] = {
         "content_sha256": hashlib.sha256(generated.audio_bytes).hexdigest(),
+        **(generated.extra_meta or {}),
     }
     try:
         grid = analyze_beat_grid(generated.audio_bytes)

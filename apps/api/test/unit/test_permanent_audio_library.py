@@ -209,3 +209,128 @@ def test_voice_privacy_invariant_blocks_platform_clones():
         scope="user",
         owner_id=uuid4(),
     )
+
+
+def test_voice_design_unsupported_detector_and_stock_voice_matcher():
+    assert voice_provider.is_voice_design_unsupported_error(
+        VoiceError("MiniMax voice design failed: your current token plan not support model, preview_text (code 2061)")
+    )
+    assert not voice_provider.is_voice_design_unsupported_error(
+        VoiceError("network timeout")
+    )
+    assert (
+        voices_svc._select_curated_stock_voice(
+            languages=["en"],
+            gender="male",
+            prompt="Calm British male baritone for institutional finance",
+            tone_tags=["authoritative"],
+            compatible_styles=["institutional_dark"],
+        )
+        == "English_Deep-VoicedGentleman"
+    )
+    assert (
+        voices_svc._select_curated_stock_voice(
+            languages=["en"],
+            gender="female",
+            prompt="Warm BBC scientific documentary narrator",
+            tone_tags=["documentary"],
+            compatible_styles=["swiss_paper"],
+        )
+        == "English_Graceful_Lady"
+    )
+    assert (
+        voices_svc._select_curated_stock_voice(
+            languages=["zh", "en"],
+            gender="male",
+            prompt="Modern energetic Chinese tech product launch commercial",
+            tone_tags=["energetic"],
+            compatible_styles=["vox_editorial"],
+        )
+        == "male-qn-jingying-jingpin"
+    )
+
+
+@pytest.mark.asyncio
+async def test_design_and_save_voice_falls_back_cleanly_on_code_2061(monkeypatch):
+    def _fail_design(*_args, **_kwargs):
+        raise VoiceError(
+            "MiniMax voice design failed: your current token plan not support model, preview_text (code 2061)"
+        )
+
+    def _fake_preview(text: str, voice_id: str, language: str = "en") -> T2AResult:
+        return T2AResult(
+            audio=b"real-speech-26-hd-mp3",
+            subtitle_file=None,
+            usage_characters=len(text),
+            trace_id="trace-stock-preview",
+        )
+
+    saved_objects: dict[str, bytes] = {}
+
+    async def _fake_save(key: str, data: bytes, **_kwargs) -> None:
+        saved_objects[key] = data
+
+    class _FakeDB:
+        def __init__(self) -> None:
+            self.added = []
+
+        def add(self, obj) -> None:
+            self.added.append(obj)
+
+        async def commit(self) -> None:
+            return None
+
+        async def refresh(self, _obj) -> None:
+            return None
+
+    monkeypatch.setattr(voice_provider, "design_voice", _fail_design)
+    monkeypatch.setattr(voice_provider, "synthesize_preview_mp3", _fake_preview)
+    monkeypatch.setattr(voices_svc.storage, "save", _fake_save)
+
+    db = _FakeDB()
+    row = await voices_svc.design_and_save_voice(
+        db,
+        owner_id=uuid4(),
+        name="OxValue Baritone",
+        prompt="British institutional male baritone narrator",
+        preview_text="Valuations boards can defend.",
+        languages=["en"],
+        tone_tags=["authoritative", "british"],
+        compatible_styles=["institutional_dark"],
+        gender="male",
+    )
+    assert row.source_kind == "minimax_stock"
+    assert row.provider_voice_id == "English_Deep-VoicedGentleman"
+    assert row.meta["fallback_from"] == "minimax_design"
+    assert "2061" in row.meta["fallback_reason"]
+    assert saved_objects[row.reference_audio_key] == b"real-speech-26-hd-mp3"
+
+
+@pytest.mark.asyncio
+async def test_generate_music_falls_back_to_studio_synth_on_code_2153(monkeypatch):
+    from app.pipeline import music as music_svc
+    from app.providers.llm.base import LLMError
+
+    assert music_svc.is_minimax_music_unavailable_error(
+        LLMError("MiniMax music generation failed: This Music API is no longer available to new users.")
+    )
+
+    async def _fail_minimax(*_args, **_kwargs):
+        raise LLMError("MiniMax music generation failed: This Music API is no longer available to new users.")
+
+    monkeypatch.setattr(music_svc.minimax_client, "generate_music", _fail_minimax)
+
+    generated = await music_svc.generate_music(
+        "Minimal institutional electronic ambient pulse",
+        compatible_styles=["institutional_dark"],
+        duration_seconds=16,
+    )
+    assert generated.model == "studio-synth-v2"
+    assert generated.ext == "mp3"
+    assert generated.size_bytes > 50_000
+    assert generated.duration_seconds == 16
+    assert generated.extra_meta is not None
+    assert generated.extra_meta["fallback_from"] == "minimax_music"
+    assert generated.extra_meta["bpm"] == 108
+    lufs = measure_audio_lufs(generated.audio_bytes)
+    assert lufs is not None and -20.0 <= lufs <= -11.0

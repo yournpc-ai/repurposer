@@ -282,6 +282,8 @@ async def prepare_minimax_music(
         prompt,
         model=USER_MODEL,
         is_instrumental=True,
+        compatible_styles=list(args.compatible_styles or []),
+        duration_seconds=max(16, min(int(round(args.duration_seconds)), 90)),
     )
     async with AsyncSessionLocal() as db:
         music = await create_music_from_generation(
