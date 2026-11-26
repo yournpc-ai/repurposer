@@ -829,6 +829,11 @@ class ToolLoopAgent:
         pending_rejection_feedback: str | None = None
         invitation: str | None = None
         rejections: list[ToolRejected] = []
+        # Active (unresolved) rejections fed to `should_stop_rejection`.
+        # Once a tool succeeds (`outcome.ok`), its earlier pre-success retries
+        # are cleared here (while `rejections` retains the full forensic log)
+        # so ancient resolved retries never insta-kill a later stage.
+        active_rejections: list[ToolRejected] = []
         rejected_candidates: list[dict] = []
         candidates: dict[str, CandidateRecord] = {}
         restored_live_ids: set[str] = set()
@@ -871,8 +876,9 @@ class ToolLoopAgent:
             """
             nonlocal prev_rejected, pending_rejection_feedback
             await _emit(on_loop_event, event)
-            previous = tuple(rejections)
+            previous = tuple(active_rejections)
             rejections.append(event)
+            active_rejections.append(event)
             if (
                 event.tool_name is not None
                 and should_stop_rejection is not None
@@ -1540,8 +1546,24 @@ class ToolLoopAgent:
                         "Not executed. Review the sibling results, then submit this action separately.", ok=False))
                     continue
                 if tool is None:
+                    offered_names = [
+                        t.name for t in (round_tools if assembled.enforce_offered_tools else active_tools)
+                    ]
+                    if call.name in {"create_video", "instantiate_skill_blueprint"} and (
+                        version_saved or "update_motion_block" in offered_names or "apply_composition_edits" in offered_names
+                    ):
+                        unknown_feedback = (
+                            f"作品初稿已存在，当前阶段不再提供 {call.name} 重建。"
+                            "请直接对现有版本使用局部编辑工具（如 update_motion_block、trim_clip、edit_text、"
+                            "apply_composition_edits、generate_sfx、preview_range、export_video）完成修改与交付。"
+                        )
+                    else:
+                        unknown_feedback = (
+                            f"未知工具 {call.name!r}。请从以下工具中选一个："
+                            + ", ".join(offered_names)
+                        )
                     if not batched:
-                        await remember(call, call_id, ToolObservation(f"Unknown tool {call.name!r}; not executed.", ok=False))
+                        await remember(call, call_id, ToolObservation(unknown_feedback, ok=False))
                     logger.info(
                         "tool_loop_rejection",
                         agent=self.name,
@@ -1550,7 +1572,7 @@ class ToolLoopAgent:
                         tool=call.name,
                     )
                     if batched:
-                        await remember(call, call_id, ToolObservation(f"Unknown tool {call.name!r}; not executed.", ok=False))
+                        await remember(call, call_id, ToolObservation(unknown_feedback, ok=False))
                         continue
                     stopped = await _reject(
                         ToolRejected(
@@ -1560,10 +1582,7 @@ class ToolLoopAgent:
                             detail=None,
                             duration_ms=int((time.monotonic() - iteration_started) * 1000),
                         ),
-                        feedback=(
-                            f"未知工具 {call.name!r}。请从以下工具中选一个："
-                            + ", ".join(t.name for t in (round_tools if assembled.enforce_offered_tools else active_tools))
-                        ),
+                        feedback=unknown_feedback,
                         iteration=iteration,
                     )
                     if stopped is not None:
@@ -1813,6 +1832,10 @@ class ToolLoopAgent:
                         retired_candidate_ids.add(candidate_record.candidate_id)
                         candidates.pop(candidate_record.candidate_id, None)
                         repair_candidate_id = None
+                    if outcome.ok:
+                        active_rejections[:] = [
+                            r for r in active_rejections if r.tool_name != dispatch_name
+                        ]
                     if outcome.ok and outcome.version_saved:
                         version_saved = True
                     last_read_name = dispatch_name

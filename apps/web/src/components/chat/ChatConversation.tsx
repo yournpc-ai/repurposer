@@ -240,7 +240,10 @@ export function ChatConversation({
   /** One conversation message with its anchors: superseded plan-version
    * chips sit right after the echo bubble whose turn produced them; an
    * in-flight live plan card anchors after its own echo bubble. */
-  const renderConversationMessage = (m: OverlayMessage) => {
+  const renderConversationMessage = (
+    m: OverlayMessage,
+    opts?: { checkpointSuperseded?: boolean },
+  ) => {
     const deliveryOutputSlot = hasMessageOutputs(m) ? (
       <div data-message-scroller-reading-edge>
         <ComponentSlot
@@ -302,7 +305,7 @@ export function ChatConversation({
               text={m.content}
               checkpoint={m.failureCheckpoint}
               disabled={chatBusy}
-              onRetry={onRetryCheckpoint}
+              onRetry={opts?.checkpointSuperseded ? undefined : onRetryCheckpoint}
             />
           ) : (
             <div className="flex flex-col items-start gap-1">
@@ -599,9 +602,10 @@ export function ChatConversation({
     unit: ConversationUnit,
     recovered = false,
     attachedSteps?: StepPlanItem[],
+    checkpointSuperseded = false,
   ) =>
     unit.kind === "message"
-      ? renderConversationMessage(unit.message)
+      ? renderConversationMessage(unit.message, { checkpointSuperseded })
       : renderActivityUnit(unit, recovered, attachedSteps)
 
   return (
@@ -661,10 +665,24 @@ export function ChatConversation({
                             later.message.blocks?.length,
                         )),
                   )
+                const checkpointSuperseded =
+                  slot.kind === "message" &&
+                  slot.message.meta === "error" &&
+                  Boolean(slot.message.failureCheckpoint) &&
+                  (blockIndex < conversationBlocks.length - 1 ||
+                    laterSlots.some(
+                      (later) =>
+                        later.kind === "activityFold" ||
+                        later.kind === "activity" ||
+                        (later.kind === "message" &&
+                          later.message.role === "assistant" &&
+                          (later.message.meta !== "error" || Boolean(later.message.failureCheckpoint))),
+                    ))
                 return renderUnit(
                   slot,
                   hasLaterOutcome,
                   slotIndex === stepsHostIndex ? blockSteps : undefined,
+                  checkpointSuperseded,
                 )
               })
               const divider =

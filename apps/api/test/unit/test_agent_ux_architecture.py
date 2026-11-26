@@ -234,3 +234,106 @@ def test_chat_message_response_distinguishes_stage_note_and_rail_note() -> None:
     )
     assert opening_note.display_role == "stage_note"
     assert mid_run_note.display_role == "rail_note"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_tool_loop_clears_active_rejections_after_tool_succeeds_and_redirects_create_video() -> None:
+    """Reproduces 43748dc1: after create_video fails twice and then SUCCEEDS on
+    iteration 2 (saving v1), a later post-v1 attempt to call create_video (which
+    is retired from round_tools) must NOT inherit the 2 pre-success rejections to
+    trigger immediate no_progress; instead it receives an actionable edit redirect
+    and recovers cleanly."""
+    from pydantic import BaseModel
+
+    from app.agents.base import AGENTS
+    from app.agents.tool_loop import (
+        ChatTool,
+        RoundAssembly,
+        ToolLoopAgent,
+        ToolObservation,
+    )
+    from app.chat.turn_tools import video_rejection_stop
+    from app.providers.llm.base import ProviderCapabilities, ToolCall, ToolGeneration
+
+    class CreateArgs(BaseModel):
+        valid: bool = False
+
+    class EditArgs(BaseModel):
+        note: str = ""
+
+    class AnswerArgs(BaseModel):
+        ok: bool = True
+
+    create_tool = ChatTool(name="create_video", terminal=False, description="create", params_model=CreateArgs)
+    edit_tool = ChatTool(name="update_motion_block", terminal=False, description="edit", params_model=EditArgs)
+    answer_tool = ChatTool(name="answer", terminal=True, description="answer", params_model=AnswerArgs)
+
+    scripted = [
+        # Iter 0 & 1: create_video rejected twice with different reasons
+        ToolGeneration(content="", tool_calls=[ToolCall(id="c0", name="create_video", arguments={"valid": False})]),
+        ToolGeneration(content="", tool_calls=[ToolCall(id="c1", name="create_video", arguments={"valid": False})]),
+        # Iter 2: create_video succeeds and saves v1!
+        ToolGeneration(content="", tool_calls=[ToolCall(id="c2", name="create_video", arguments={"valid": True})]),
+        # Iter 3: model accidentally calls retired create_video after v1 exists
+        ToolGeneration(content="", tool_calls=[ToolCall(id="c3", name="create_video", arguments={"valid": True})]),
+        # Iter 4: model follows actionable redirect to update_motion_block
+        ToolGeneration(content="", tool_calls=[ToolCall(id="c4", name="update_motion_block", arguments={"note": "fix"})]),
+        # Iter 5: finishes cleanly
+        ToolGeneration(content="已基于初稿 v1 完成修订。", tool_calls=[ToolCall(id="c5", name="answer", arguments={"ok": True})]),
+    ]
+    seen_feedback: list[str] = []
+
+    class FakeClient:
+        provider = "fake"
+        capabilities = ProviderCapabilities(supports_native_tools=True)
+
+        async def generate_with_tools(self, *, messages, tools, **_kwargs):
+            for msg in messages:
+                content = msg.get("content")
+                if isinstance(content, str) and "不再提供 create_video" in content:
+                    seen_feedback.append(content)
+            return scripted.pop(0)
+
+    agent_name = f"test_recovery_{uuid4().hex[:8]}"
+    loop = ToolLoopAgent(
+        name=agent_name,
+        system="chat/system.j2",
+        prompt="chat/user.j2",
+        tools=[create_tool, edit_tool, answer_tool],
+        max_iterations=8,
+        assemble=lambda **_kw: ({}, None),
+        client=FakeClient(),
+    )
+
+    fail_count = 0
+
+    async def execute(name: str, params, _prose: str):
+        nonlocal fail_count
+        if name == "create_video":
+            if not params.valid:
+                fail_count += 1
+                return f"duration mismatch #{fail_count}"
+            return ToolObservation("saved v1", ok=True, version_saved=True)
+        if name == "update_motion_block":
+            return ToolObservation("edited v2", ok=True, version_saved=True)
+        return None
+
+    def assembler(*, version_saved: bool, **_kw):
+        offered = [edit_tool, answer_tool] if version_saved else [create_tool, edit_tool, answer_tool]
+        return RoundAssembly(tools=offered, system="sys", enforce_offered_tools=True)
+
+    try:
+        result = await loop.call_loop(
+            execute,
+            round_assembler=assembler,
+            should_stop_rejection=video_rejection_stop,
+        )
+    finally:
+        AGENTS.pop(agent_name, None)
+    assert result.no_progress_tool is None
+    assert result.tool_name == "answer"
+    assert "update_motion_block" in result.calls
+    assert seen_feedback, "expected actionable redirect telling model to use edit tools instead of create_video"
+    # Full forensic log still records all 3 rejections
+    assert len(result.rejections) == 3

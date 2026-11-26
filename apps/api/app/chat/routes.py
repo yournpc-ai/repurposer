@@ -1378,18 +1378,27 @@ async def _resume_stream(
                         json.dumps({"turn_id": str(turn_user_message_id), "run_id": run_id}),
                     )
                 )
+                resumed_steps: list[dict] | None = None
                 async with AsyncSessionLocal() as state_db:
                     locked = await _lock_turn_for_transcript_write(state_db, turn_user_message_id)
                     locked.turn_state = "in_flight"
                     # Reset any failed step back to in_progress on retry
                     locked_intent = dict(locked.intent or {})
-                    if isinstance(locked_intent.get("steps"), list):
+                    if isinstance(locked_intent.get("steps"), list) and locked_intent["steps"]:
                         locked_intent["steps"] = [
                             {**s, "status": "in_progress"} if isinstance(s, dict) and s.get("status") == "failed" else s
                             for s in locked_intent["steps"]
                         ]
                         locked.intent = locked_intent
+                        resumed_steps = locked_intent["steps"]
                     await state_db.commit()
+                if resumed_steps:
+                    await queue.put(
+                        _sse(
+                            "assistant.activity",
+                            json.dumps({"kind": "steps", "steps": resumed_steps}, ensure_ascii=False),
+                        )
+                    )
 
                 append_open_read, mirror, cancel_open = _make_activity_persister(
                     queue,
@@ -1446,6 +1455,12 @@ async def _resume_stream(
                     resume_text = (
                         f"{resume_text}\n\nQuestion: {q_title}\nUser answer: {ans_text}\n\n"
                         "(Previous attempt encountered an error; resume and complete the task from preserved materials and brief.)"
+                    )
+                if resumed_steps:
+                    steps_json = json.dumps(resumed_steps, ensure_ascii=False)
+                    resume_text = (
+                        f"{resume_text}\n\n"
+                        f"(Existing step progress: {steps_json}. Reuse these exact step titles, keep completed steps as 'done', and immediately advance the active step as you proceed.)"
                     )
                 with bind_conversation_turn(
                     conversation_id=conversation_id,
