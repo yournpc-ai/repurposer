@@ -129,6 +129,7 @@ class Project(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     persona_id = Column(UUID(as_uuid=True), ForeignKey("personas.id"), nullable=True)
     title = Column(String(255), nullable=False)
+    title_user_edited = Column(Boolean, nullable=False, default=False, server_default="false")
     event_name = Column(String(255), nullable=True)
     language = Column(String(10), default="zh")
     status = Column(Enum(ProjectStatus), default=ProjectStatus.DRAFT)
@@ -509,6 +510,7 @@ class Conversation(Base):
     asset_id = Column(UUID(as_uuid=True), nullable=True, index=True)
     asset_type = Column(String(50), nullable=True)  # "clip" | "derivative"
     title = Column(String(255), nullable=True)
+    title_user_edited = Column(Boolean, nullable=False, default=False, server_default="false")
     # Server-owned tool history, not a second work model or client input.
     context = Column(JSONB, nullable=False, default=lambda: {"schema_version": 1, "items": []},
                      server_default='{"schema_version":1,"items":[]}')

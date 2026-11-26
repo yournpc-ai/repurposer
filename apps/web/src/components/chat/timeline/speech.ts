@@ -60,6 +60,8 @@ export interface SpeechSegmentsDeps {
   onInterimSettled?: (rowId: string) => void
   /** Current optimistic/server turn identity, resolved at each row birth. */
   turnId?: () => string | undefined
+  /** Current execution segment identity (Turn -> Run), resolved at each row birth. */
+  runId?: () => string | undefined
   /** Test seam: the real seat is createTypewriter; a synchronous fake
    * keeps the suite timer-free. */
   typewriterFactory?: typeof createTypewriter
@@ -73,6 +75,7 @@ export interface SpeechSegments {
     turnId: string | null,
     messageId: string,
     seq: number | null,
+    runId?: string | null,
   ) => void
   /** Envelope-time pacing channel (the zero-delta / unseen-tail law): a
    * push rides the SAME typewriter into the main segment, pinning its row
@@ -118,6 +121,12 @@ export function createSpeechSegments(deps: SpeechSegmentsDeps): SpeechSegments {
   const releaseQueue: ReleaseEntry[] = []
   const visibleRows = new Set<string>()
 
+  const openInterimRows = new Set<string>()
+  const interimRowIds = new Set<string>()
+  const settleInterim = (rowId: string) => {
+    if (openInterimRows.delete(rowId)) deps.onInterimSettled?.(rowId)
+  }
+
   const markVisible = (rowId: string, text: string) => {
     if (!text.trim() || visibleRows.has(rowId)) return
     visibleRows.add(rowId)
@@ -130,11 +139,14 @@ export function createSpeechSegments(deps: SpeechSegmentsDeps): SpeechSegments {
     turnId?: string | null,
     serverMessageId?: string,
     seq?: number | null,
+    interim?: boolean,
+    runId?: string | null,
   ) => {
     apply((prev) => {
       if (prev.some((m) => m.id === id)) {
         return serverMessageId ? stampServerMessageId(prev, id, serverMessageId) : prev
       }
+      const resolvedRunId = runId === undefined ? deps.runId?.() : runId ?? undefined
       const next = [
         ...prev,
         {
@@ -145,10 +157,12 @@ export function createSpeechSegments(deps: SpeechSegmentsDeps): SpeechSegments {
           role: "assistant" as const,
           content: "",
           turnId: turnId === undefined ? deps.turnId?.() : turnId ?? undefined,
+          ...(resolvedRunId ? { runId: resolvedRunId } : {}),
           serverMessageId,
           serverIdAliases: serverMessageId ? [serverMessageId] : undefined,
           seq: seq ?? undefined,
           streaming: true,
+          ...(interim ? { interim: true, displayRole: "stage_note" as const } : {}),
           at: at ?? new Date().toISOString(),
         },
       ]
@@ -234,39 +248,34 @@ export function createSpeechSegments(deps: SpeechSegmentsDeps): SpeechSegments {
     typewriter.push(text)
   }
 
-  const openInterimRows = new Set<string>()
-  const settleInterim = (rowId: string) => {
-    if (openInterimRows.delete(rowId)) deps.onInterimSettled?.(rowId)
-  }
-
   const onInterimProse = (
     text: string,
     at: string | undefined,
     turnId: string | null,
     messageId: string,
     seq: number | null,
+    runId?: string | null,
   ) => {
     if (!text.trim()) return
     const interimRowId = `${baseId}#ip${++interimProseCount}`
     openInterimRows.add(interimRowId)
+    interimRowIds.add(interimRowId)
     deps.onInterimStart?.(interimRowId)
+    const resolvedRunId = runId ?? deps.runId?.()
     if (receivedAny) {
-      // Path A — settle IN PLACE, synchronously: the row rekeys NOW (its
-      // array position and birthKey never move), its unreleased chars are
-      // re-attributed to the interim_prose id, and the frame's authoritative
-      // text lands when those chars finish typing. The main identity
-      // resets at the same instant — later deltas and activity rows can
-      // never be swallowed by this settle.
       apply((prev) => stampServerMessageId(
         prev.map((m) =>
           m.id === baseId
             ? {
                 ...m,
                 id: interimRowId,
+                interim: true,
+                displayRole: "stage_note" as const,
                 serverMessageId: messageId,
                 seq: seq ?? m.seq,
                 at: at ?? m.at,
                 ...(turnId == null ? {} : { turnId }),
+                ...(resolvedRunId ? { runId: resolvedRunId } : {}),
               }
             : m,
         ),
@@ -308,7 +317,7 @@ export function createSpeechSegments(deps: SpeechSegmentsDeps): SpeechSegments {
     // Path B — pin the row NOW (出生钉位), pace the text into it through
     // the same typewriter; the settle markers ride the same queue, so a
     // main-segment delta arriving mid-typing routes to its OWN row.
-    ensureSpeechRow(interimRowId, at, turnId, messageId, seq)
+    ensureSpeechRow(interimRowId, at, turnId, messageId, seq, true, resolvedRunId)
     releaseQueue.push({
       rowId: baseId,
       remaining: 0,

@@ -47,6 +47,7 @@ export interface ProjectConversationSummary {
   updated_at: string | null
   message_count: number
   has_active_job: boolean
+  has_pending_question?: boolean
   compacted: boolean
   compacted_at: string | null
 }
@@ -122,6 +123,80 @@ export interface WorkbenchData {
 }
 
 export const CONVERSATIONS_CHANGED_EVENT = "repurposer:conversations-changed"
+export const CONVERSATION_ACTIVITY_EVENT = "repurposer:conversation-activity"
+
+const busyConversationKeys = new Set<string>()
+const completedConversationKeys = new Set<string>()
+const pendingQuestionKeys = new Map<string, boolean>()
+
+function emitConversationActivity(projectId: string) {
+  if (typeof window === "undefined") return
+  window.dispatchEvent(
+    new CustomEvent(CONVERSATION_ACTIVITY_EVENT, { detail: { projectId } }),
+  )
+}
+
+export function setConversationBusy(
+  projectId: string,
+  conversationId: string | null | undefined,
+  busy: boolean,
+  options?: { markCompleted?: boolean },
+) {
+  const key = conversationId || `${projectId}:__active__`
+  const wasBusy = busyConversationKeys.has(key)
+  if (busy) {
+    busyConversationKeys.add(key)
+    completedConversationKeys.delete(key)
+    if (!wasBusy) emitConversationActivity(projectId)
+  } else {
+    busyConversationKeys.delete(key)
+    if (wasBusy) {
+      if (options?.markCompleted !== false) {
+        completedConversationKeys.add(key)
+      }
+      emitConversationActivity(projectId)
+    }
+  }
+}
+
+export function setConversationPendingQuestion(
+  projectId: string,
+  conversationId: string | null | undefined,
+  pending: boolean,
+) {
+  const key = conversationId || `${projectId}:__active__`
+  const prev = pendingQuestionKeys.get(key)
+  if (prev === pending) return
+  pendingQuestionKeys.set(key, pending)
+  if (pending) {
+    completedConversationKeys.delete(key)
+  }
+  emitConversationActivity(projectId)
+}
+
+export function markConversationSeen(
+  projectId: string,
+  conversationId: string | null | undefined,
+) {
+  const key = conversationId || `${projectId}:__active__`
+  const activeKey = `${projectId}:__active__`
+  let changed = false
+  if (completedConversationKeys.delete(key)) changed = true
+  if (completedConversationKeys.delete(activeKey)) changed = true
+  if (changed) emitConversationActivity(projectId)
+}
+
+export function getConversationActivitySnapshot(): {
+  busy: ReadonlySet<string>
+  completed: ReadonlySet<string>
+  pendingQuestion: ReadonlyMap<string, boolean>
+} {
+  return {
+    busy: new Set(busyConversationKeys),
+    completed: new Set(completedConversationKeys),
+    pendingQuestion: new Map(pendingQuestionKeys),
+  }
+}
 
 export function notifyConversationsChanged(projectId: string) {
   if (typeof window === "undefined") return
@@ -168,6 +243,26 @@ export async function renameConversation(
   const updated = (await res.json()) as ProjectConversationSummary
   notifyConversationsChanged(updated.project_id)
   return updated
+}
+
+export const CONVERSATION_DELETED_EVENT = "repurposer:conversation-deleted"
+
+export async function deleteConversation(
+  conversationId: string,
+  projectId?: string,
+): Promise<void> {
+  const res = await apiFetch(`/api/v1/chat/conversations/${conversationId}`, {
+    method: "DELETE",
+  })
+  if (!res.ok) throw new Error("Failed to delete conversation")
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(
+      new CustomEvent(CONVERSATION_DELETED_EVENT, {
+        detail: { conversationId, projectId },
+      }),
+    )
+  }
+  if (projectId) notifyConversationsChanged(projectId)
 }
 
 export async function compactConversation(

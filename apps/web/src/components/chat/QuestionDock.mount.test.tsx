@@ -29,7 +29,15 @@ const items: BriefQuestionItem[] = values.map(([slot, optionId], index) => ({
   allow_freeform: true,
 }))
 
-function Harness({ onSubmit, fields = items }: { onSubmit: (answers: BriefAnswerItem[]) => void; fields?: BriefQuestionItem[] }) {
+function Harness({
+  onSubmit,
+  onBail,
+  fields = items,
+}: {
+  onSubmit: (answers: BriefAnswerItem[]) => void
+  onBail?: () => void
+  fields?: BriefQuestionItem[]
+}) {
   const [answers, setAnswers] = useState<BriefAnswerItem[]>([])
   return (
     <QuestionDock
@@ -42,13 +50,14 @@ function Harness({ onSubmit, fields = items }: { onSubmit: (answers: BriefAnswer
       groupAnswers={answers}
       onGroupAnswersChange={setAnswers}
       onGroupSubmit={onSubmit}
+      onBail={onBail}
       onAnswer={vi.fn()}
       answering={false}
     />
   )
 }
 
-it("pages one question at a time and submits all answers once", () => {
+it("pages one question at a time with AffectUI DecisionCard and submits all answers once", () => {
   const onSubmit = vi.fn()
   render(<Harness onSubmit={onSubmit} />)
 
@@ -67,14 +76,13 @@ it("pages one question at a time and submits all answers once", () => {
   fireEvent.click(screen.getByText("Choose 16:9"))
   expect(onSubmit).not.toHaveBeenCalled()
 
-  fireEvent.click(screen.getByText("questionDock.previous"))
-  const selected = screen.getByRole("button", { name: /Choose en/ })
+  fireEvent.click(screen.getByRole("button", { name: "questionDock.previous" }))
+  const selected = screen.getByRole("option", { name: /Choose en/ })
   expect(selected.getAttribute("aria-pressed")).toBe("true")
-  const card = selected.closest(".ui-crdc")
-  expect(card).not.toBeNull()
-  expect(card?.hasAttribute("data-selected")).toBe(true)
-  expect(card?.parentElement?.querySelectorAll(".ui-crdc[data-selected]")).toHaveLength(1)
+  expect(selected.hasAttribute("data-selected")).toBe(true)
+  expect(selected.closest(".ui-dcc__rows")?.querySelectorAll(".ui-dcc__opt[data-selected]")).toHaveLength(1)
   expect(selected.querySelector("svg")).not.toBeNull()
+
   fireEvent.click(screen.getByText("questionDock.next"))
   fireEvent.click(screen.getByText("questionDock.submit"))
 
@@ -88,7 +96,49 @@ it("pages one question at a time and submits all answers once", () => {
   ]))
 })
 
-it("keeps the legacy single-question form", () => {
+it("folds to a compact waiting bar via collapse/expand without losing answers and exposes Skip", () => {
+  const onSubmit = vi.fn()
+  const onBail = vi.fn()
+  render(<Harness onSubmit={onSubmit} onBail={onBail} />)
+
+  fireEvent.click(screen.getByRole("button", { name: "questionDock.collapse" }))
+  expect(screen.queryByText("Question 0")).toBeNull()
+  expect(screen.getByText("questionDock.waiting")).toBeTruthy()
+
+  fireEvent.click(screen.getByRole("button", { name: "questionDock.expand" }))
+  expect(screen.getByText("Question 0")).toBeTruthy()
+
+  fireEvent.click(screen.getByText("questionDock.skip"))
+  expect(onBail).toHaveBeenCalledTimes(1)
+})
+
+it("renders media approval with affectUI ApprovalCard and inline dismiss without extra freeform input", () => {
+  const onAnswer = vi.fn()
+  const onBail = vi.fn()
+  render(
+    <QuestionDock
+      kind="question"
+      plain
+      mediaApproval
+      question="允许生成旁白吗？最多使用 25 积分。"
+      options={[
+        { id: "approve", label: "允许" },
+        { id: "decline", label: "取消" },
+      ]}
+      onAnswer={onAnswer}
+      onBail={onBail}
+      bailLabel="跳过"
+      answering={false}
+    />,
+  )
+  expect(screen.queryByRole("textbox")).toBeNull()
+  fireEvent.click(screen.getByRole("button", { name: "允许" }))
+  expect(onAnswer).toHaveBeenCalledWith("approve")
+  fireEvent.click(screen.getByRole("button", { name: "跳过" }))
+  expect(onBail).toHaveBeenCalledTimes(1)
+})
+
+it("keeps the legacy single-question form via AffectUI DecisionCard", () => {
   const onAnswer = vi.fn()
   render(
     <QuestionDock
@@ -102,7 +152,6 @@ it("keeps the legacy single-question form", () => {
   fireEvent.click(screen.getByText("One"))
   expect(onAnswer).toHaveBeenCalledWith("1")
 })
-
 
 it("revives a grouped pending question instead of filtering it as plain text", () => {
   const pending = {
@@ -134,7 +183,6 @@ it("keeps legacy option docking and rejects options-empty plain text", () => {
   expect(dockWorthyQuestion(plainText)).toBeNull()
 })
 
-
 it("submits just the five questions, including a custom answer on the last page", () => {
   const fields = [
     { slot: "production_direction", title: "用途和表达方向", label: "面向创作者的产品演示" },
@@ -143,10 +191,12 @@ it("submits just the five questions, including a custom answer on the last page"
     { slot: "subtitle_languages", title: "字幕语言", label: "简体中文" },
     { slot: "aspect", title: "画面比例", label: "16:9 横版" },
   ].map(({ slot, title, label }) => ({
-    slot, question: title,
-    options: slot === "subtitle_languages"
-      ? [{ id: "1", label, value: ["zh-CN"] }, { id: "2", label: "英文", value: ["en-US"] }]
-      : [{ id: "1", label, value: label }],
+    slot,
+    question: title,
+    options:
+      slot === "subtitle_languages"
+        ? [{ id: "1", label, value: ["zh-CN"] }, { id: "2", label: "英文", value: ["en-US"] }]
+        : [{ id: "1", label, value: label }],
   }))
   const onSubmit = vi.fn()
   render(<Harness fields={fields} onSubmit={onSubmit} />)
@@ -157,8 +207,8 @@ it("submits just the five questions, including a custom answer on the last page"
   fireEvent.click(screen.getByText("questionDock.next"))
   fireEvent.click(screen.getByText("15 秒"))
   fireEvent.click(screen.getByText("英文旁白"))
-  expect(screen.getByRole("button", { name: /简体中文/ })).toBeTruthy()
-  fireEvent.click(screen.getByRole("button", { name: /英文/ }))
+  expect(screen.getByRole("option", { name: /简体中文/ })).toBeTruthy()
+  fireEvent.click(screen.getByRole("option", { name: /英文/ }))
   expect(screen.getAllByRole("textbox")).toHaveLength(1)
   fireEvent.change(screen.getByRole("textbox", { name: "画面比例" }), { target: { value: "9:16" } })
   expect(onSubmit).not.toHaveBeenCalled()

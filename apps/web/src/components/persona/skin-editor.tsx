@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next"
 import { Player } from "@remotion/player"
 import { Video } from "@repurposer/video-remotion"
 import { videoSpecSchema, type VideoSpec } from "@repurposer/video-spec"
-import { Check, RotateCcw, Save, Upload, X } from "lucide-react"
+import { Check, RotateCcw, Save, Upload, X } from "@/components/ui/icons"
 
 import { IconButton } from "@/components/ui/icon-button-clean"
 import { Button } from "@/components/ui/button-clean"

@@ -297,7 +297,7 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
                 snapshots=[r for _, r in resources if r.get("kind") == "web"],
                 creative_state=creative_state,
             )
-            names.update({"prepare_video_materials", "get_asset", "get_understanding", "search_transcript"})
+            names.update({"prepare_video_materials", "search_web", "get_asset", "get_understanding", "search_transcript"})
             # A project without a saved work can generate media, but has no timeline to inspect or edit.
             from app.chat.editor import WRITE_TOOLS
             from app.models.schemas import ExternalSkillReference
@@ -366,6 +366,16 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
                 }
         if not asks_for_export(user_text) and not hint.get("output_id") and not confirmation:
             context["delivery_scope"] = "The opening does not explicitly request formal export. Complete the requested editing or preview and report the saved result. A separate formal export would require confirmation."
+        elif (
+            asks_for_export(user_text)
+            and not draft_only_request(user_text)
+            and selected is not None
+            and not (facts.get("delivered") or {}).get("composition_version_id") == selected["version_id"]
+        ):
+            context["delivery_scope"] = (
+                "The user requested a finished video. After finishing edits and checking with preview_range, "
+                "proceed directly to export_video, review_video, and deliver_video to deliver the final MP4."
+            )
         if draft_only_request(user_text):
             context["delivery_scope"] = "Save the requested work and report any requested preview. Formal export is outside this request."
             context.pop("revised_delivery", None)
@@ -400,9 +410,10 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
                 names = {"answer", "review_video", "deliver_video"}
 
         def dialogue_wire(description, parameters):
-            return description, prune_wire_parameters(parameters, {
-                "brief", "material_text", "material_urls", "items", "slot",
-            })
+            pruned = {"brief", "material_text", "material_urls", "slot"}
+            if not native_creation:
+                pruned.add("items")
+            return description, prune_wire_parameters(parameters, pruned)
 
         if (facts.get("authorized_media") or {}).get("status") == "available":
             names.discard("ask_user")
@@ -420,8 +431,11 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
                 return previous(description, parameters) if previous is not None else (description, parameters)
 
             return replace(tool, wire_view=view, description=(
-                "根据实际结果结束本轮；也可以直接在消息正文答复。" if tool.name == "answer" else
-                "询问一个确定目标所需的问题。"
+                "根据实际结果结束本轮；也可以直接在消息正文答复。" if tool.name == "answer" else (
+                    "发起一次单卡确认：当需要确认多个制作偏好（如故事创作偏向、是否要旁白、旁白语言、字幕语言、时长）时，用 items 数组在同一张卡片里一次收集，不要拆成多轮追问。"
+                    if native_creation
+                    else "询问一个确定目标所需的问题。"
+                )
             ))
 
         tools = [terminal_wire(t) if t.name in {"answer", "ask_user"} else t for t in tools]
@@ -454,6 +468,28 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
         media_ready = bool(facts.get("media_receipts")) or facts.get("new_result_tool") in {
             "generate_voice", "generate_music", "generate_image", "generate_sfx",
         }
+        production_tools_open = bool(
+            {"create_video", "export_video", "review_video", "deliver_video"}
+            & {t.name for t in tools}
+        )
+        delivered_output_id = (facts.get("delivered") or {}).get("output_id")
+        bare_production_feedback = (
+            "你刚才只输出了过程说明而没有调用工具，成片尚未完成交付。"
+            "请立即调用下一步工具继续推进（素材已齐就直接调用 create_video 一次性成稿；"
+            "已成稿则预览后依次调用 export_video → review_video → deliver_video 交付成片）。"
+            "只有遇到无法恢复的错误必须中止时，才调用 answer 工具如实说明。"
+            if (
+                asks_for_export(user_text)
+                and not draft_only_request(user_text)
+                and not pending
+                and not media_ready
+                and not facts.get("awaiting_media_authorization")
+                and not delivered_output_id
+                and (facts.get("authorized_media") or {}).get("status") != "declined"
+                and production_tools_open
+            )
+            else None
+        )
         system_prompt = jinja_env.get_template("chat/video_editor.j2").render(
             website_evidence_rule=website_evidence_rule,
         )
@@ -468,7 +504,8 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
             project_reply=lambda text: project_editor_reply(text, facts.get("editor_labels", {}), user_text),
             caller_state={"video_target": selected},
             invitation_tool="ask_user" if any(t.name == "ask_user" for t in tools) else None,
-            allow_bare_reply=True,
+            missing_tool_feedback=bare_production_feedback,
+            allow_bare_reply=bare_production_feedback is None,
         )
     if pending and (pending_ctx := _pending_question_context(pending)):
         return RoundAssembly(

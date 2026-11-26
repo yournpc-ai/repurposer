@@ -1,5 +1,5 @@
 import { useNavigate } from "@tanstack/react-router"
-import { ChevronDown, Menu } from "lucide-react"
+import { ChevronDown, Menu } from "@/components/ui/icons"
 import { useState, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -67,7 +67,7 @@ export function MobileNavigation(): ReactNode {
           </div>
         </div>
         <div className="p-5 pt-2">
-          <Button size="lg" className="w-full text-sm" onClick={createVideo}>
+          <Button size="lg" className="landing-cta w-full" onClick={createVideo}>
             {t("landing.headerCta")}
           </Button>
         </div>

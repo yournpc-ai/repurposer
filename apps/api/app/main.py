@@ -22,6 +22,7 @@ from app.routers.catalog import router as catalog_router
 from app.pipeline.music import seed_default_music
 from app.pipeline.routes import (
     assets,
+    library,
     music,
     outputs,
     persona_assets,
@@ -258,6 +259,7 @@ app.include_router(personas_router, prefix="/api/v1/personas", tags=["personas"]
 app.include_router(projects, prefix="/api/v1/projects", tags=["projects"])
 app.include_router(chat_router, prefix="/api/v1/chat", tags=["chat"])
 app.include_router(assets, prefix="/api/v1/projects", tags=["assets"])
+app.include_router(library, prefix="/api/v1/assets", tags=["assets"])
 app.include_router(persona_assets, prefix="/api/v1/personas", tags=["persona-assets"])
 app.include_router(staging, prefix="/api/v1/uploads/staging", tags=["staging"])
 app.include_router(outputs, prefix="/api/v1/outputs", tags=["outputs"])

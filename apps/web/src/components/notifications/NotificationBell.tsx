@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import { Bell, ExternalLink } from "lucide-react"
+import { Bell, ExternalLink } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 
 import { useAuth } from "@/lib/auth-context"

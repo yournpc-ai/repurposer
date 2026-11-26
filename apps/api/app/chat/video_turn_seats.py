@@ -596,7 +596,17 @@ async def analyze_brand_seat(*, project: Project, args: Any, user_text: str) -> 
         ))
         current_project.pending_brief = latest.model_dump(mode="json")
         await db.commit()
-        project.pending_brief = current_project.pending_brief
+        committed_brief = current_project.pending_brief
+    # Sync the committed value onto the turn-scoped ORM instance without
+    # marking it dirty on turn.db; otherwise turn.db's autoflush re-issues an
+    # uncommitted UPDATE projects before create_video's inner session locks
+    # the same project row, causing a permanent self-deadlock.
+    try:
+        from sqlalchemy.orm.attributes import set_committed_value
+
+        set_committed_value(project, "pending_brief", committed_brief)
+    except Exception:
+        project.pending_brief = committed_brief
     return ToolObservation(json.dumps(facts, ensure_ascii=False))
 
 
@@ -1122,11 +1132,23 @@ def stamp_video_presentation(
         video_presentation_receipt,
     )
 
+    intent = message.intent if isinstance(message.intent, dict) else {}
+    if intent.get("output_refs") or intent.get("delivered_output"):
+        return None
     blocks = list(observed_ranges or [])
     if read is not None:
         final_block = storyboard_block(read)
+        target_vid = final_block.get("composition_version_id")
+        blocks = [b for b in blocks if b.get("composition_version_id") == target_vid]
         if final_block not in blocks:
             blocks.append(final_block)
+    elif blocks:
+        latest_vid = blocks[-1].get("composition_version_id")
+        blocks = [b for b in blocks if b.get("composition_version_id") == latest_vid]
+    # Show only the single most recent preview block in chat rather than stacking
+    # multiple intermediate self-check clips.
+    if len(blocks) > 1:
+        blocks = [blocks[-1]]
     message.blocks = [
         *(block for block in message.blocks or [] if block.get("kind") != "video_storyboard"),
         *({**block, "presented_message_id": str(message.id)} for block in blocks),
@@ -1154,7 +1176,10 @@ def asks_for_export(text: str) -> bool:
         return False
     return bool(re.search(
         r"导出|交付|(?:成片|mp4).{0,8}(?:发给|发我)|(?:发给我|给我发).{0,8}(?:成片|mp4)|"
-        r"\b(?:export|deliver|send.{0,30}mp4)\b", text, re.I
+        r"新品发布|(?:制作|生成|创作|做)(?:一[条个部支段]|个)?[^。！？\n]{0,20}(?:宣传片|发布片|短片|广告片|演示片|视频|成片)|"
+        r"\b(?:export|deliver|send.{0,30}mp4|"
+        r"(?:make|create|produce|generate)\s+(?:a|an|the)?\s*(?:[a-z0-9_-]+\s+){0,4}(?:promo|launch|product|marketing|brand)?\s*(?:video|film|commercial|trailer))\b",
+        text, re.I,
     ))
 
 

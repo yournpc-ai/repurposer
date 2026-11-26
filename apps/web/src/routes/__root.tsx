@@ -8,7 +8,9 @@ import { ThemeProvider } from "@/lib/theme/ThemeProvider"
 
 import { AuthProvider } from "@/components/AuthProvider"
 import { SettingsDialogProvider } from "@/components/settings/SettingsDialog"
-import { LANG_COOKIE, normalizeLocale, type Locale } from "@/lib/i18n"
+import { LANG_COOKIE, normalizeLocale, readLangCookie, type Locale } from "@/lib/i18n"
+import enLocale from "@/lib/i18n/locales/en"
+import zhLocale from "@/lib/i18n/locales/zh"
 import appCss from "../styles.css?url"
 
 // Server-module imports are denied in the client bundle (import-protection),
@@ -30,13 +32,16 @@ export const Route = createRootRoute({
     if (typeof document === "undefined") {
       return { lang: await readLangCookieOnServer() }
     }
-    return { lang: null }
+    return { lang: readLangCookie() }
   },
-  head: () => ({
+  head: ({ loaderData }) => {
+    const copy = loaderData?.lang === "zh" ? zhLocale.landing.meta : enLocale.landing.meta
+    return {
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Rookie" },
+      { title: copy.title },
+      { name: "description", content: copy.description },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
@@ -64,7 +69,8 @@ export const Route = createRootRoute({
         `,
       },
     ],
-  }),
+  }
+  },
   component: RootComponent,
   shellComponent: RootDocument,
 })

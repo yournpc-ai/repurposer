@@ -905,7 +905,10 @@ class ToolLoopAgent:
             return None
 
         assembled_result_count = 0
+        prev_iteration_had_rejection = False
         for iteration in range(self.max_iterations):
+            suppress_retry_interim = prev_rejected or prev_iteration_had_rejection
+            prev_iteration_had_rejection = False
             if iteration and prev_rejected and on_repair is not None:
                 await _emit(on_repair)
             prev_rejected = False
@@ -1337,6 +1340,62 @@ class ToolLoopAgent:
                     member = BatchMember(group_id, wire["id"], request.name, index, len(wire_calls),
                                          presentation.active_key if presentation else None)
                     members[wire["id"]] = member
+                # Emit the model's interim progress note BEFORE BatchDeclared so the
+                # transcript order is always [interim_prose] -> [batch activities],
+                # preventing the frontend from prematurely closing the previous work
+                # fold and exposing an orphan interim row with action buttons.
+                has_non_terminal = any(
+                    (by_name.get(c.name) is not None and not by_name[c.name].terminal)
+                    for c in result.tool_calls
+                )
+                has_terminal = any(
+                    (by_name.get(c.name) is not None and by_name[c.name].terminal)
+                    for c in result.tool_calls
+                )
+                batch_will_reject = (
+                    active_repair is not None
+                    and any(c.name != CORRECTION_TOOL_NAME for c in result.tool_calls)
+                ) or (
+                    batched
+                    and not self.service_per_call
+                    and any(
+                        c.name in by_name
+                        and (by_name[c.name].terminal or not by_name[c.name].batchable)
+                        for c in result.tool_calls
+                    )
+                )
+                if (
+                    members
+                    and has_non_terminal
+                    and not has_terminal
+                    and not batch_will_reject
+                    and response_prose.strip()
+                    and on_interim_prose is not None
+                ):
+                    prose_handled = True
+                    if suppress_retry_interim or active_repair is not None:
+                        logger.info(
+                            "tool_loop_interim_prose_suppressed_retry",
+                            agent=self.name,
+                            iteration=iteration,
+                        )
+                    elif interim_proses_sent < MAX_INTERIM_PROSES_PER_TURN or (
+                        self.service_per_call and interim_proses_sent < MAX_INTERIM_PROSES_PER_TURN * 2
+                    ):
+                        await _emit(on_interim_prose, response_prose.strip())
+                        interim_proses_sent += 1
+                        logger.info(
+                            "tool_loop_interim_prose",
+                            agent=self.name,
+                            iteration=iteration,
+                            predecessor=last_read_name,
+                        )
+                    else:
+                        logger.info(
+                            "tool_loop_interim_prose_capped",
+                            agent=self.name,
+                            iteration=iteration,
+                        )
                 if members:
                     await _emit(on_loop_event, BatchDeclared(tuple(members.values())))
 
@@ -1344,6 +1403,9 @@ class ToolLoopAgent:
                                candidate_record: CandidateRecord | None = None,
                                candidate_active: bool = True,
                                target_tool: str | None = None):
+                nonlocal prev_iteration_had_rejection
+                if not observation.ok:
+                    prev_iteration_had_rejection = True
                 if group_id and call_id in members and call_id not in started:
                     await _emit(on_loop_event, replace(members[call_id], state="not_executed"))
                 if group_id and observation.valid_for_key:
@@ -1643,7 +1705,13 @@ class ToolLoopAgent:
                     and bool(prose.strip())
                     and on_interim_prose is not None
                 )
-                if interim_prose_route and (self.service_per_call or interim_proses_sent < MAX_INTERIM_PROSES_PER_TURN):
+                if interim_prose_route and (suppress_retry_interim or active_repair is not None or is_correction):
+                    logger.info(
+                        "tool_loop_interim_prose_suppressed_retry",
+                        agent=self.name,
+                        iteration=iteration,
+                    )
+                elif interim_prose_route and (self.service_per_call or interim_proses_sent < MAX_INTERIM_PROSES_PER_TURN):
                     await _emit(on_interim_prose, prose.strip())
                     interim_proses_sent += 1
                     logger.info(

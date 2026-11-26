@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button-clean"
 import { IconButton } from "@/components/ui/icon-button-clean"
 import { Spinner } from "@/components/ui/spinner-clean"
 import { useTranslation } from "react-i18next"
-import { Plus, X } from "lucide-react"
+import { Plus, X } from "@/components/ui/icons"
 
 import {
   ASSETS_ACCEPT,

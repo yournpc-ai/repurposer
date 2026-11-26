@@ -1,7 +1,7 @@
 import { Link, createFileRoute } from "@tanstack/react-router"
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Mic2, Plus } from "lucide-react"
+import { Mic2, Plus } from "@/components/ui/icons"
 
 import { Button } from "@/components/ui/button-clean"
 import { EmptyState } from "@/components/ui/empty-state-clean"

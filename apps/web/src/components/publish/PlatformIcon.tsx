@@ -1,4 +1,4 @@
-import { Linkedin } from "lucide-react"
+import { Linkedin } from "@/components/ui/icons"
 
 import type { ChannelPlatform } from "@/lib/types"
 

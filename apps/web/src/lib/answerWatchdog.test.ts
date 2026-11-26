@@ -64,4 +64,39 @@ describe("armAnswerWatchdog", () => {
     expect(w.signal.aborted).toBe(false)
     expect(vi.getTimerCount()).toBe(0)
   })
+
+  it("never aborts while tab is hidden and grants a fresh grace window on return", () => {
+    const prevDoc = globalThis.document
+    let visState: DocumentVisibilityState = "hidden"
+    Object.defineProperty(globalThis, "document", {
+      configurable: true,
+      value: {
+        get visibilityState() {
+          return visState
+        },
+      },
+    })
+    try {
+      const w = armAnswerWatchdog(45_000, 10_000)
+      // Tab stays hidden for 3 minutes — background execution must NOT abort
+      vi.advanceTimersByTime(180_000)
+      expect(w.signal.aborted).toBe(false)
+
+      // Return to tab — watchdog grants a fresh grace window instead of tripping immediately
+      visState = "visible"
+      vi.advanceTimersByTime(10_000)
+      expect(w.signal.aborted).toBe(false)
+      vi.advanceTimersByTime(35_000)
+      expect(w.signal.aborted).toBe(false)
+      // Still no frame after the full post-wake threshold -> now declares dead
+      vi.advanceTimersByTime(20_000)
+      expect(w.signal.aborted).toBe(true)
+      w.disarm()
+    } finally {
+      Object.defineProperty(globalThis, "document", {
+        configurable: true,
+        value: prevDoc,
+      })
+    }
+  })
 })

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { toast } from "sonner"
-import { Plus } from "lucide-react"
+import { Plus } from "@/components/ui/icons"
 import { createRef } from "react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
@@ -79,6 +79,9 @@ describe("Full-radius composer and scroll-to-bottom controls", () => {
       expect(btn.className).toContain("rounded-full")
       expect(btn.style.getPropertyValue("--radius")).toBe("9999px")
     }
+    const stopBtn = screen.getByRole("button", { name: "Stop" })
+    expect(stopBtn.getAttribute("data-variant")).toBe("secondary")
+    expect(stopBtn.style.getPropertyValue("--ui-icbc-icon")).toBe("#ef4444")
   })
 
   it("renders HomeComposer shell with pill corners and circular + / ↑ buttons", () => {

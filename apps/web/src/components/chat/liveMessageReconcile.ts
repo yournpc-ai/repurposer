@@ -109,20 +109,61 @@ export function buildRecoveredActivityRow({
 export function stampMessagePresentation(
   messages: OverlayMessage[],
   previewId: string,
-  message: { id: string; blocks?: MessageBlock[]; intent?: unknown; steps?: unknown; feedback?: unknown },
+  message: {
+    id: string
+    run_id?: string | null
+    display_role?: OverlayMessage["displayRole"] | null
+    question?: unknown
+    answer?: unknown
+    blocks?: MessageBlock[]
+    intent?: unknown
+    steps?: unknown
+    feedback?: unknown
+  },
 ): OverlayMessage[] {
   const blocks = message.blocks?.length ? message.blocks : undefined
   const outputRefs = deliveryOutputRefs(message.intent)
   const facts = messageReceiptFacts(message.intent)
   const steps = parseStepsPlan(message.steps, message.intent)
   const feedback = parseFeedbackSummary(message.feedback)
-  if (!blocks && outputRefs.length === 0 && !facts.jobReceipt && !steps && feedback === undefined) return messages
+  const intentObj = message.intent && typeof message.intent === "object"
+    ? (message.intent as Record<string, unknown>)
+    : null
+  const turnProse = intentObj?.turn_prose === true
+  const runId =
+    typeof message.run_id === "string" && message.run_id
+      ? message.run_id
+      : typeof intentObj?.run_id === "string" && intentObj.run_id
+        ? intentObj.run_id
+        : undefined
+  const displayRole = message.display_role ?? undefined
+  const questionPayload = message.question as { options?: unknown[]; items?: unknown[] } | null | undefined
+  const isDockedQuestionFraming = Boolean(
+    questionPayload &&
+    !message.answer &&
+    ((questionPayload.options?.length ?? 0) > 0 || (questionPayload.items?.length ?? 0) > 0),
+  )
+  if (
+    !blocks &&
+    outputRefs.length === 0 &&
+    !facts.jobReceipt &&
+    !steps &&
+    feedback === undefined &&
+    !turnProse &&
+    !runId &&
+    !displayRole &&
+    !isDockedQuestionFraming
+  ) return messages
   const targetId = messages.some((row) => row.id === previewId) ? previewId : message.id
   return messages.map((row) => row.id === targetId ? {
     ...row,
     ...(blocks ? { blocks } : {}),
     ...facts,
     ...(steps ? { steps } : {}),
+    ...(turnProse ? { turnProse: true } : {}),
+    ...(runId ? { runId } : {}),
+    ...(displayRole ? { displayRole } : {}),
+    ...(isDockedQuestionFraming ? { questionEcho: true } : {}),
     ...(feedback !== undefined ? { feedback } : {}),
     ...(outputRefs.length > 0 ? { outputRefs } : {}),
   } : row)

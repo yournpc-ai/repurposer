@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import { Check, Copy, ThumbsDown, ThumbsUp } from "lucide-react"
+import { Check, Copy, ThumbsDown, ThumbsUp } from "@/components/ui/icons"
 import { motion, useReducedMotion } from "motion/react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
@@ -25,6 +25,11 @@ export interface MessageActionBarProps {
   createdAt?: string
   feedback?: MessageFeedbackSummary | null
   onFeedbackChange?: (messageId: string, next: MessageFeedbackSummary | null) => void
+  /** Hover-reveal mode (for substantive pre-QA checkpoint summaries): silent at rest,
+   * surfaces on parent group hover / keyboard focus-visible, or while rated/open. */
+  revealOnHover?: boolean
+  /** Omit the trailing relative timestamp (e.g. "刚刚") on intermediate framing rows. */
+  hideTimestamp?: boolean
   className?: string
 }
 
@@ -34,6 +39,8 @@ export function MessageActionBar({
   createdAt,
   feedback: initialFeedback = null,
   onFeedbackChange,
+  revealOnHover = false,
+  hideTimestamp = false,
   className,
 }: MessageActionBarProps) {
   const { t } = useTranslation()
@@ -157,23 +164,16 @@ export function MessageActionBar({
     void commitFeedback("bad", selectedTags, reason.trim() || null, true)
   }, [commitFeedback, reason, selectedTags])
 
-  const relativeTime = createdAt && nowMs != null ? formatRelativeTime(createdAt, t, nowMs) : ""
+  const relativeTime =
+    !hideTimestamp && createdAt && nowMs != null ? formatRelativeTime(createdAt, t, nowMs) : ""
   const exactTime = createdAt ? (() => {
     const parsed = Date.parse(createdAt)
     return Number.isNaN(parsed) ? undefined : new Date(parsed).toLocaleString()
   })() : undefined
+  const stayVisible = !revealOnHover || Boolean(feedback) || badPopoverOpen || copied
 
-  return (
-    <motion.div
-      data-slot="message-action-bar"
-      initial={prefersReducedMotion ? false : { opacity: 0, y: 2 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-      className={cn(
-        "mt-1.5 flex items-center gap-0.5 text-muted-foreground",
-        className,
-      )}
-    >
+  const content = (
+    <>
       <IconButton
         size="sm"
         variant="ghost"
@@ -271,6 +271,42 @@ export function MessageActionBar({
           {relativeTime}
         </span>
       ) : null}
+    </>
+  )
+
+  // Never put motion `animate={{ opacity: 1 }}` on the same node as `opacity-0`
+  // hover classes — Framer Motion writes inline `style="opacity: 1"` which
+  // overrides Tailwind's `opacity-0` utility.
+  if (revealOnHover) {
+    return (
+      <div
+        data-slot="message-action-bar"
+        data-reveal-mode="hover"
+        className={cn(
+          "mt-1.5 flex items-center gap-0.5 text-muted-foreground transition-opacity duration-150",
+          !stayVisible &&
+            "opacity-0 group-hover/msg:opacity-100 group-has-[:focus-visible]/msg:opacity-100",
+          className,
+        )}
+      >
+        {content}
+      </div>
+    )
+  }
+
+  return (
+    <motion.div
+      data-slot="message-action-bar"
+      data-reveal-mode="always"
+      initial={prefersReducedMotion ? false : { opacity: 0, y: 2 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+      className={cn(
+        "mt-1.5 flex items-center gap-0.5 text-muted-foreground",
+        className,
+      )}
+    >
+      {content}
     </motion.div>
   )
 }

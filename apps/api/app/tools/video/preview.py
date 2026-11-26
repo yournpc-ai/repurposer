@@ -27,7 +27,7 @@ from app.editing.schemas import (
     Timeline,
 )
 from app.editing.store import content_of, get_video_version, snapshot_facts
-from app.editing.temporal import slice_clip
+from app.editing.temporal import slice_clip, ticks_to_frames
 from app.editing.video_spec import CompileError, compile_video_spec
 from app.models.schemas import (
     MediaInput,
@@ -106,6 +106,7 @@ def project_video_scrub(
         raise ScrubTargetError("the scrub window contains no clips")
 
     tracks = []
+    settings = content.settings
     for track in content.timeline.tracks:
         if selected and not any(clip.clip_id in selected for clip in track.clips):
             continue
@@ -117,6 +118,15 @@ def project_video_scrub(
                 start=max(window.start, clip.range.start),
                 end=min(window.end, clip.range.end),
             )
+            # Sub-frame boundary grazes contribute zero rendered frames to this
+            # preview window; skip instead of failing slice_clip.
+            if (
+                isinstance(target, VideoRangeScrubTarget)
+                and kept != clip.range
+                and ticks_to_frames(kept.end, settings.timebase, settings.fps.num, settings.fps.den)
+                <= ticks_to_frames(kept.start, settings.timebase, settings.fps.num, settings.fps.den)
+            ):
+                continue
             try:
                 projected = deepcopy(clip) if kept == clip.range else slice_clip(content, clip, kept)
             except ValueError as exc:

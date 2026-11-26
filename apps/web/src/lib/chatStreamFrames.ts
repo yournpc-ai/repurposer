@@ -16,8 +16,12 @@ import type {
   ActivityRowFrame,
   CandidateMemberPayload,
   CandidateSurface,
+  DisplayRole,
+  FailureCheckpoint,
   MessageBlock,
   OverlayMessage,
+  QuestionMessage,
+  StepPlanItem,
 } from "@/components/chat/timeline/types"
 
 /** The thinking frame's payload: `{}` = a pure keepalive (drive the
@@ -72,12 +76,17 @@ export interface RowAppendPayload {
   role: "user" | "assistant"
   content: string
   turn_id?: string | null
+  run_id?: string | null
+  display_role?: DisplayRole | null
   seq?: number | null
   /** The row's intent dump — activity rows carry {type:"activity", frame}. */
   intent?: unknown
+  question?: QuestionMessage["question"]
+  answer?: QuestionMessage["answer"]
   /** Structured presentation blocks (Video Project phase B) — the
    * storyboard card's resolve references on the presenting row. */
   blocks?: MessageBlock[]
+  steps?: StepPlanItem[] | null
   created_at?: string | null
 }
 
@@ -91,7 +100,21 @@ export type ActivityRowFramePayload = Omit<ActivityFramePayload, "seq" | "kind" 
 }
 
 export type RoutedStreamFrame =
-  | { kind: "turn_started"; turnId: string }
+  | { kind: "turn_started"; turnId: string; runId?: string | null }
+  | {
+      kind: "decision_committed"
+      runId: string | null
+      turnId: string | null
+      answeredQuestion: QuestionMessage
+    }
+  | {
+      kind: "run_synced"
+      active: boolean
+      runId: string | null
+      turnId: string | null
+      liveFocus: string | null
+      steps: StepPlanItem[] | null
+    }
   | { kind: "delta"; text: string; messageId: string | null }
   | { kind: "thinking"; payload: ThinkingPayload }
   | { kind: "candidates"; event: CandidateEventPayload }
@@ -100,14 +123,32 @@ export type RoutedStreamFrame =
       text: string
       at?: string
       turnId: string | null
+      runId?: string | null
+      displayRole?: "stage_note" | "rail_note"
       messageId: string
       seq: number | null
     }
   | { kind: "activity"; frame: ActivityFramePayload }
   | { kind: "row_append"; row: RowAppendPayload }
   | { kind: "row_update"; id: string; frame: ActivityRowFramePayload }
+  | {
+      kind: "title_updated"
+      projectId: string
+      conversationId: string
+      projectTitle?: string
+      conversationTitle?: string
+    }
   | { kind: "completed"; envelope: unknown }
-  | { kind: "failed"; detail: unknown; persisted: boolean; turnId: string | null; messageId?: string }
+  | {
+      kind: "failed"
+      detail: unknown
+      persisted: boolean
+      turnId: string | null
+      runId?: string | null
+      messageId?: string
+      decisionCommitted?: boolean
+      checkpoint?: FailureCheckpoint
+    }
   | { kind: "ignored" }
 
 /** Live Candidate Surface reducer. Set identity comes from the server frame;
@@ -219,8 +260,42 @@ export function routeStreamFrame(
   terminal: { completed: string; failed: string },
 ): RoutedStreamFrame {
   if (event === "turn.started") {
-    const parsed = JSON.parse(data) as { turn_id: string }
-    return { kind: "turn_started", turnId: parsed.turn_id }
+    const parsed = JSON.parse(data) as { turn_id: string; run_id?: string | null }
+    return {
+      kind: "turn_started",
+      turnId: parsed.turn_id,
+      ...(typeof parsed.run_id === "string" ? { runId: parsed.run_id } : {}),
+    }
+  }
+  if (event === "decision.committed") {
+    const parsed = JSON.parse(data) as {
+      run_id?: string | null
+      turn_id?: string | null
+      answered_question: QuestionMessage
+    }
+    return {
+      kind: "decision_committed",
+      runId: typeof parsed.run_id === "string" ? parsed.run_id : null,
+      turnId: typeof parsed.turn_id === "string" ? parsed.turn_id : null,
+      answeredQuestion: parsed.answered_question,
+    }
+  }
+  if (event === "run.synced") {
+    const parsed = JSON.parse(data) as {
+      active?: boolean
+      run_id?: string | null
+      turn_id?: string | null
+      live_focus?: string | null
+      steps?: StepPlanItem[] | null
+    }
+    return {
+      kind: "run_synced",
+      active: Boolean(parsed.active),
+      runId: typeof parsed.run_id === "string" ? parsed.run_id : null,
+      turnId: typeof parsed.turn_id === "string" ? parsed.turn_id : null,
+      liveFocus: typeof parsed.live_focus === "string" ? parsed.live_focus : null,
+      steps: Array.isArray(parsed.steps) ? parsed.steps : null,
+    }
   }
   if (event === "assistant.delta") {
     const parsed = JSON.parse(data) as { text: string; message_id?: string | null }
@@ -245,20 +320,50 @@ export function routeStreamFrame(
       text: string
       at?: string | null
       turn_id?: string | null
+      run_id?: string | null
+      display_role?: string | null
       message_id?: unknown
       seq?: unknown
     }
     if (typeof parsed.message_id !== "string" || !parsed.message_id) {
       throw new Error("assistant.interim_prose requires message_id")
     }
+    const displayRole =
+      parsed.display_role === "rail_note" || parsed.display_role === "stage_note"
+        ? parsed.display_role
+        : undefined
     return {
       kind: "interim_prose",
       text: parsed.text,
       at: typeof parsed.at === "string" ? parsed.at : undefined,
       turnId: typeof parsed.turn_id === "string" ? parsed.turn_id : null,
+      ...(typeof parsed.run_id === "string" ? { runId: parsed.run_id } : {}),
+      ...(displayRole ? { displayRole } : {}),
       messageId: parsed.message_id,
       seq: typeof parsed.seq === "number" ? parsed.seq : null,
     }
+  }
+  if (event === "title.updated") {
+    const parsed = JSON.parse(data) as {
+      project_id?: string
+      conversation_id?: string
+      project_title?: string
+      conversation_title?: string
+    }
+    if (typeof parsed.project_id === "string" && typeof parsed.conversation_id === "string") {
+      return {
+        kind: "title_updated",
+        projectId: parsed.project_id,
+        conversationId: parsed.conversation_id,
+        ...(typeof parsed.project_title === "string"
+          ? { projectTitle: parsed.project_title }
+          : {}),
+        ...(typeof parsed.conversation_title === "string"
+          ? { conversationTitle: parsed.conversation_title }
+          : {}),
+      }
+    }
+    return { kind: "ignored" }
   }
   if (event === "assistant.activity") {
     return { kind: "activity", frame: JSON.parse(data) as ActivityFramePayload }
@@ -280,10 +385,18 @@ export function routeStreamFrame(
       persisted?: boolean
       message_id?: string
       turn_id?: string | null
+      run_id?: string | null
+      decision_committed?: boolean
+      checkpoint?: FailureCheckpoint
     }
     return {
       kind: "failed",
       ...(typeof parsed.message_id === "string" ? { messageId: parsed.message_id } : {}),
+      ...(typeof parsed.run_id === "string" ? { runId: parsed.run_id } : {}),
+      ...(parsed.decision_committed === true ? { decisionCommitted: true } : {}),
+      ...(parsed.checkpoint && typeof parsed.checkpoint === "object"
+        ? { checkpoint: parsed.checkpoint }
+        : {}),
       detail: parsed.detail,
       persisted: !!parsed.persisted,
       turnId: typeof parsed.turn_id === "string" ? parsed.turn_id : null,

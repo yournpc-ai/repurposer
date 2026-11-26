@@ -361,8 +361,10 @@ async def test_create_video_preserves_creative_state_and_external_skill(database
             "skill_resource": {"resource_id": "fixed-image"},
         }],
     )
-    with bind_progress("skill-create", None):
-        result = await create_video(db, turn, args)
+    async with database() as create_db:
+        with bind_progress("skill-create", None):
+            result = await create_video(create_db, turn, args)
+        await create_db.commit()
     monkeypatch.undo()
     assert len(placements) == 1
     async with database() as db:

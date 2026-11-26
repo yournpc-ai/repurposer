@@ -11,9 +11,11 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppRouteImport } from './routes/_app'
+import { Route as AppAssetsRouteImport } from './routes/_app.assets'
 import { Route as AppBrandTemplateRouteImport } from './routes/_app.brand-template'
 import { Route as AppHomeRouteImport } from './routes/_app.home'
 import { Route as AppPersonasRouteImport } from './routes/_app.personas'
+import { Route as AppPresetsRouteImport } from './routes/_app.presets'
 import { Route as AppProjectsRouteImport } from './routes/_app.projects'
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
 import { Route as AppPersonasIndexRouteImport } from './routes/_app.personas.index'
@@ -30,6 +32,11 @@ const AppRoute = AppRouteImport.update({
   id: '/_app',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppAssetsRoute = AppAssetsRouteImport.update({
+  id: '/assets',
+  path: '/assets',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppBrandTemplateRoute = AppBrandTemplateRouteImport.update({
   id: '/brand-template',
   path: '/brand-template',
@@ -43,6 +50,11 @@ const AppHomeRoute = AppHomeRouteImport.update({
 const AppPersonasRoute = AppPersonasRouteImport.update({
   id: '/personas',
   path: '/personas',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppPresetsRoute = AppPresetsRouteImport.update({
+  id: '/presets',
+  path: '/presets',
   getParentRoute: () => AppRoute,
 } as any)
 const AppProjectsRoute = AppProjectsRouteImport.update({
@@ -78,9 +90,11 @@ const AppProjectsIdRoute = AppProjectsIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/assets': typeof AppAssetsRoute
   '/brand-template': typeof AppBrandTemplateRoute
   '/home': typeof AppHomeRoute
   '/personas': typeof AppPersonasRouteWithChildren
+  '/presets': typeof AppPresetsRoute
   '/projects': typeof AppProjectsRouteWithChildren
   '/settings': typeof AppSettingsRoute
   '/personas/$id': typeof AppPersonasIdRoute
@@ -90,8 +104,10 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/assets': typeof AppAssetsRoute
   '/brand-template': typeof AppBrandTemplateRoute
   '/home': typeof AppHomeRoute
+  '/presets': typeof AppPresetsRoute
   '/settings': typeof AppSettingsRoute
   '/personas/$id': typeof AppPersonasIdRoute
   '/projects/$id': typeof AppProjectsIdRoute
@@ -102,9 +118,11 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_app': typeof AppRouteWithChildren
+  '/_app/assets': typeof AppAssetsRoute
   '/_app/brand-template': typeof AppBrandTemplateRoute
   '/_app/home': typeof AppHomeRoute
   '/_app/personas': typeof AppPersonasRouteWithChildren
+  '/_app/presets': typeof AppPresetsRoute
   '/_app/projects': typeof AppProjectsRouteWithChildren
   '/_app/settings': typeof AppSettingsRoute
   '/_app/personas/$id': typeof AppPersonasIdRoute
@@ -116,9 +134,11 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/assets'
     | '/brand-template'
     | '/home'
     | '/personas'
+    | '/presets'
     | '/projects'
     | '/settings'
     | '/personas/$id'
@@ -128,8 +148,10 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/assets'
     | '/brand-template'
     | '/home'
+    | '/presets'
     | '/settings'
     | '/personas/$id'
     | '/projects/$id'
@@ -139,9 +161,11 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/_app'
+    | '/_app/assets'
     | '/_app/brand-template'
     | '/_app/home'
     | '/_app/personas'
+    | '/_app/presets'
     | '/_app/projects'
     | '/_app/settings'
     | '/_app/personas/$id'
@@ -171,6 +195,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_app/assets': {
+      id: '/_app/assets'
+      path: '/assets'
+      fullPath: '/assets'
+      preLoaderRoute: typeof AppAssetsRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/brand-template': {
       id: '/_app/brand-template'
       path: '/brand-template'
@@ -190,6 +221,13 @@ declare module '@tanstack/react-router' {
       path: '/personas'
       fullPath: '/personas'
       preLoaderRoute: typeof AppPersonasRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/presets': {
+      id: '/_app/presets'
+      path: '/presets'
+      fullPath: '/presets'
+      preLoaderRoute: typeof AppPresetsRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/projects': {
@@ -266,17 +304,21 @@ const AppProjectsRouteWithChildren = AppProjectsRoute._addFileChildren(
 )
 
 interface AppRouteChildren {
+  AppAssetsRoute: typeof AppAssetsRoute
   AppBrandTemplateRoute: typeof AppBrandTemplateRoute
   AppHomeRoute: typeof AppHomeRoute
   AppPersonasRoute: typeof AppPersonasRouteWithChildren
+  AppPresetsRoute: typeof AppPresetsRoute
   AppProjectsRoute: typeof AppProjectsRouteWithChildren
   AppSettingsRoute: typeof AppSettingsRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppAssetsRoute: AppAssetsRoute,
   AppBrandTemplateRoute: AppBrandTemplateRoute,
   AppHomeRoute: AppHomeRoute,
   AppPersonasRoute: AppPersonasRouteWithChildren,
+  AppPresetsRoute: AppPresetsRoute,
   AppProjectsRoute: AppProjectsRouteWithChildren,
   AppSettingsRoute: AppSettingsRoute,
 }

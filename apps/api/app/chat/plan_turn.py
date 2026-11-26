@@ -195,6 +195,17 @@ class PlanTurn:
             )
         self.text = text
 
+        # Hydrate persisted live checklist steps from the opening row so
+        # background worker continuations keep and finalize the same plan.
+        if self.turn_id is not None and self._latest_steps is None:
+            from app.chat.activity import sanitize_steps
+
+            opening_row = await db.get(Message, self.turn_id)
+            raw_opening_steps = (opening_row.intent or {}).get("steps") if opening_row else None
+            hydrated_steps = sanitize_steps(raw_opening_steps)
+            if hydrated_steps:
+                self._latest_steps = hydrated_steps
+
         # 建议点选落地解算 (ADR-099 §4): a pick-carrying request resolves
         # its provenance NOW — the note (fresh = the control event named;
         # stale = WHAT moved + re-grounding advice) rides the router-facing
@@ -575,6 +586,13 @@ class PlanTurn:
             sanitized = sanitize_steps(getattr(params, "steps", None))
             if sanitized:
                 self._latest_steps = sanitized
+                await self._persist_live_steps(sanitized)
+                return ToolObservation(
+                    f"Steps updated (reuse these exact titles on later updates, only change status): {json.dumps(sanitized, ensure_ascii=False)}",
+                    ok=True,
+                    context_lifetime="turn",
+                    persist=False,
+                )
             return ToolObservation("Steps updated.", ok=True, context_lifetime="call", persist=False)
         if name in EDITOR_NAMES:
             return await execute_editor(self, name, params)
@@ -781,6 +799,9 @@ class PlanTurn:
         persisted row that actually presents the saved facts."""
         pending = self._video_presentation_pending
         self._video_presentation_pending = None
+        observed_ranges = self.__dict__.pop("_editor_preview_blocks", [])
+        if getattr(self, "_editor_delivery", None):
+            return
         from app.chat.video_turn_seats import (  # deferred: same layer
             requested_video_production,
             stamp_video_presentation,
@@ -788,7 +809,7 @@ class PlanTurn:
 
         updated = stamp_video_presentation(
             self.project, message, pending,
-            observed_ranges=self.__dict__.pop("_editor_preview_blocks", []),
+            observed_ranges=observed_ranges,
             production_requested=bool(pending and pending.get("fresh_design"))
             and requested_video_production(self.text),
         )
@@ -975,16 +996,40 @@ class PlanTurn:
         self.outcome = (assistant_message, self.settled_pending)
         return None
 
-    def _stamp_turn_metadata(self, message: Message | None, *, completed: bool) -> None:
-        """Stamp finalized steps and lightweight eval_meta onto the settled assistant row."""
+    async def _persist_live_steps(self, steps: list[dict[str, str]]) -> None:
+        """Persist the latest checklist onto the opening row so mid-turn refreshes keep it."""
+        if self.turn_id is None or not steps:
+            return
+        try:
+            from app.models.database import AsyncSessionLocal
+
+            async with AsyncSessionLocal() as steps_db:
+                opening = await steps_db.get(Message, self.turn_id)
+                if opening is not None:
+                    opening_intent = dict(opening.intent or {})
+                    opening_intent["steps"] = steps
+                    opening.intent = opening_intent
+                    await steps_db.commit()
+        except Exception:
+            logger.warning("plan_turn_persist_live_steps_failed", turn_id=str(self.turn_id), exc_info=True)
+
+    async def _stamp_turn_metadata(self, message: Message | None, *, completed: bool) -> None:
+        """Stamp finalized steps, turn_prose boundary, and eval_meta onto the settled assistant row."""
         if message is None or message.role != "assistant":
             return
         from app.chat.activity import finalize_steps
 
         intent = dict(message.intent or {})
+        if (
+            (message.content or "").strip()
+            and intent.get("type") != "interim_prose"
+            and message.question is None
+        ):
+            intent["turn_prose"] = True
         final_steps = finalize_steps(self._latest_steps, completed=completed)
         if final_steps:
             intent["steps"] = final_steps
+            await self._persist_live_steps(final_steps)
         eval_meta = dict(self._last_eval_meta)
         base_ref = getattr(self, "_video_base_ref", None) or {}
         pending_pres = self._video_presentation_pending or {}
@@ -1010,6 +1055,9 @@ class PlanTurn:
             )
         if eval_meta:
             intent["eval_meta"] = eval_meta
+        run_id = getattr(self, "run_id", None)
+        if run_id:
+            intent["run_id"] = run_id
         if intent != (message.intent or {}):
             message.intent = intent
 
@@ -1027,7 +1075,7 @@ class PlanTurn:
             # presentation — the TERMINAL row IS the presentation message;
             # stamp its provenance now that the row persisted.
             await self._stamp_presentation(self.outcome[0])
-            self._stamp_turn_metadata(self.outcome[0], completed=normal_completion)
+            await self._stamp_turn_metadata(self.outcome[0], completed=normal_completion)
             return self.outcome
         # The degrade paths land their own message — resolve any still-armed
         # queue FIRST so its frames precede the envelope: a clean bare reply
@@ -1058,7 +1106,7 @@ class PlanTurn:
             if partial:
                 message = await _create_message(self.db, self.conversation_id, "assistant", partial, turn_id=self.turn_id)
                 await self._stamp_video_presentation(message)
-                self._stamp_turn_metadata(message, completed=False)
+                await self._stamp_turn_metadata(message, completed=False)
                 return message, self.settled_pending
         if result.no_progress_tool is not None:
             video_read = self._video_presentation_pending
@@ -1077,7 +1125,7 @@ class PlanTurn:
             # A direct video save is real even when its later correction stops.
             # Present those saved facts and attach the normal review receipt.
             await self._stamp_video_presentation(assistant_message)
-            self._stamp_turn_metadata(assistant_message, completed=False)
+            await self._stamp_turn_metadata(assistant_message, completed=False)
             return assistant_message, self.settled_pending
         if result.ended_by is not None:
             # A deterministic refusal ends the loop without another model
@@ -1099,7 +1147,7 @@ class PlanTurn:
                 "assistant",
                 content,
             )
-            self._stamp_turn_metadata(assistant_message, completed=False)
+            await self._stamp_turn_metadata(assistant_message, completed=False)
             return assistant_message, self.settled_pending
         if not result.exhausted:
             # The bare final reply (no tool called) — the read-tolerant
@@ -1120,7 +1168,7 @@ class PlanTurn:
             # The bare reply IS the presentation when the model closed a
             # design beat without a further call — same association seat.
             await self._stamp_presentation(assistant_message)
-            self._stamp_turn_metadata(assistant_message, completed=True)
+            await self._stamp_turn_metadata(assistant_message, completed=True)
             return assistant_message, self.settled_pending
         # Exhaustion can follow successful reads and failed submissions.
         # A latched begin refusal speaks
@@ -1198,6 +1246,7 @@ async def run_plan_turn(
     on_candidates=None,
     on_row_append=None,
     turn_id: UUID | None = None,
+    run_id: str | None = None,
     group_answer_submitted: bool = False,
     authorized_media: Message | None = None,
     review_pinned_export: bool = False,
@@ -1209,6 +1258,7 @@ async def run_plan_turn(
         on_phase=on_phase, on_activity=on_activity, on_candidates=on_candidates,
         on_row_append=on_row_append, turn_id=turn_id,
     )
+    turn.run_id = run_id
     from app.chat.context import conversation_messages
     from app.chat.prompts import assemble_video_round
     from app.chat.speech_language import conversation_speech_language
@@ -1288,7 +1338,7 @@ async def run_plan_turn(
                 await base_on_loop_event(event)
 
         on_loop_event = on_loop_event_with_retract
-        base_on_interim_prose = _interim_prose_callback(db, turn.conversation_id, on_interim_prose, turn_id)
+        base_on_interim_prose = _interim_prose_callback(db, turn.conversation_id, on_interim_prose, turn_id, run_id=run_id)
 
         async def on_interim_prose_after_flush(text: str) -> None:
             if deferred.armed:
@@ -1297,7 +1347,7 @@ async def run_plan_turn(
 
         interim_prose_hook = on_interim_prose_after_flush
     else:
-        interim_prose_hook = _interim_prose_callback(db, turn.conversation_id, on_interim_prose, turn_id)
+        interim_prose_hook = _interim_prose_callback(db, turn.conversation_id, on_interim_prose, turn_id, run_id=run_id)
     from app.chat.conversation_context import ConversationContext, conversation_context_tool
     from app.chat.turn_tools import video_rejection_stop
     from app.skills.resolution import list_available_skills

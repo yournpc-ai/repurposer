@@ -6,7 +6,10 @@ import { apiFetch } from "@/lib/api"
 import SoundLabPanel from "./SoundLabPanel"
 
 const { cite, start, stop } = vi.hoisted(() => ({ cite: vi.fn((_text: string) => true), start: vi.fn(), stop: vi.fn() }))
-vi.mock("./WorkbenchContext", () => ({ useWorkbench: () => ({ citeText: cite }) }))
+vi.mock("./WorkbenchContext", () => ({
+  useWorkbench: () => ({ citeText: cite }),
+  useOptionalWorkbench: () => ({ citeText: cite }),
+}))
 vi.mock("react-i18next", () => ({ useTranslation: () => ({
   i18n: { language: "en" }, t: (key: string, opts?: { settings: string }) => opts?.settings ?? key,
 }) }))

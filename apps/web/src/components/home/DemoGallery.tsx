@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react"
 import { useTranslation } from "react-i18next"
 
-import { ChevronLeft, ChevronRight, Volume2, VolumeX } from "lucide-react"
+import { ChevronLeft, ChevronRight, Volume2, VolumeX } from "@/components/ui/icons"
 
 import { IconButton } from "@/components/ui/icon-button-clean"
 import { SegmentedControl } from "@/components/ui/segmented-control-clean"

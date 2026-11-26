@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react"
 import { Player, type PlayerRef } from "@remotion/player"
 import { Video } from "@repurposer/video-remotion"
 import type { VideoSpec } from "@repurposer/video-spec"
-import { Pause, Play } from "lucide-react"
+import { Pause, Play } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 
 export default function MotionPresetPlayer({ spec, title }: { spec: VideoSpec; title: string }) {

@@ -11,20 +11,25 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react"
 import {
+  Check,
+  Copy,
   Crop,
   Download,
+  FileText,
   Film,
   Image as ImageIcon,
   MessageSquarePlus,
   Play,
   RefreshCw,
+  SlidersHorizontal,
   Sparkles,
   Video as VideoIcon,
   X,
-} from "lucide-react"
+} from "@/components/ui/icons"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
+import { Streamdown } from "streamdown"
 
 import { MediaRegionSelectionOverlay } from "@/components/results/MediaRegionSelectionOverlay"
 import { Badge } from "@/components/ui/badge-clean"
@@ -34,13 +39,18 @@ import { EmptyState } from "@/components/ui/empty-state-clean"
 import { IconButton } from "@/components/ui/icon-button-clean"
 import { SegmentedControl } from "@/components/ui/segmented-control-clean"
 import { Select } from "@/components/ui/select-clean"
+import { Loading, Skeleton } from "@/components/ui/skeleton-clean"
 import { Spinner } from "@/components/ui/spinner-clean"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { apiFetch } from "@/lib/api"
 import type { MediaRegionSelection } from "@/lib/mediaRegionSelection"
-import { cn } from "@/lib/utils"
+import { cn, formatDuration } from "@/lib/utils"
 import type { WorkbenchAsset, WorkbenchOutput } from "@/lib/workbench"
-import { useWorkbench, type WorkbenchTab } from "./WorkbenchContext"
+import {
+  useWorkbench,
+  type WorkbenchArtifact,
+  type WorkbenchPresetKind,
+} from "./WorkbenchContext"
 
 const LazyWorkbenchDraftPlayer = lazy(() =>
   import("./WorkbenchDraftPlayer").then((m) => ({
@@ -58,16 +68,33 @@ const VisualPresetGalleryPanel = lazy(() => import("./VisualPresetGalleryPanel")
 const SoundLabPanel = lazy(() => import("./SoundLabPanel"))
 
 const WIDTH_STORAGE_KEY = "repurposer-workbench-width"
-const DEFAULT_WIDTH = 460
+const DEFAULT_WIDTH = 480
 const MIN_WIDTH = 360
+const MAX_SCRUB_WINDOW_S = 12
 
-interface StoryboardSceneSummary {
+interface RawStoryboardScene {
   scene_id?: string
+  number?: number
   label?: string
+  intent?: string | null
+  visual_description?: string | null
+  description?: string | null
+  narration?: string | null
   duration_seconds?: number
   start_seconds?: number
   end_seconds?: number
-  description?: string
+  range_seconds?: { start?: number; end?: number }
+}
+
+interface NormalizedScene {
+  id: string
+  number: number
+  title: string
+  summary: string | null
+  narration: string | null
+  startSeconds: number
+  endSeconds: number
+  durationSeconds: number
 }
 
 interface StoryboardResponse {
@@ -81,24 +108,29 @@ interface StoryboardResponse {
   }
   storyboard?: {
     duration_seconds?: number
-    scenes?: StoryboardSceneSummary[]
+    scenes?: RawStoryboardScene[]
   }
-  scenes?: StoryboardSceneSummary[]
+  scenes?: RawStoryboardScene[]
 }
 
-function resolveOutputVideoUrl(output: WorkbenchOutput | undefined): string | null {
+function resolveOutputVideoUrl(
+  output: WorkbenchOutput | undefined,
+): string | null {
   if (!output?.files) return null
   for (const key of ["video", "mp4", "stream", "url", "final"]) {
     const val = output.files[key]
     if (typeof val === "string" && val.trim()) return val
   }
   const firstVideo = Object.values(output.files).find(
-    (v): v is string => typeof v === "string" && /\.(mp4|webm|mov)(\?|$)/i.test(v),
+    (v): v is string =>
+      typeof v === "string" && /\.(mp4|webm|mov)(\?|$)/i.test(v),
   )
   return firstVideo ?? null
 }
 
-function resolveOutputPosterUrl(output: WorkbenchOutput | undefined): string | null {
+function resolveOutputPosterUrl(
+  output: WorkbenchOutput | undefined,
+): string | null {
   if (!output?.files) return null
   for (const key of ["poster", "thumbnail", "cover", "image"]) {
     const val = output.files[key]
@@ -107,18 +139,432 @@ function resolveOutputPosterUrl(output: WorkbenchOutput | undefined): string | n
   return null
 }
 
-function PlayerTabContent() {
+function normalizeScenes(
+  raw: RawStoryboardScene[] | undefined,
+  fallbackScenePrefix: string,
+): NormalizedScene[] {
+  if (!raw || raw.length === 0) return []
+  let cursor = 0
+  return raw.map((scene, idx) => {
+    const start =
+      typeof scene.range_seconds?.start === "number"
+        ? scene.range_seconds.start
+        : typeof scene.start_seconds === "number"
+          ? scene.start_seconds
+          : cursor
+    const rawDuration =
+      typeof scene.range_seconds?.end === "number"
+        ? Math.max(0, scene.range_seconds.end - start)
+        : typeof scene.end_seconds === "number"
+          ? Math.max(0, scene.end_seconds - start)
+          : typeof scene.duration_seconds === "number"
+            ? Math.max(0, scene.duration_seconds)
+            : 0
+    const end =
+      typeof scene.range_seconds?.end === "number"
+        ? scene.range_seconds.end
+        : typeof scene.end_seconds === "number"
+          ? scene.end_seconds
+          : start + rawDuration
+    cursor = Math.max(cursor, end)
+
+    const number = typeof scene.number === "number" ? scene.number : idx + 1
+    const title =
+      scene.label?.trim() ||
+      scene.intent?.trim() ||
+      `${fallbackScenePrefix} ${number}`
+    const summary =
+      scene.visual_description?.trim() ||
+      scene.description?.trim() ||
+      null
+    const narration = scene.narration?.trim() || null
+
+    return {
+      id: scene.scene_id ?? `scene-${number}`,
+      number,
+      title,
+      summary,
+      narration,
+      startSeconds: start,
+      endSeconds: end,
+      durationSeconds: rawDuration > 0 ? rawDuration : Math.max(0, end - start),
+    }
+  })
+}
+
+function formatTimeRange(start: number, end: number): string {
+  return `${formatDuration(Math.max(0, start))}–${formatDuration(Math.max(start, end))}`
+}
+
+function DirectorSceneList({
+  scenes,
+  activeSceneId,
+  onSelectScene,
+  onCiteScene,
+}: {
+  scenes: NormalizedScene[]
+  activeSceneId: string | null
+  onSelectScene?: (scene: NormalizedScene) => void
+  onCiteScene?: (scene: NormalizedScene) => void
+}) {
   const { t } = useTranslation()
-  const {
-    workbench,
-    selectedVersionId,
-    setSelectedVersionId,
-    selectedOutputId,
-    openWorkbench,
-  } = useWorkbench()
+  if (scenes.length === 0) return null
+
+  return (
+    <div className="flex flex-col gap-2 pt-1">
+      <div className="flex items-center justify-between text-[11px] font-medium uppercase tracking-[0.06em] text-muted-foreground">
+        <span>
+          {t("workbench.player.scenesHeading")} ({scenes.length})
+        </span>
+      </div>
+      <div className="flex flex-col gap-1.5">
+        {scenes.map((scene) => {
+          const isActive = activeSceneId === scene.id
+          const secondaryText = scene.summary || scene.narration
+          return (
+            <div
+              key={scene.id}
+              className={cn(
+                "group flex items-start gap-2.5 rounded-lg border px-2.5 py-2 text-xs transition-colors",
+                isActive
+                  ? "border-foreground/25 bg-accent"
+                  : "border-subtle bg-card hover:bg-accent/60",
+              )}
+            >
+              <button
+                type="button"
+                onClick={() => onSelectScene?.(scene)}
+                className="flex min-w-0 flex-1 items-start gap-2.5 text-left focus-visible:outline-2 focus-visible:outline-ring"
+              >
+                <span className="mt-0.5 shrink-0 font-mono text-[10px] tabular-nums text-muted-foreground">
+                  {String(scene.number).padStart(2, "0")}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="truncate font-medium text-foreground">
+                      {scene.title}
+                    </span>
+                    {scene.durationSeconds > 0 ? (
+                      <span className="shrink-0 font-mono text-[10px] tabular-nums text-muted-foreground">
+                        {formatTimeRange(scene.startSeconds, scene.endSeconds)}
+                      </span>
+                    ) : null}
+                  </div>
+                  {secondaryText ? (
+                    <p className="mt-0.5 line-clamp-2 text-[11px] leading-relaxed text-muted-foreground">
+                      {secondaryText}
+                    </p>
+                  ) : null}
+                </div>
+              </button>
+              {onCiteScene ? (
+                <IconButton
+                  size="sm"
+                  variant="ghost"
+                  icon={<MessageSquarePlus className="size-3.5" />}
+                  label={t("workbench.player.citeScene")}
+                  onClick={() => onCiteScene(scene)}
+                  className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-has-[:focus-visible]:opacity-100 max-md:opacity-100"
+                />
+              ) : null}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function OutputArtifactView({
+  outputId,
+  initialSelectRegion = false,
+}: {
+  outputId: string
+  initialSelectRegion?: boolean
+}) {
+  const { t } = useTranslation()
+  const { workbench, openArtifact, citeMention, citeText } = useWorkbench()
+
+  const output = useMemo(
+    () => (workbench?.outputs ?? []).find((o) => o.id === outputId) ?? null,
+    [workbench?.outputs, outputId],
+  )
+  const videoUrl = resolveOutputVideoUrl(output ?? undefined)
+  const posterUrl = resolveOutputPosterUrl(output ?? undefined)
+
+  const matchingComp = useMemo(() => {
+    if (!output?.composition_id) return workbench?.compositions[0] ?? null
+    return (
+      (workbench?.compositions ?? []).find(
+        (c) => c.composition_id === output.composition_id,
+      ) ?? null
+    )
+  }, [workbench?.compositions, output?.composition_id])
+
+  const hasNewerDraft = Boolean(
+    matchingComp?.current_version_id &&
+      output?.composition_version_id &&
+      matchingComp.current_version_id !== output.composition_version_id,
+  )
+
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+  const [selecting, setSelecting] = useState(initialSelectRegion)
+  const [region, setRegion] = useState<MediaRegionSelection | null>(null)
+  const [currentTime, setCurrentTime] = useState(0)
+  const [scenes, setScenes] = useState<NormalizedScene[]>([])
+
+  useEffect(() => {
+    setRegion(null)
+    setSelecting(initialSelectRegion)
+    setCurrentTime(0)
+  }, [outputId, initialSelectRegion])
+
+  useEffect(() => {
+    const versionId = output?.composition_version_id
+    if (!versionId) {
+      setScenes([])
+      return
+    }
+    let cancelled = false
+    void apiFetch(`/api/v1/chat/video/versions/${versionId}/storyboard`, {
+      toast: false,
+    })
+      .then(async (res) => {
+        if (!res.ok) return
+        const data = (await res.json()) as StoryboardResponse
+        if (!cancelled) {
+          setScenes(
+            normalizeScenes(
+              data.storyboard?.scenes ?? data.scenes,
+              t("workbench.player.scenePrefix"),
+            ),
+          )
+        }
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [output?.composition_version_id, t])
+
+  const activeSceneId = useMemo(() => {
+    const hit = scenes.find(
+      (s) => currentTime >= s.startSeconds && currentTime < s.endSeconds,
+    )
+    return hit?.id ?? null
+  }, [scenes, currentTime])
+
+  const label = matchingComp?.name || t("workbench.chip.output")
+
+  const handleToggleRegion = () => {
+    setSelecting((prev) => {
+      const next = !prev
+      if (next && videoRef.current && !videoRef.current.paused) {
+        videoRef.current.pause()
+      }
+      if (!next) setRegion(null)
+      return next
+    })
+  }
+
+  const handleCite = useCallback(
+    (includeRegion: boolean) => {
+      if (!output) return
+      const ok = citeMention({
+        type: "output",
+        id: output.id,
+        label,
+        ...(includeRegion && region ? { region } : {}),
+      })
+      if (ok) {
+        toast.success(t("workbench.inspector.regionCited"))
+        if (includeRegion) {
+          setRegion(null)
+          setSelecting(false)
+        }
+      }
+    },
+    [output, citeMention, label, region, t],
+  )
+
+  const handleCiteScene = useCallback(
+    (scene: NormalizedScene) => {
+      const citation = t("workbench.player.sceneCitation", {
+        number: scene.number,
+        range: formatTimeRange(scene.startSeconds, scene.endSeconds),
+        title: scene.title,
+      })
+      if (citeText(citation)) {
+        toast.success(t("workbench.inspector.regionCited"))
+      }
+    },
+    [citeText, t],
+  )
+
+  if (!output || !videoUrl) {
+    return (
+      <div className="flex flex-1 items-center justify-center p-6">
+        <EmptyState
+          bare
+          icon={<Film className="size-5" />}
+          title={t("workbench.player.noOutputs")}
+          text={t("workbench.player.emptyText")}
+        />
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-1 flex-col gap-3 overflow-y-auto p-4 thin-scroll">
+      {hasNewerDraft && matchingComp?.current_version_id ? (
+        <div className="flex items-center justify-between gap-2 rounded-lg border border-subtle bg-muted px-3 py-2 text-xs">
+          <span className="text-muted-foreground">
+            {t("workbench.player.newerDraftAvailable")}
+          </span>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() =>
+              openArtifact({
+                key: `version:${matchingComp.current_version_id!}`,
+                kind: "version",
+                versionId: matchingComp.current_version_id!,
+                title: matchingComp.name ?? undefined,
+              })
+            }
+          >
+            {t("workbench.player.switchToDraft")}
+          </Button>
+        </div>
+      ) : null}
+
+      {/* Full-length Video Stage with inline Pause-and-Select Region */}
+      <div className="relative overflow-hidden rounded-lg border border-subtle bg-black">
+        <video
+          key={output.id}
+          ref={videoRef}
+          src={videoUrl}
+          poster={posterUrl ?? undefined}
+          controls={!selecting}
+          playsInline
+          onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
+          className="aspect-video w-full object-contain"
+        />
+        <MediaRegionSelectionOverlay
+          mediaRef={videoRef}
+          control={{
+            enabled: selecting,
+            value: region,
+            onChange: setRegion,
+            onReselect: () => setRegion(null),
+            onCancel: () => {
+              setRegion(null)
+              setSelecting(false)
+            },
+            onDone: () => handleCite(true),
+          }}
+        />
+      </div>
+
+      {/* Action Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Button
+            size="sm"
+            variant={selecting ? "primary" : "secondary"}
+            icon={<Crop className="size-3.5" />}
+            onClick={handleToggleRegion}
+          >
+            {t(
+              selecting
+                ? "workbench.inspector.selectingRegion"
+                : "workbench.inspector.selectRegion",
+            )}
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            icon={<MessageSquarePlus className="size-3.5" />}
+            onClick={() => handleCite(Boolean(region))}
+          >
+            {t(
+              region
+                ? "workbench.inspector.citeRegionInChat"
+                : "workbench.inspector.citeInChat",
+            )}
+          </Button>
+          {output.composition_version_id ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              icon={<FileText className="size-3.5" />}
+              onClick={() =>
+                openArtifact({
+                  key: `storyboard:${output.composition_version_id!}`,
+                  kind: "storyboard",
+                  versionId: output.composition_version_id!,
+                  title: t("workbench.storyboard.tabTitle", { name: label }),
+                })
+              }
+            >
+              {t("workbench.storyboard.openAction")}
+            </Button>
+          ) : null}
+        </div>
+        <a
+          href={videoUrl}
+          download
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex"
+        >
+          <Button
+            size="sm"
+            variant="secondary"
+            icon={<Download className="size-3.5" />}
+          >
+            {t("workbench.player.download")}
+          </Button>
+        </a>
+      </div>
+
+      {selecting ? (
+        <p className="text-[11px] text-muted-foreground">
+          {t("workbench.inspector.dragRegionHint")}
+        </p>
+      ) : null}
+
+      <DirectorSceneList
+        scenes={scenes}
+        activeSceneId={activeSceneId}
+        onSelectScene={(scene) => {
+          if (videoRef.current) {
+            videoRef.current.currentTime = scene.startSeconds
+            setCurrentTime(scene.startSeconds)
+          }
+        }}
+        onCiteScene={handleCiteScene}
+      />
+    </div>
+  )
+}
+
+function VersionArtifactView({
+  versionId,
+  initialStartSeconds,
+  initialEndSeconds,
+}: {
+  versionId: string
+  initialStartSeconds?: number
+  initialEndSeconds?: number
+}) {
+  const { t } = useTranslation()
+  const { workbench, setSelectedVersionId, openArtifact, citeText } =
+    useWorkbench()
 
   const allVersions = useMemo(() => {
     const list: {
+      compositionId: string
       compositionName: string
       version_id: string
       version: number
@@ -129,6 +575,7 @@ function PlayerTabContent() {
     for (const comp of workbench?.compositions ?? []) {
       for (const ver of comp.versions) {
         list.push({
+          compositionId: comp.composition_id,
           compositionName: comp.name || t("workbench.tabs.player"),
           ...ver,
         })
@@ -137,37 +584,66 @@ function PlayerTabContent() {
     return list
   }, [workbench?.compositions, t])
 
-  const videoOutputs = useMemo(
-    () => (workbench?.outputs ?? []).filter((o) => Boolean(resolveOutputVideoUrl(o))),
-    [workbench?.outputs],
+  const activeVersion =
+    allVersions.find((v) => v.version_id === versionId) ??
+    allVersions[0] ??
+    null
+
+  const matchingOutput = useMemo(() => {
+    const outputs = (workbench?.outputs ?? []).filter((o) =>
+      Boolean(resolveOutputVideoUrl(o)),
+    )
+    if (!activeVersion) return outputs[0] ?? null
+    return (
+      outputs.find(
+        (o) => o.composition_version_id === activeVersion.version_id,
+      ) ??
+      outputs.find((o) => o.composition_id === activeVersion.compositionId) ??
+      null
+    )
+  }, [workbench?.outputs, activeVersion])
+
+  const totalDuration = Math.max(
+    1,
+    Number(activeVersion?.duration_seconds) || MAX_SCRUB_WINDOW_S,
   )
 
-  const [mode, setMode] = useState<"draft" | "output">(() =>
-    allVersions.length > 0 ? "draft" : videoOutputs.length > 0 ? "output" : "draft",
+  const [windowRange, setWindowRange] = useState<{ start: number; end: number }>(
+    () => {
+      const start = Math.max(0, initialStartSeconds ?? 0)
+      const requestedEnd =
+        initialEndSeconds ?? Math.min(totalDuration, start + MAX_SCRUB_WINDOW_S)
+      const end = Math.min(
+        totalDuration,
+        Math.max(start + 1, Math.min(start + MAX_SCRUB_WINDOW_S, requestedEnd)),
+      )
+      return { start, end }
+    },
   )
 
   useEffect(() => {
-    if (selectedOutputId && !selectedVersionId && videoOutputs.some((o) => o.id === selectedOutputId)) {
-      setMode("output")
-    } else if (selectedVersionId && allVersions.some((v) => v.version_id === selectedVersionId)) {
-      setMode("draft")
-    } else if (allVersions.length === 0 && videoOutputs.length > 0) {
-      setMode("output")
-    }
-  }, [selectedOutputId, selectedVersionId, allVersions, videoOutputs])
-
-  const activeVersion =
-    allVersions.find((v) => v.version_id === selectedVersionId) ?? allVersions[0] ?? null
-  const activeOutput =
-    videoOutputs.find((o) => o.id === selectedOutputId) ?? videoOutputs[0] ?? null
+    const start = Math.max(0, initialStartSeconds ?? 0)
+    const requestedEnd =
+      initialEndSeconds ?? Math.min(totalDuration, start + MAX_SCRUB_WINDOW_S)
+    const end = Math.min(
+      totalDuration,
+      Math.max(start + 1, Math.min(start + MAX_SCRUB_WINDOW_S, requestedEnd)),
+    )
+    setWindowRange({ start, end })
+  }, [versionId, initialStartSeconds, initialEndSeconds, totalDuration])
 
   const [storyboard, setStoryboard] = useState<StoryboardResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [reloadNonce, setReloadNonce] = useState(0)
+  const [seekRequest, setSeekRequest] = useState<{
+    localSeconds: number
+    nonce: number
+  } | null>(null)
+  const [playheadSeconds, setPlayheadSeconds] = useState(0)
 
   useEffect(() => {
-    if (mode !== "draft" || !activeVersion) {
+    if (!activeVersion) {
       setStoryboard(null)
       setError(null)
       return
@@ -175,9 +651,12 @@ function PlayerTabContent() {
     let cancelled = false
     setLoading(true)
     setError(null)
-    const rangeEnd = Math.min(12, Math.max(1, Number(activeVersion.duration_seconds) || 12))
     const scrubParam = encodeURIComponent(
-      JSON.stringify({ kind: "range", start_seconds: 0, end_seconds: rangeEnd }),
+      JSON.stringify({
+        kind: "range",
+        start_seconds: windowRange.start,
+        end_seconds: windowRange.end,
+      }),
     )
     const load = async () => {
       try {
@@ -195,11 +674,14 @@ function PlayerTabContent() {
         const data = (await res.json()) as StoryboardResponse
         if (!cancelled) {
           setStoryboard(data)
+          setPlayheadSeconds(windowRange.start)
           setLoading(false)
         }
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : t("workbench.player.loadError"))
+          setError(
+            err instanceof Error ? err.message : t("workbench.player.loadError"),
+          )
           setLoading(false)
         }
       }
@@ -208,9 +690,65 @@ function PlayerTabContent() {
     return () => {
       cancelled = true
     }
-  }, [mode, activeVersion, reloadNonce, t])
+  }, [activeVersion, windowRange.start, windowRange.end, reloadNonce, t])
 
-  if (allVersions.length === 0 && videoOutputs.length === 0) {
+  const scenes = useMemo(
+    () =>
+      normalizeScenes(
+        storyboard?.storyboard?.scenes ?? storyboard?.scenes,
+        t("workbench.player.scenePrefix"),
+      ),
+    [storyboard, t],
+  )
+
+  const activeSceneId = useMemo(() => {
+    const hit = scenes.find(
+      (s) => playheadSeconds >= s.startSeconds && playheadSeconds < s.endSeconds,
+    )
+    return hit?.id ?? null
+  }, [scenes, playheadSeconds])
+
+  const handleSelectScene = useCallback(
+    (scene: NormalizedScene) => {
+      if (
+        scene.startSeconds >= windowRange.start &&
+        scene.startSeconds < windowRange.end
+      ) {
+        setSeekRequest((prev) => ({
+          localSeconds: scene.startSeconds - windowRange.start,
+          nonce: (prev?.nonce ?? 0) + 1,
+        }))
+        setPlayheadSeconds(scene.startSeconds)
+        return
+      }
+      const nextStart = Math.max(0, scene.startSeconds)
+      const nextEnd = Math.min(
+        totalDuration,
+        Math.max(
+          nextStart + 1,
+          Math.min(nextStart + MAX_SCRUB_WINDOW_S, Math.max(scene.endSeconds, nextStart + 6)),
+        ),
+      )
+      setWindowRange({ start: nextStart, end: nextEnd })
+    },
+    [windowRange.start, windowRange.end, totalDuration],
+  )
+
+  const handleCiteScene = useCallback(
+    (scene: NormalizedScene) => {
+      const citation = t("workbench.player.sceneCitation", {
+        number: scene.number,
+        range: formatTimeRange(scene.startSeconds, scene.endSeconds),
+        title: scene.title,
+      })
+      if (citeText(citation)) {
+        toast.success(t("workbench.inspector.regionCited"))
+      }
+    },
+    [citeText, t],
+  )
+
+  if (!activeVersion) {
     return (
       <div className="flex flex-1 items-center justify-center p-6">
         <EmptyState
@@ -223,43 +761,36 @@ function PlayerTabContent() {
     )
   }
 
-  const scenes = storyboard?.storyboard?.scenes ?? storyboard?.scenes ?? []
   const previewSpec =
     storyboard?.video_preview?.status === "ready"
       ? storyboard.video_preview.video_spec
       : null
-  const outputVideoUrl = resolveOutputVideoUrl(activeOutput ?? undefined)
+  const isPartialWindow = totalDuration > MAX_SCRUB_WINDOW_S + 0.1
+  const exactOutputMatches =
+    matchingOutput?.composition_version_id === activeVersion.version_id
 
   return (
     <div className="flex flex-1 flex-col gap-3 overflow-y-auto p-4 thin-scroll">
-      {/* Mode switcher (Draft vs Rendered MP4) + Version selector */}
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        {allVersions.length > 0 && videoOutputs.length > 0 ? (
-          <SegmentedControl<"draft" | "output">
-            variant="tray"
-            size="sm"
-            value={mode}
-            onChange={(next) => {
-              if (next === "output" && activeOutput) {
-                openWorkbench({ tab: "player", outputId: activeOutput.id })
-              } else if (activeVersion) {
-                setSelectedVersionId(activeVersion.version_id)
-              }
-              setMode(next)
-            }}
-            options={[
-              { value: "draft", label: t("workbench.player.draftMode") },
-              { value: "output", label: t("workbench.player.outputMode") },
-            ]}
-          />
-        ) : null}
-
-        {mode === "draft" && allVersions.length > 0 ? (
-          <div className="flex min-w-[170px] flex-1 items-center justify-end gap-2">
+      {/* Quiet Version Metadata & Switcher */}
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="truncate font-medium text-foreground">
+            {activeVersion.compositionName}
+          </span>
+          {activeVersion.style_preset ? (
+            <Badge tone="neutral" size="sm">
+              {t(`skills.picker.styles.${activeVersion.style_preset}`, {
+                defaultValue: activeVersion.style_preset,
+              })}
+            </Badge>
+          ) : null}
+        </div>
+        <div className="flex items-center gap-1.5">
+          {allVersions.length > 1 ? (
             <Select
               size="sm"
               aria-label={t("workbench.player.versionLabel")}
-              value={activeVersion?.version_id ?? null}
+              value={activeVersion.version_id}
               onChange={(val) => setSelectedVersionId(val)}
               options={allVersions.map((v) => ({
                 value: v.version_id,
@@ -267,201 +798,341 @@ function PlayerTabContent() {
                   version: v.version,
                   duration: Math.round(v.duration_seconds * 10) / 10,
                 }),
-                description: v.style_preset
-                  ? t(`skills.picker.styles.${v.style_preset}`, { defaultValue: v.style_preset })
+                description: v.is_head
+                  ? t("workbench.player.latestBadge")
                   : undefined,
               }))}
             />
-          </div>
-        ) : null}
-
-        {mode === "output" && videoOutputs.length > 1 ? (
-          <div className="flex min-w-[170px] flex-1 items-center justify-end gap-2">
-            <Select
-              size="sm"
-              aria-label={t("workbench.player.outputMode")}
-              value={activeOutput?.id ?? null}
-              onChange={(outputId) => openWorkbench({ tab: "player", outputId })}
-              options={videoOutputs.map((o, idx) => ({
-                value: o.id,
-                label: `${t("workbench.chip.output")} #${videoOutputs.length - idx}`,
-              }))}
-            />
-          </div>
-        ) : null}
+          ) : (
+            <span className="tabular-nums">
+              {`v${activeVersion.version} · ${Math.round(activeVersion.duration_seconds * 10) / 10}s`}
+            </span>
+          )}
+        </div>
       </div>
 
-      {/* Main Stage */}
-      {mode === "output" ? (
-        outputVideoUrl ? (
-          <div className="flex flex-col gap-3">
-            <div className="overflow-hidden rounded-lg border border-border bg-black">
-              <video
-                key={activeOutput?.id}
-                src={outputVideoUrl}
-                poster={resolveOutputPosterUrl(activeOutput ?? undefined) ?? undefined}
-                controls
-                playsInline
-                className="aspect-video w-full object-contain"
-              />
-            </div>
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Badge tone="success" size="sm">
-                  MP4
-                </Badge>
-                {activeOutput?.created_at ? (
-                  <span>{new Date(activeOutput.created_at).toLocaleString()}</span>
-                ) : null}
-              </div>
-              <a
-                href={outputVideoUrl}
-                download
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex"
-              >
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  icon={<Download className="size-3.5" />}
-                >
-                  {t("workbench.player.download")}
-                </Button>
-              </a>
-            </div>
-          </div>
-        ) : (
-          <p className="py-8 text-center text-xs text-muted-foreground">
-            {t("workbench.player.noOutputs")}
-          </p>
-        )
+      {/* Main Live Draft Stage */}
+      {loading ? (
+        <Loading label={t("common.loading")} className="aspect-video w-full">
+          <Skeleton width="100%" height="100%" radius={10} />
+        </Loading>
+      ) : error ? (
+        <div className="flex aspect-video w-full flex-col items-center justify-center gap-3 rounded-lg border border-subtle bg-muted p-4 text-center">
+          <p className="text-xs text-muted-foreground">{error}</p>
+          <Button
+            size="sm"
+            variant="secondary"
+            icon={<RefreshCw className="size-3.5" />}
+            onClick={() => setReloadNonce((n) => n + 1)}
+          >
+            {t("workbench.player.retry")}
+          </Button>
+        </div>
+      ) : previewSpec ? (
+        <Suspense
+          fallback={
+            <Loading label={t("common.loading")} className="aspect-video w-full">
+              <Skeleton width="100%" height="100%" radius={10} />
+            </Loading>
+          }
+        >
+          <LazyWorkbenchDraftPlayer
+            rawSpec={previewSpec}
+            windowStartSeconds={windowRange.start}
+            seekRequest={seekRequest}
+            onTimeSecondsChange={setPlayheadSeconds}
+          />
+        </Suspense>
       ) : (
-        <div className="flex flex-col gap-3">
-          {/* Draft header metadata */}
-          {activeVersion ? (
-            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <span className="font-medium text-foreground">
-                {activeVersion.compositionName}
-              </span>
-              <Badge tone="info" size="sm">
-                {`v${activeVersion.version}`}
-              </Badge>
-              {activeVersion.is_head ? (
-                <Badge tone="success" size="sm">
-                  {t("workbench.player.latestBadge")}
-                </Badge>
-              ) : null}
-              {activeVersion.style_preset ? (
-                <Badge tone="neutral" size="sm">
-                  {t(`skills.picker.styles.${activeVersion.style_preset}`, {
-                    defaultValue: activeVersion.style_preset,
-                  })}
-                </Badge>
-              ) : null}
-              <span className="ml-auto tabular-nums">
-                {`${Math.round(activeVersion.duration_seconds * 10) / 10}s`}
-              </span>
-            </div>
-          ) : null}
-
-          {loading ? (
-            <div className="flex aspect-video w-full items-center justify-center gap-2 rounded-lg border border-border bg-muted/40 text-xs text-muted-foreground">
-              <Spinner size={16} />
-              <span>{t("common.loading")}</span>
-            </div>
-          ) : error ? (
-            <div className="flex aspect-video w-full flex-col items-center justify-center gap-3 rounded-lg border border-border bg-muted/30 p-4 text-center">
-              <p className="text-xs text-muted-foreground">{error}</p>
-              <Button
-                size="sm"
-                variant="secondary"
-                icon={<RefreshCw className="size-3.5" />}
-                onClick={() => setReloadNonce((n) => n + 1)}
-              >
-                {t("workbench.player.retry")}
-              </Button>
-            </div>
-          ) : previewSpec ? (
-            <Suspense
-              fallback={
-                <div className="flex aspect-video w-full items-center justify-center gap-2 rounded-lg border border-border bg-muted/40 text-xs text-muted-foreground">
-                  <Spinner size={16} />
-                  <span>{t("common.loading")}</span>
-                </div>
-              }
-            >
-              <LazyWorkbenchDraftPlayer rawSpec={previewSpec} />
-            </Suspense>
-          ) : (
-            <div className="flex aspect-video w-full flex-col items-center justify-center gap-2 rounded-lg border border-border bg-muted/30 p-4 text-center text-xs text-muted-foreground">
-              <Play className="size-5 opacity-60" />
-              <span>{activeVersion ? `${activeVersion.compositionName} · v${activeVersion.version}` : ""}</span>
-            </div>
-          )}
-
-          {/* Scene breakdown list below player */}
-          {scenes.length > 0 ? (
-            <div className="flex flex-col gap-1.5 pt-1">
-              <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                {t("workbench.player.scenesHeading")} ({scenes.length})
-              </div>
-              <div className="flex flex-col gap-1.5">
-                {scenes.map((scene, idx) => (
-                  <div
-                    key={scene.scene_id ?? idx}
-                    className="flex items-start justify-between gap-2 rounded-lg border border-border/70 bg-muted/20 px-2.5 py-2 text-xs"
-                  >
-                    <div className="min-w-0">
-                      <div className="truncate font-medium text-foreground">
-                        {scene.label || `Scene ${idx + 1}`}
-                      </div>
-                      {scene.description ? (
-                        <p className="mt-0.5 line-clamp-2 text-[11px] text-muted-foreground">
-                          {scene.description}
-                        </p>
-                      ) : null}
-                    </div>
-                    {typeof scene.duration_seconds === "number" ? (
-                      <span className="shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground">
-                        {`${Math.round(scene.duration_seconds * 10) / 10}s`}
-                      </span>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
+        <div className="flex aspect-video w-full flex-col items-center justify-center gap-2 rounded-lg border border-subtle bg-muted p-4 text-center text-xs text-muted-foreground">
+          <Play className="size-5 opacity-60" />
+          <span>{`${activeVersion.compositionName} · v${activeVersion.version}`}</span>
         </div>
       )}
+
+      {/* Window Hint + Quick Actions */}
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+        {isPartialWindow ? (
+          <span className="font-mono text-[11px] text-muted-foreground">
+            {t("workbench.player.previewWindowHint", {
+              range: formatTimeRange(windowRange.start, windowRange.end),
+              total: formatDuration(totalDuration),
+            })}
+          </span>
+        ) : (
+          <span />
+        )}
+        <div className="flex items-center gap-1.5">
+          {matchingOutput ? (
+            <Button
+              size="sm"
+              variant={exactOutputMatches ? "primary" : "secondary"}
+              icon={<Play className="size-3.5" />}
+              onClick={() =>
+                openArtifact({
+                  key: `output:${matchingOutput.id}`,
+                  kind: "output",
+                  outputId: matchingOutput.id,
+                  title: activeVersion.compositionName,
+                })
+              }
+            >
+              {t("workbench.player.watchFullMp4")}
+            </Button>
+          ) : null}
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={<FileText className="size-3.5" />}
+            onClick={() =>
+              openArtifact({
+                key: `storyboard:${activeVersion.version_id}`,
+                kind: "storyboard",
+                versionId: activeVersion.version_id,
+                title: t("workbench.storyboard.tabTitle", {
+                  name: activeVersion.compositionName,
+                }),
+              })
+            }
+          >
+            {t("workbench.storyboard.openAction")}
+          </Button>
+        </div>
+      </div>
+
+      <DirectorSceneList
+        scenes={scenes}
+        activeSceneId={activeSceneId}
+        onSelectScene={handleSelectScene}
+        onCiteScene={handleCiteScene}
+      />
     </div>
   )
 }
 
-type InspectorItem =
-  | { kind: "asset"; id: string; label: string; url: string; mediaType: "image" | "video"; asset: WorkbenchAsset }
-  | { kind: "output"; id: string; label: string; url: string; poster?: string | null; mediaType: "video"; output: WorkbenchOutput }
-
-function InspectorTabContent() {
+function StoryboardMarkdownView({ versionId }: { versionId: string }) {
   const { t } = useTranslation()
-  const {
-    workbench,
-    selectedAssetId,
-    setSelectedAssetId,
-    selectedOutputId,
-    setSelectedOutputId,
-    citeMention,
-  } = useWorkbench()
+  const { workbench, openArtifact } = useWorkbench()
+  const [data, setData] = useState<StoryboardResponse | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [copied, setCopied] = useState(false)
 
-  const items = useMemo<InspectorItem[]>(() => {
-    const out: InspectorItem[] = []
+  const versionMeta = useMemo(() => {
+    for (const comp of workbench?.compositions ?? []) {
+      const hit = comp.versions.find((v) => v.version_id === versionId)
+      if (hit) return { compName: comp.name || t("workbench.tabs.player"), ver: hit }
+    }
+    return null
+  }, [workbench?.compositions, versionId, t])
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    void apiFetch(`/api/v1/chat/video/versions/${versionId}/storyboard`, {
+      toast: false,
+    })
+      .then(async (res) => {
+        if (!res.ok) return
+        const payload = (await res.json()) as StoryboardResponse
+        if (!cancelled) {
+          setData(payload)
+          setLoading(false)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [versionId])
+
+  const scenes = useMemo(
+    () =>
+      normalizeScenes(
+        data?.storyboard?.scenes ?? data?.scenes,
+        t("workbench.player.scenePrefix"),
+      ),
+    [data, t],
+  )
+
+  const markdown = useMemo(() => {
+    const title = versionMeta?.compName || t("workbench.storyboard.defaultTitle")
+    const versionNum = data?.version ?? versionMeta?.ver.version
+    const dur =
+      data?.storyboard?.duration_seconds ??
+      versionMeta?.ver.duration_seconds ??
+      scenes.reduce((acc, s) => Math.max(acc, s.endSeconds), 0)
+    const lines: string[] = [
+      `# ${title}${versionNum != null ? ` (v${versionNum})` : ""}`,
+      "",
+      `- **${t("workbench.storyboard.durationLabel")}**: ${Math.round(dur * 10) / 10}s`,
+      `- **${t("workbench.player.scenesHeading")}**: ${scenes.length}`,
+      "",
+    ]
+    for (const scene of scenes) {
+      lines.push(
+        `### ${String(scene.number).padStart(2, "0")} · ${scene.title} \`${formatTimeRange(scene.startSeconds, scene.endSeconds)}\``,
+      )
+      lines.push("")
+      if (scene.summary) {
+        lines.push(scene.summary)
+        lines.push("")
+      }
+      if (scene.narration) {
+        lines.push(`> ${scene.narration}`)
+        lines.push("")
+      }
+    }
+    return lines.join("\n")
+  }, [data, versionMeta, scenes, t])
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(markdown)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1800)
+    } catch {
+      // Ignore clipboard permission errors
+    }
+  }
+
+  if (loading) {
+    return (
+      <Loading label={t("common.loading")} className="flex flex-1 flex-col overflow-hidden">
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-subtle px-4 py-2.5">
+          <Skeleton width={96} height={24} radius={6} />
+          <Skeleton width={68} height={24} radius={6} />
+        </div>
+        <div className="flex flex-col gap-5 p-5">
+          <Skeleton width="44%" height={16} radius={6} />
+          <div className="flex flex-col gap-2">
+            <Skeleton line width="96%" height={10} />
+            <Skeleton line width="88%" height={10} />
+            <Skeleton line width="92%" height={10} />
+            <Skeleton line width="62%" height={10} />
+          </div>
+          <Skeleton width="36%" height={14} radius={6} className="mt-2" />
+          <div className="flex flex-col gap-2">
+            <Skeleton line width="94%" height={10} />
+            <Skeleton line width="82%" height={10} />
+            <Skeleton line width="54%" height={10} />
+          </div>
+        </div>
+      </Loading>
+    )
+  }
+
+  return (
+    <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-subtle px-4 py-2">
+        <Button
+          size="sm"
+          variant="ghost"
+          icon={<Play className="size-3.5" />}
+          onClick={() =>
+            openArtifact({
+              key: `version:${versionId}`,
+              kind: "version",
+              versionId,
+              title: versionMeta?.compName,
+            })
+          }
+        >
+          {t("workbench.storyboard.openVideo")}
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          icon={copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+          onClick={handleCopy}
+        >
+          {t(copied ? "common.copied" : "common.copy")}
+        </Button>
+      </div>
+      <div className="flex-1 overflow-y-auto px-5 py-4 thin-scroll">
+        <div className="prose-sm max-w-none text-sm leading-relaxed text-foreground">
+          <Streamdown mode="static">{markdown}</Streamdown>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function MarkdownArtifactView({
+  title,
+  subtitle,
+  content,
+}: {
+  title: string
+  subtitle?: string
+  content: string
+}) {
+  const { t } = useTranslation()
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(content)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1800)
+    } catch {
+      // Ignore clipboard permission errors
+    }
+  }
+
+  return (
+    <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-subtle px-4 py-2.5">
+        <div className="min-w-0">
+          <div className="truncate text-sm font-medium text-foreground">
+            {title}
+          </div>
+          {subtitle ? (
+            <p className="truncate text-xs text-muted-foreground">{subtitle}</p>
+          ) : null}
+        </div>
+        <Button
+          size="sm"
+          variant="ghost"
+          icon={copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+          onClick={handleCopy}
+        >
+          {t(copied ? "common.copied" : "common.copy")}
+        </Button>
+      </div>
+      <div className="flex-1 overflow-y-auto px-5 py-4 thin-scroll">
+        <div className="max-w-none text-sm leading-relaxed text-foreground">
+          <Streamdown mode="static">{content}</Streamdown>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+type VisualAssetItem = {
+  id: string
+  label: string
+  url: string
+  mediaType: "image" | "video"
+  asset: WorkbenchAsset
+}
+
+function AssetArtifactView({ assetId }: { assetId: string }) {
+  const { t } = useTranslation()
+  const { workbench, setSelectedAssetId, citeMention } = useWorkbench()
+
+  const visualAssets = useMemo<VisualAssetItem[]>(() => {
+    const out: VisualAssetItem[] = []
     for (const asset of workbench?.assets ?? []) {
       if (!asset.file_url) continue
       const isVideo = asset.type === "video"
-      const isImage = asset.type === "image" || asset.type === "web_page" || /\.(png|jpe?g|webp|gif)(\?|$)/i.test(asset.file_url)
+      const isImage =
+        asset.type === "image" ||
+        asset.type === "web_page" ||
+        /\.(png|jpe?g|webp|gif)(\?|$)/i.test(asset.file_url)
       if (!isVideo && !isImage) continue
       out.push({
-        kind: "asset",
         id: asset.id,
         label: asset.title || t("workbench.chip.asset"),
         url: asset.file_url,
@@ -469,47 +1140,43 @@ function InspectorTabContent() {
         asset,
       })
     }
-    for (const output of workbench?.outputs ?? []) {
-      const videoUrl = resolveOutputVideoUrl(output)
-      if (!videoUrl) continue
-      out.push({
-        kind: "output",
-        id: output.id,
-        label: `${t("workbench.chip.output")} · ${output.type}`,
-        url: videoUrl,
-        poster: resolveOutputPosterUrl(output),
-        mediaType: "video",
-        output,
-      })
-    }
     return out
-  }, [workbench?.assets, workbench?.outputs, t])
+  }, [workbench?.assets, t])
 
-  const activeItem = useMemo<InspectorItem | null>(() => {
-    if (selectedAssetId) {
-      const hit = items.find((i) => i.kind === "asset" && i.id === selectedAssetId)
-      if (hit) return hit
-    }
-    if (selectedOutputId) {
-      const hit = items.find((i) => i.kind === "output" && i.id === selectedOutputId)
-      if (hit) return hit
-    }
-    return items[0] ?? null
-  }, [items, selectedAssetId, selectedOutputId])
+  const activeItem =
+    visualAssets.find((a) => a.id === assetId) ?? visualAssets[0] ?? null
 
   const mediaRef = useRef<HTMLVideoElement | HTMLImageElement | null>(null)
-  const [selecting, setSelecting] = useState(true)
+  const [selecting, setSelecting] = useState(
+    () => activeItem?.mediaType !== "video",
+  )
   const [region, setRegion] = useState<MediaRegionSelection | null>(null)
 
   useEffect(() => {
     setRegion(null)
-  }, [activeItem?.id, activeItem?.kind])
+    setSelecting(activeItem?.mediaType !== "video")
+  }, [activeItem?.id, activeItem?.mediaType])
+
+  const handleToggleSelect = () => {
+    setSelecting((prev) => {
+      const next = !prev
+      if (
+        next &&
+        mediaRef.current instanceof HTMLVideoElement &&
+        !mediaRef.current.paused
+      ) {
+        mediaRef.current.pause()
+      }
+      if (!next) setRegion(null)
+      return next
+    })
+  }
 
   const handleCite = useCallback(
     (includeRegion: boolean) => {
       if (!activeItem) return
       const ok = citeMention({
-        type: activeItem.kind,
+        type: "asset",
         id: activeItem.id,
         label: activeItem.label,
         ...(includeRegion && region ? { region } : {}),
@@ -522,7 +1189,7 @@ function InspectorTabContent() {
     [activeItem, citeMention, region, t],
   )
 
-  if (items.length === 0 || !activeItem) {
+  if (!activeItem) {
     return (
       <div className="flex flex-1 items-center justify-center p-6">
         <EmptyState
@@ -537,7 +1204,6 @@ function InspectorTabContent() {
 
   return (
     <div className="flex flex-1 flex-col gap-3 overflow-y-auto p-4 thin-scroll">
-      {/* Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0 flex-1">
           <div className="truncate text-xs font-medium text-foreground">
@@ -552,12 +1218,13 @@ function InspectorTabContent() {
             size="sm"
             variant={selecting ? "primary" : "secondary"}
             icon={<Crop className="size-3.5" />}
-            onClick={() => {
-              setSelecting((prev) => !prev)
-              if (selecting) setRegion(null)
-            }}
+            onClick={handleToggleSelect}
           >
-            {t(selecting ? "workbench.inspector.selectingRegion" : "workbench.inspector.selectRegion")}
+            {t(
+              selecting
+                ? "workbench.inspector.selectingRegion"
+                : "workbench.inspector.selectRegion",
+            )}
           </Button>
           <Button
             size="sm"
@@ -565,31 +1232,37 @@ function InspectorTabContent() {
             icon={<MessageSquarePlus className="size-3.5" />}
             onClick={() => handleCite(Boolean(region))}
           >
-            {t(region ? "workbench.inspector.citeRegionInChat" : "workbench.inspector.citeInChat")}
+            {t(
+              region
+                ? "workbench.inspector.citeRegionInChat"
+                : "workbench.inspector.citeInChat",
+            )}
           </Button>
         </div>
       </div>
 
-      {/* Main Inspector Stage with Inline MediaRegionSelectionOverlay */}
-      <div className="relative flex min-h-[240px] w-full flex-1 items-center justify-center overflow-hidden rounded-lg border border-border bg-black/90">
+      <div className="relative flex min-h-[240px] w-full flex-1 items-center justify-center overflow-hidden rounded-lg border border-subtle bg-black/90">
         {activeItem.mediaType === "video" ? (
           <video
             key={activeItem.id}
-            ref={(el) => { mediaRef.current = el }}
+            ref={(el) => {
+              mediaRef.current = el
+            }}
             src={activeItem.url}
-            poster={activeItem.kind === "output" ? activeItem.poster ?? undefined : undefined}
             controls={!selecting}
             playsInline
-            className="max-h-[420px] w-full object-contain"
+            className="max-h-[460px] w-full object-contain"
           />
         ) : (
           <img
             key={activeItem.id}
-            ref={(el) => { mediaRef.current = el }}
+            ref={(el) => {
+              mediaRef.current = el
+            }}
             src={activeItem.url}
             alt={activeItem.label}
             draggable={false}
-            className="max-h-[420px] w-full select-none object-contain"
+            className="max-h-[460px] w-full select-none object-contain"
           />
         )}
         <MediaRegionSelectionOverlay
@@ -608,66 +1281,56 @@ function InspectorTabContent() {
         />
       </div>
 
-      {/* Thumbnail Strip */}
-      <div className="flex gap-2 overflow-x-auto pb-1 thin-scroll">
-        {items.map((item) => {
-          const isSelected = item.kind === activeItem.kind && item.id === activeItem.id
-          return (
-            <button
-              key={`${item.kind}:${item.id}`}
-              type="button"
-              onClick={() => {
-                if (item.kind === "asset") {
-                  setSelectedAssetId(item.id)
-                  setSelectedOutputId(null)
-                } else {
-                  setSelectedOutputId(item.id)
-                  setSelectedAssetId(null)
-                }
-              }}
-              className={cn(
-                "group relative flex w-24 shrink-0 flex-col overflow-hidden rounded-lg border bg-muted/30 text-left transition-colors",
-                isSelected
-                  ? "border-foreground ring-1 ring-foreground/25"
-                  : "border-border/70 hover:border-border",
-              )}
-            >
-              <div className="relative aspect-video w-full overflow-hidden bg-muted">
-                {item.mediaType === "image" ? (
-                  <img
-                    src={item.url}
-                    alt={item.label}
-                    className="h-full w-full object-cover"
-                  />
-                ) : item.kind === "output" && item.poster ? (
-                  <img
-                    src={item.poster}
-                    alt={item.label}
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <span className="flex h-full w-full items-center justify-center text-muted-foreground">
-                    <VideoIcon className="size-4" />
-                  </span>
+      {visualAssets.length > 1 ? (
+        <div className="flex gap-2 overflow-x-auto pb-1 thin-scroll">
+          {visualAssets.map((item) => {
+            const isSelected = item.id === activeItem.id
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setSelectedAssetId(item.id)}
+                className={cn(
+                  "group relative flex w-24 shrink-0 flex-col overflow-hidden rounded-lg border bg-muted text-left transition-colors",
+                  isSelected
+                    ? "border-foreground"
+                    : "border-subtle hover:border-foreground/30",
                 )}
-              </div>
-              <span className="truncate px-1.5 py-1 text-[10px] text-muted-foreground group-hover:text-foreground">
-                {item.label}
-              </span>
-            </button>
-          )
-        })}
-      </div>
+              >
+                <div className="relative aspect-video w-full overflow-hidden bg-muted">
+                  {item.mediaType === "image" ? (
+                    <img
+                      src={item.url}
+                      alt={item.label}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <span className="flex h-full w-full items-center justify-center text-muted-foreground">
+                      <VideoIcon className="size-4" />
+                    </span>
+                  )}
+                </div>
+                <span className="truncate px-1.5 py-1 text-[10px] text-muted-foreground group-hover:text-foreground">
+                  {item.label}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      ) : null}
     </div>
   )
 }
 
-function SlotsTabContent() {
+function SkillArtifactView({ skillVersionId }: { skillVersionId: string }) {
   const { t } = useTranslation()
-  const { workbench, selectedSkillVersionId, setSelectedSkillVersionId } = useWorkbench()
+  const { workbench, openArtifact } = useWorkbench()
   const skills = (workbench?.skills ?? []).filter(
-    (s): s is typeof s & { reference: { kind: "external"; skill_version_id: string } } =>
-      s.reference.kind === "external" && Boolean(s.reference.skill_version_id),
+    (
+      s,
+    ): s is typeof s & {
+      reference: { kind: "external"; skill_version_id: string }
+    } => s.reference.kind === "external" && Boolean(s.reference.skill_version_id),
   )
 
   if (skills.length === 0) {
@@ -684,7 +1347,8 @@ function SlotsTabContent() {
   }
 
   const activeSkill =
-    skills.find((s) => s.reference.skill_version_id === selectedSkillVersionId) ?? skills[0]
+    skills.find((s) => s.reference.skill_version_id === skillVersionId) ??
+    skills[0]
 
   return (
     <div className="flex flex-1 flex-col gap-3 overflow-y-auto p-4 thin-scroll">
@@ -693,7 +1357,13 @@ function SlotsTabContent() {
           size="sm"
           aria-label={t("workbench.slots.skillLabel")}
           value={activeSkill.reference.skill_version_id}
-          onChange={(val) => setSelectedSkillVersionId(val)}
+          onChange={(val) =>
+            openArtifact({
+              key: `skill:${val}`,
+              kind: "skill",
+              skillVersionId: val,
+            })
+          }
           options={skills.map((s) => ({
             value: s.reference.skill_version_id,
             label: s.name,
@@ -716,21 +1386,97 @@ function SlotsTabContent() {
       )}
       <Suspense
         fallback={
-          <div className="flex h-48 items-center justify-center gap-2 text-xs text-muted-foreground">
-            <Spinner size={16} />
-            <span>{t("common.loading")}</span>
-          </div>
+          <Loading label={t("common.loading")} className="flex flex-col gap-3">
+            <div className="aspect-video w-full">
+              <Skeleton width="100%" height="100%" radius={10} />
+            </div>
+            <div className="flex flex-col gap-2 rounded-lg border border-subtle p-3">
+              <Skeleton width="36%" height={10} />
+              <Skeleton line width="88%" height={10} />
+              <Skeleton line width="74%" height={10} />
+              <Skeleton line width="80%" height={10} />
+            </div>
+          </Loading>
         }
       >
         <LazySlotPreviewContent
           skillVersionId={activeSkill.reference.skill_version_id}
-          defaultStylePreset={activeSkill.blueprint_summary?.style_preset ?? undefined}
+          defaultStylePreset={
+            activeSkill.blueprint_summary?.style_preset ?? undefined
+          }
           active
           embedded
         />
       </Suspense>
     </div>
   )
+}
+
+function PresetsArtifactView({
+  initialKind = "block",
+}: {
+  initialKind?: WorkbenchPresetKind
+}) {
+  const { t } = useTranslation()
+  const { openArtifact } = useWorkbench()
+  const [kind, setKind] = useState<WorkbenchPresetKind>(initialKind)
+
+  useEffect(() => {
+    setKind(initialKind)
+  }, [initialKind])
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="shrink-0 border-b border-subtle px-3 py-2">
+        <SegmentedControl<WorkbenchPresetKind>
+          size="sm"
+          variant="underline"
+          aria-label={t("workbench.tabs.presets")}
+          value={kind}
+          onChange={(next) => {
+            setKind(next)
+            openArtifact({ key: "presets", kind: "presets", presetTab: next })
+          }}
+          options={[
+            { value: "block", label: t("visualGallery.blocks") },
+            { value: "text_preset", label: t("visualGallery.text") },
+            { value: "sounds", label: t("visualGallery.sounds") },
+          ]}
+        />
+      </div>
+      <Suspense
+        fallback={
+          <div className="flex flex-1 items-center justify-center p-6">
+            <Spinner size={16} />
+          </div>
+        }
+      >
+        {kind === "sounds" ? (
+          <SoundLabPanel />
+        ) : (
+          <VisualPresetGalleryPanel key={kind} kind={kind} />
+        )}
+      </Suspense>
+    </div>
+  )
+}
+
+function artifactTabIcon(artifact: WorkbenchArtifact) {
+  switch (artifact.kind) {
+    case "output":
+      return <Play className="size-3.5 shrink-0" />
+    case "version":
+      return <Film className="size-3.5 shrink-0" />
+    case "storyboard":
+    case "markdown":
+      return <FileText className="size-3.5 shrink-0" />
+    case "asset":
+      return <ImageIcon className="size-3.5 shrink-0" />
+    case "skill":
+      return <Sparkles className="size-3.5 shrink-0" />
+    case "presets":
+      return <SlidersHorizontal className="size-3.5 shrink-0" />
+  }
 }
 
 export function WorkbenchPane({
@@ -741,8 +1487,16 @@ export function WorkbenchPane({
   const { t } = useTranslation()
   const mobile = useIsMobile()
   const prefersReducedMotion = useReducedMotion()
-  const { isOpen, closeWorkbench, activeTab, setActiveTab, workbench } = useWorkbench()
-  const [visualKind, setVisualKind] = useState<"block" | "text_preset">("block")
+  const {
+    isOpen,
+    closeWorkbench,
+    openArtifacts,
+    activeArtifact,
+    openArtifact,
+    closeArtifact,
+    activateArtifact,
+    workbench,
+  } = useWorkbench()
   const [width, setWidth] = useState(DEFAULT_WIDTH)
   const [resizing, setResizing] = useState(false)
 
@@ -762,7 +1516,8 @@ export function WorkbenchPane({
 
   const clampWidth = useCallback(
     (next: number) => {
-      const parentWidth = containerRef?.current?.clientWidth ?? window.innerWidth
+      const parentWidth =
+        containerRef?.current?.clientWidth ?? window.innerWidth
       const maxWidth = Math.max(MIN_WIDTH, Math.floor(parentWidth * 0.56))
       return Math.min(maxWidth, Math.max(MIN_WIDTH, Math.round(next)))
     },
@@ -797,75 +1552,290 @@ export function WorkbenchPane({
     window.addEventListener("pointerup", onUp)
   }
 
-  const slotsCount = workbench?.skills.length ?? 0
-  const assetsCount = (workbench?.assets.filter((a) => Boolean(a.file_url)).length ?? 0) + (workbench?.outputs.length ?? 0)
-  const versionsCount = workbench?.compositions.reduce((n, c) => n + c.versions.length, 0) ?? 0
+  const resolveArtifactLabel = useCallback(
+    (artifact: WorkbenchArtifact): string => {
+      if (artifact.title?.trim()) return artifact.title.trim()
+      if (artifact.kind === "output") {
+        const out = workbench?.outputs.find((o) => o.id === artifact.outputId)
+        const comp = workbench?.compositions.find(
+          (c) => c.composition_id === out?.composition_id,
+        )
+        return comp?.name || t("workbench.player.outputMode")
+      }
+      if (artifact.kind === "version") {
+        for (const comp of workbench?.compositions ?? []) {
+          const v = comp.versions.find((ver) => ver.version_id === artifact.versionId)
+          if (v) return comp.name ? `${comp.name} · v${v.version}` : `v${v.version}`
+        }
+        return t("workbench.tabs.player")
+      }
+      if (artifact.kind === "storyboard") {
+        return t("workbench.storyboard.defaultTitle")
+      }
+      if (artifact.kind === "asset") {
+        const asset = workbench?.assets.find((a) => a.id === artifact.assetId)
+        return asset?.title || t("workbench.chip.asset")
+      }
+      if (artifact.kind === "skill") {
+        const skill = workbench?.skills.find(
+          (s) =>
+            s.reference.kind === "external" &&
+            s.reference.skill_version_id === artifact.skillVersionId,
+        )
+        return skill?.name || t("workbench.tabs.slots")
+      }
+      if (artifact.kind === "presets") {
+        return t("workbench.tabs.presets")
+      }
+      return artifact.title
+    },
+    [workbench, t],
+  )
+
+  const availableItems = useMemo<
+    { key: string; label: string; meta?: string; icon: React.ReactNode; artifact: WorkbenchArtifact }[]
+  >(() => {
+    const items: {
+      key: string
+      label: string
+      meta?: string
+      icon: React.ReactNode
+      artifact: WorkbenchArtifact
+    }[] = []
+    const playableOutputs = (workbench?.outputs ?? []).filter((o) =>
+      Boolean(resolveOutputVideoUrl(o)),
+    )
+    for (let i = 0; i < playableOutputs.length; i += 1) {
+      const out = playableOutputs[i]
+      const comp = workbench?.compositions.find(
+        (c) => c.composition_id === out.composition_id,
+      )
+      const label = comp?.name
+        ? playableOutputs.length > 1
+          ? `${comp.name} · MP4 #${playableOutputs.length - i}`
+          : `${comp.name} · MP4`
+        : `${t("workbench.chip.output")} #${playableOutputs.length - i}`
+      items.push({
+        key: `output:${out.id}`,
+        label,
+        meta: "MP4",
+        icon: <Play className="size-3.5 shrink-0 text-muted-foreground" />,
+        artifact: {
+          key: `output:${out.id}`,
+          kind: "output",
+          outputId: out.id,
+          title: label,
+        },
+      })
+    }
+
+    for (const comp of workbench?.compositions ?? []) {
+      const head =
+        comp.versions.find((v) => v.version_id === comp.current_version_id) ??
+        comp.versions[0]
+      if (!head) continue
+      const title = comp.name || t("workbench.tabs.player")
+      items.push({
+        key: `version:${head.version_id}`,
+        label: title,
+        meta: `v${head.version} · ${Math.round(head.duration_seconds * 10) / 10}s`,
+        icon: <Film className="size-3.5 shrink-0 text-muted-foreground" />,
+        artifact: {
+          key: `version:${head.version_id}`,
+          kind: "version",
+          versionId: head.version_id,
+          title,
+        },
+      })
+      items.push({
+        key: `storyboard:${head.version_id}`,
+        label: t("workbench.storyboard.tabTitle", { name: title }),
+        meta: "MD",
+        icon: <FileText className="size-3.5 shrink-0 text-muted-foreground" />,
+        artifact: {
+          key: `storyboard:${head.version_id}`,
+          kind: "storyboard",
+          versionId: head.version_id,
+          title: t("workbench.storyboard.tabTitle", { name: title }),
+        },
+      })
+    }
+
+    const visualAssets = (workbench?.assets ?? []).filter(
+      (a) =>
+        a.file_url &&
+        (a.type === "image" ||
+          a.type === "video" ||
+          a.type === "web_page" ||
+          /\.(png|jpe?g|webp|gif)(\?|$)/i.test(a.file_url)),
+    )
+    for (const asset of visualAssets) {
+      const label = asset.title || t("workbench.chip.asset")
+      items.push({
+        key: `asset:${asset.id}`,
+        label,
+        icon: <ImageIcon className="size-3.5 shrink-0 text-muted-foreground" />,
+        artifact: {
+          key: `asset:${asset.id}`,
+          kind: "asset",
+          assetId: asset.id,
+          title: label,
+        },
+      })
+    }
+
+    for (const skill of workbench?.skills ?? []) {
+      if (skill.reference.kind !== "external" || !skill.reference.skill_version_id) {
+        continue
+      }
+      items.push({
+        key: `skill:${skill.reference.skill_version_id}`,
+        label: skill.name,
+        icon: <Sparkles className="size-3.5 shrink-0 text-muted-foreground" />,
+        artifact: {
+          key: `skill:${skill.reference.skill_version_id}`,
+          kind: "skill",
+          skillVersionId: skill.reference.skill_version_id,
+          title: skill.name,
+        },
+      })
+    }
+
+    return items
+  }, [workbench, t])
 
   const paneContent = (
-    <div className="flex h-full min-h-0 flex-col bg-background">
-      {/* Workbench tabs and close control */}
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2">
-        <SegmentedControl<WorkbenchTab>
-          kind="tabs"
-          variant="tray"
-          size="sm"
-          aria-label={t("workbench.title")}
-          className="min-w-0"
-          value={activeTab === "sounds" ? "presets" : activeTab}
-          onChange={setActiveTab}
-          options={[
-            {
-              value: "player",
-              label: t("workbench.tabs.player"),
-              count: versionsCount > 0 ? versionsCount : undefined,
-            },
-            {
-              value: "inspector",
-              label: t("workbench.tabs.inspector"),
-              count: assetsCount > 0 ? assetsCount : undefined,
-            },
-            {
-              value: "slots",
-              label: t("workbench.tabs.slots"),
-              count: slotsCount > 0 ? slotsCount : undefined,
-            },
-            { value: "presets", label: t("workbench.tabs.presets") },
-          ]}
-        />
-        <IconButton
-          size="sm"
-          variant="ghost"
-          icon={<X className="size-4" />}
-          label={t("workbench.close")}
-          onClick={closeWorkbench}
-        />
-      </div>
-
-      {/* Active Tab Panel */}
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden" role="tabpanel">
-        {activeTab === "player" ? <PlayerTabContent /> : null}
-        {activeTab === "inspector" ? <InspectorTabContent /> : null}
-        {activeTab === "slots" ? <SlotsTabContent /> : null}
-        {(activeTab === "presets" || activeTab === "sounds") && <>
-          <div className="shrink-0 border-b border-subtle px-3 py-2">
-            <SegmentedControl<"block" | "text_preset" | "sounds">
-              size="sm" variant="underline" aria-label={t("workbench.tabs.presets")}
-              value={activeTab === "sounds" ? "sounds" : visualKind}
-              onChange={kind => {
-                if (kind !== "sounds") setVisualKind(kind)
-                setActiveTab(kind === "sounds" ? "sounds" : "presets")
-              }}
-              options={[
-                { value: "block", label: t("visualGallery.blocks") },
-                { value: "text_preset", label: t("visualGallery.text") },
-                { value: "sounds", label: t("visualGallery.sounds") },
-              ]}
-            />
+    <div className="flex h-full min-h-0 flex-col bg-transparent">
+      {/* Only render the tab strip when there is an open artifact — zero dead header bar or + button */}
+      {openArtifacts.length > 0 ? (
+        <div className="flex h-12 shrink-0 items-center border-b border-subtle px-2.5">
+          <div
+            role="tablist"
+            aria-label={t("workbench.title")}
+            className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto no-scrollbar"
+          >
+            {openArtifacts.map((artifact) => {
+              const selected = artifact.key === activeArtifact?.key
+              const label = resolveArtifactLabel(artifact)
+              return (
+                <div
+                  key={artifact.key}
+                  className={cn(
+                    "group flex max-w-[220px] shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors",
+                    selected
+                      ? "bg-card text-foreground shadow-resting"
+                      : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                  )}
+                >
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={selected}
+                    onClick={() => activateArtifact(artifact.key)}
+                    title={label}
+                    className="flex min-w-0 items-center gap-1.5 focus-visible:outline-2 focus-visible:outline-ring"
+                  >
+                    {artifactTabIcon(artifact)}
+                    <span className="truncate">{label}</span>
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={t("workbench.closeTab", { title: label })}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      closeArtifact(artifact.key)
+                    }}
+                    className="ml-0.5 rounded-sm p-0.5 text-muted-foreground opacity-60 transition-opacity hover:bg-accent hover:text-foreground hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-ring"
+                  >
+                    <X className="size-3" />
+                  </button>
+                </div>
+              )
+            })}
           </div>
-          <Suspense fallback={<Spinner />}>
-            {activeTab === "sounds" ? <SoundLabPanel /> : <VisualPresetGalleryPanel key={visualKind} kind={visualKind} />}
-          </Suspense>
-        </>}
+        </div>
+      ) : null}
+
+      {/* Focused Single-Artifact Stage */}
+      <div
+        className="flex min-h-0 flex-1 flex-col overflow-hidden"
+        role="tabpanel"
+      >
+        {!activeArtifact ? (
+          availableItems.length > 0 ? (
+            <div className="flex flex-1 flex-col gap-3 overflow-y-auto p-5 thin-scroll">
+              <div className="text-[11px] font-medium uppercase tracking-[0.06em] text-muted-foreground">
+                {t("workbench.projectFilesHeading")}
+              </div>
+              <div className="flex flex-col gap-1">
+                {availableItems.map((item) => (
+                  <button
+                    key={item.key}
+                    type="button"
+                    onClick={() => openArtifact(item.artifact)}
+                    className="flex h-9 items-center justify-between gap-2.5 rounded-lg border border-subtle bg-card px-3 text-left text-xs text-foreground transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring"
+                  >
+                    <span className="flex min-w-0 items-center gap-2">
+                      {item.icon}
+                      <span className="truncate font-medium">{item.label}</span>
+                    </span>
+                    {item.meta ? (
+                      <span className="shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground">
+                        {item.meta}
+                      </span>
+                    ) : null}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-1 flex-col items-center justify-center p-8">
+              <div className="flex w-full max-w-[300px] flex-col items-center gap-5">
+                {/* Quiet 16:9 cinema monitor frame — signals a waiting screening stage, not a blank error */}
+                <div className="relative flex aspect-video w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-subtle bg-card/40">
+                  <div className="flex items-center gap-1.5 text-[11px] font-mono tracking-wider text-muted-foreground/60">
+                    <span>16:9</span>
+                    <span>·</span>
+                    <span>READY</span>
+                  </div>
+                </div>
+                <div className="space-y-1.5 text-center">
+                  <p className="text-[13px] font-medium text-foreground">
+                    {t("workbench.emptyStageTitle")}
+                  </p>
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    {t("workbench.emptyStageText")}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )
+        ) : activeArtifact.kind === "output" ? (
+          <OutputArtifactView
+            outputId={activeArtifact.outputId}
+            initialSelectRegion={activeArtifact.selectRegion}
+          />
+        ) : activeArtifact.kind === "version" ? (
+          <VersionArtifactView
+            versionId={activeArtifact.versionId}
+            initialStartSeconds={activeArtifact.startSeconds}
+            initialEndSeconds={activeArtifact.endSeconds}
+          />
+        ) : activeArtifact.kind === "storyboard" ? (
+          <StoryboardMarkdownView versionId={activeArtifact.versionId} />
+        ) : activeArtifact.kind === "markdown" ? (
+          <MarkdownArtifactView
+            title={activeArtifact.title}
+            subtitle={activeArtifact.subtitle}
+            content={activeArtifact.content}
+          />
+        ) : activeArtifact.kind === "asset" ? (
+          <AssetArtifactView assetId={activeArtifact.assetId} />
+        ) : activeArtifact.kind === "skill" ? (
+          <SkillArtifactView skillVersionId={activeArtifact.skillVersionId} />
+        ) : (
+          <PresetsArtifactView initialKind={activeArtifact.presetTab} />
+        )}
       </div>
     </div>
   )
@@ -874,8 +1844,14 @@ export function WorkbenchPane({
     return (
       <Dialog
         open={isOpen}
-        onOpenChange={(next) => { if (!next) closeWorkbench() }}
-        title={t("workbench.title")}
+        onOpenChange={(next) => {
+          if (!next) closeWorkbench()
+        }}
+        title={
+          activeArtifact
+            ? resolveArtifactLabel(activeArtifact)
+            : t("workbench.title")
+        }
         closeLabel={t("workbench.close")}
         width={680}
       >
@@ -891,16 +1867,22 @@ export function WorkbenchPane({
           key="studio-workbench-pane"
           data-slot="workbench-pane"
           aria-label={t("workbench.title")}
-          initial={prefersReducedMotion ? { opacity: 1 } : { width: 0, opacity: 0 }}
-          animate={prefersReducedMotion ? { width, opacity: 1 } : { width, opacity: 1 }}
-          exit={prefersReducedMotion ? { opacity: 0 } : { width: 0, opacity: 0 }}
+          initial={
+            prefersReducedMotion ? { opacity: 1 } : { width: 0, opacity: 0 }
+          }
+          animate={
+            prefersReducedMotion ? { width, opacity: 1 } : { width, opacity: 1 }
+          }
+          exit={
+            prefersReducedMotion ? { opacity: 0 } : { width: 0, opacity: 0 }
+          }
           transition={
             resizing || prefersReducedMotion
               ? { duration: 0 }
               : { type: "spring", stiffness: 420, damping: 36 }
           }
           style={{ width }}
-          className="relative flex h-full shrink-0 flex-col overflow-hidden border-l border-border bg-background"
+          className="ui-as-panel relative flex h-full shrink-0 flex-col overflow-hidden bg-[var(--page)]"
         >
           {/* Left-edge drag-resize handle */}
           <div
@@ -913,7 +1895,10 @@ export function WorkbenchPane({
               resizing ? "bg-foreground/20" : "hover:bg-foreground/15",
             )}
           />
-          <div className="flex h-full min-h-0 w-full flex-col" style={{ minWidth: MIN_WIDTH }}>
+          <div
+            className="flex h-full min-h-0 w-full flex-col"
+            style={{ minWidth: MIN_WIDTH }}
+          >
             {paneContent}
           </div>
         </motion.aside>

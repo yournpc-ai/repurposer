@@ -78,7 +78,10 @@ async def test_stop_queued_export_releases_hold_and_fences_delivery(database, mo
                 response = await request
     assert response.status_code == 200
     frames = parse_sse_frames(response.text)
-    assert ("turn.started", {"turn_id": str(receipt.turn_id)}) in frames
+    assert any(
+        event == "turn.started" and payload.get("turn_id") == str(receipt.turn_id)
+        for event, payload in frames
+    )
     assert not any(event in {"turn.failed", "turn.completed"} for event, _ in frames)
     async with database() as db:
         assert (await db.get(ExportJob, job_id)).status == "cancelled"

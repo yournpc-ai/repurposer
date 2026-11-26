@@ -1,4 +1,4 @@
-import { Moon, Sun } from "lucide-react"
+import { Moon, Sun } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 
 import { useTheme } from "@/lib/theme/ThemeProvider"

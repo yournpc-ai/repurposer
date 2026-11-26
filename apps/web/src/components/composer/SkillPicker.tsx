@@ -2,11 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
-import { Clapperboard, Film, Layers } from "lucide-react"
+import { Clapperboard, Film, Layers } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 
 import { Badge } from "@/components/ui/badge-clean"
 import { Card } from "@/components/ui/card-clean"
+import { Loading, Skeleton } from "@/components/ui/skeleton-clean"
 import {
   fetchChatSkills,
   filterSkillOptions,
@@ -216,9 +217,17 @@ export function SkillPicker({
       className="composer-picker thin-scroll z-50 max-h-[360px] overflow-y-auto"
     >
       {status === "loading" ? (
-        <span className="px-2 py-1.5 text-muted-foreground">
-          {t("common.loading")}
-        </span>
+        <Loading label={t("common.loading")} className="flex flex-col gap-2.5 p-2">
+          {[148, 176, 132].map((w, idx) => (
+            <div key={idx} className="flex items-center gap-2.5 px-1">
+              <Skeleton width={28} height={28} radius={6} />
+              <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+                <Skeleton width={w} height={10} />
+                <Skeleton width={Math.round(w * 1.25)} height={8} />
+              </div>
+            </div>
+          ))}
+        </Loading>
       ) : status === "error" ? (
         <span className="px-2 py-1.5 text-muted-foreground">
           {t("common.requestFailed")}

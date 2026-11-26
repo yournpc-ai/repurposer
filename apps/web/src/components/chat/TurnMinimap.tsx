@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next"
 
 import { Badge } from "@/components/ui/badge-clean"
 import { Tooltip } from "@/components/ui/tooltip-clean"
+import { useOptionalWorkbench } from "@/components/workbench/WorkbenchContext"
 import { cn } from "@/lib/utils"
 
 export interface TurnMinimapItem {
@@ -26,26 +27,30 @@ function truncatePreview(text: string, maxChars = 16): string {
 export function TurnMinimap({
   turns,
   viewportRef,
+  hidden = false,
   className,
 }: {
   turns: TurnMinimapItem[]
   viewportRef: RefObject<HTMLDivElement | null>
+  hidden?: boolean
   className?: string
 }) {
   const { t } = useTranslation()
+  const workbench = useOptionalWorkbench()
   const prefersReducedMotion = useReducedMotion()
+  const visible = turns.length > 1 && !hidden && !workbench?.isOpen
   const [activeId, setActiveId] = useState<string | null>(() => turns.at(-1)?.id ?? null)
 
   useEffect(() => {
-    if (turns.length < 3) return
+    if (!visible) return
     setActiveId((prev) =>
       prev && turns.some((turn) => turn.id === prev) ? prev : (turns.at(-1)?.id ?? null),
     )
-  }, [turns])
+  }, [turns, visible])
 
   useEffect(() => {
-    if (turns.length < 3) return
-    const root = viewportRef.current
+    if (!visible) return
+    const root = viewportRef?.current
     if (!root || typeof IntersectionObserver === "undefined") return
     const nodes = Array.from(root.querySelectorAll<HTMLElement>("[data-turn-minimap-id]"))
     if (nodes.length === 0) return
@@ -73,13 +78,13 @@ export function TurnMinimap({
     )
     for (const node of nodes) observer.observe(node)
     return () => observer.disconnect()
-  }, [turns, viewportRef])
+  }, [turns, viewportRef, visible])
 
-  if (turns.length < 3) return null
+  if (!visible) return null
 
   const handleJump = (turnId: string) => {
     setActiveId(turnId)
-    const root = viewportRef.current ?? document
+    const root = viewportRef?.current ?? document
     const escapedId =
       typeof CSS !== "undefined" && typeof CSS.escape === "function"
         ? CSS.escape(turnId)
@@ -103,7 +108,7 @@ export function TurnMinimap({
       animate={{ opacity: 1, x: 0 }}
       transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
       className={cn(
-        "pointer-events-auto absolute left-2 top-1/2 z-10 hidden -translate-y-1/2 flex-col items-center gap-1.5 rounded-full border border-border/70 bg-background/85 px-1 py-2 shadow-xs backdrop-blur-sm md:flex",
+        "pointer-events-auto absolute left-3 top-1/2 z-10 hidden -translate-y-1/2 flex-col items-center gap-1 py-1 md:flex",
         className,
       )}
     >
@@ -134,20 +139,20 @@ export function TurnMinimap({
               aria-label={label}
               aria-current={active ? "true" : undefined}
               onClick={() => handleJump(turn.id)}
-              className="group flex size-4 items-center justify-center rounded-full focus-visible:outline-2 focus-visible:outline-ring"
+              className="group flex size-3.5 items-center justify-center rounded-full focus-visible:outline-2 focus-visible:outline-ring"
             >
               <motion.span
                 animate={
                   prefersReducedMotion
                     ? undefined
-                    : { scale: active ? 1.35 : 1 }
+                    : { scale: active ? 1.15 : 1 }
                 }
                 transition={{ type: "spring", stiffness: 420, damping: 32 }}
                 className={cn(
-                  "block rounded-full transition-colors",
+                  "block size-1.5 rounded-full transition-colors",
                   active
-                    ? "size-2 bg-foreground"
-                    : "size-1.5 bg-muted-foreground/45 group-hover:bg-muted-foreground",
+                    ? "bg-foreground/75"
+                    : "bg-muted-foreground/30 group-hover:bg-muted-foreground/70",
                 )}
               />
             </button>

@@ -2,7 +2,7 @@
 
 import { Link, useRouterState } from "@tanstack/react-router"
 import { useTranslation } from "react-i18next"
-import { FolderKanban } from "lucide-react"
+import { FolderKanban } from "@/components/ui/icons"
 
 import { AccountMenu } from "@/components/app-sidebar"
 import { CreditsPill } from "@/components/credits/CreditsPill"
@@ -15,14 +15,16 @@ export function StudioHeader() {
   const { t } = useTranslation()
   const pathname = useRouterState({ select: (state) => state.location.pathname })
   const onProjects = pathname.startsWith("/projects")
-  const { left, actions } = useStudioHeaderSlot()
+  const onProjectChat = /^\/projects\/[^/]+/.test(pathname)
+  const { left, actions, hideNotifications } = useStudioHeaderSlot()
   const hasRouteSlot = Boolean(left || actions)
+  const showNotifications = !hideNotifications && !onProjectChat
 
   return (
     <header
       data-slot="studio-header"
       className={cn(
-        "sticky top-0 z-30 flex h-12 shrink-0 items-center justify-between gap-2 bg-background/95 px-4 backdrop-blur-sm border-b border-border",
+        "sticky top-0 z-30 flex h-12 shrink-0 items-center justify-between gap-2 bg-background/95 px-4 backdrop-blur-sm border-b border-border/40 md:border-b-0 md:bg-transparent md:backdrop-blur-none",
         !hasRouteSlot && "md:border-b-0 md:bg-transparent md:backdrop-blur-none",
       )}
     >
@@ -33,11 +35,6 @@ export function StudioHeader() {
           className="-ml-2 flex shrink-0 items-center gap-2 rounded-lg px-2 py-1 transition-colors active:bg-accent md:hidden"
         >
           <LogoMark className="h-6 w-6" />
-          {!left && (
-            <span className="font-semibold tracking-tight max-[400px]:hidden">
-              Rookie
-            </span>
-          )}
         </Link>
 
         {left ? (
@@ -51,19 +48,6 @@ export function StudioHeader() {
       </div>
 
       <div className="flex shrink-0 items-center gap-1">
-        {actions ? (
-          <>
-            <div data-slot="studio-header-actions" className="flex items-center gap-1">
-              {actions}
-            </div>
-            <span
-              aria-hidden="true"
-              data-slot="studio-header-divider"
-              className="mx-1 h-3.5 w-px shrink-0 bg-border"
-            />
-          </>
-        ) : null}
-
         <Link
           to="/projects"
           aria-label={t("nav.myProjects")}
@@ -76,7 +60,12 @@ export function StudioHeader() {
           <FolderKanban className="size-4" />
         </Link>
         <CreditsPill refreshKey={pathname} />
-        <NotificationBell chip={false} />
+        {actions ? (
+          <div data-slot="studio-header-actions" className="flex items-center gap-1">
+            {actions}
+          </div>
+        ) : null}
+        {showNotifications ? <NotificationBell chip={false} /> : null}
         <div className="md:hidden">
           <AccountMenu />
         </div>

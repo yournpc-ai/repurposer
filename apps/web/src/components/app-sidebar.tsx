@@ -1,5 +1,5 @@
 import { Link, useMatch } from "@tanstack/react-router"
-import { FolderKanban, Home, PanelLeft, User } from "lucide-react"
+import { Home, Library, PanelLeft, SlidersHorizontal, User } from "@/components/ui/icons"
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -41,8 +41,10 @@ export function AccountMenu({ expanded = false }: { expanded?: boolean }) {
       <Popover
         open={open}
         onClose={() => setOpen(false)}
-        width={user ? 296 : 160}
+        width={user ? 236 : 160}
+        side="top"
         align="start"
+        className="!p-1.5"
         aria-label={name}
         focusOnOpen
       >
@@ -87,7 +89,8 @@ export function AppSidebar({ defaultOpen }: { defaultOpen: boolean }) {
       {(
         [
           { to: "/home", label: t("nav.home"), Icon: Home },
-          { to: "/projects", label: t("nav.myProjects"), Icon: FolderKanban },
+          { to: "/assets", label: t("nav.assets"), Icon: Library },
+          { to: "/presets", label: t("nav.presets"), Icon: SlidersHorizontal },
         ] as const
       ).map(({ to, label, Icon }) => (
         <Link
@@ -114,22 +117,26 @@ export function AppSidebar({ defaultOpen }: { defaultOpen: boolean }) {
         closeLabel={t("common.close")}
       >
         {nav}
-        {activeProjectId ? (
-          <ProjectConversationsTree
-            projectId={activeProjectId}
-            activeConversationId={activeConversationId}
-            onNavigate={() => setMobileOpen(false)}
-          />
-        ) : null}
+        <ProjectConversationsTree
+          projectId={activeProjectId}
+          activeConversationId={activeConversationId}
+          onNavigate={() => setMobileOpen(false)}
+        />
         <AccountMenu expanded />
       </Dialog>
     )
   return (
     <aside className="ui-as-side" data-expanded={expanded}>
       <div className="flex items-center">
-        <div aria-hidden={!expanded} className="ui-as-side__label flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
+        <div
+          aria-hidden={!expanded}
+          className={
+            expanded
+              ? "ui-as-side__label flex min-w-0 flex-1 items-center overflow-hidden pl-2"
+              : "ui-as-side__label flex min-w-0 flex-1 items-center overflow-hidden"
+          }
+        >
           <LogoMark className="size-6" />
-          <span className="text-sm font-medium">Rookie</span>
         </div>
         <IconButton
           className="ui-as-side__toggle"
@@ -140,12 +147,11 @@ export function AppSidebar({ defaultOpen }: { defaultOpen: boolean }) {
         />
       </div>
       {nav}
-      {expanded && activeProjectId ? (
-        <ProjectConversationsTree
-          projectId={activeProjectId}
-          activeConversationId={activeConversationId}
-        />
-      ) : null}
+      <ProjectConversationsTree
+        projectId={activeProjectId}
+        activeConversationId={activeConversationId}
+        collapsed={!expanded}
+      />
       <div className="mt-auto">
         <AccountMenu expanded={expanded} />
       </div>

@@ -25,6 +25,7 @@ import { fetchEventSource } from "@microsoft/fetch-event-source"
 
 import { API_URL, UNAUTHORIZED_EVENT, WALLET_REFRESH_EVENT } from "@/lib/api"
 import { clearAuth, getToken } from "@/lib/auth"
+import { notifyConversationsChanged } from "@/lib/workbench"
 import i18n from "@/lib/i18n"
 import { routeStreamFrame } from "@/lib/chatStreamFrames"
 import { normalizeStreamError } from "@/lib/streamTransport"
@@ -39,7 +40,13 @@ export type {
   ThinkingPayload,
 } from "@/lib/chatStreamFrames"
 export type { ActivityFramePayload } from "@/components/chat/timeline/types"
-import type { ActivityFramePayload, BriefAnswerItem } from "@/components/chat/timeline/types"
+import type {
+  ActivityFramePayload,
+  BriefAnswerItem,
+  FailureCheckpoint,
+  QuestionMessage,
+  StepPlanItem,
+} from "@/components/chat/timeline/types"
 import type { SkillReference } from "@/lib/skills"
 import type {
   ActivityRowFramePayload,
@@ -66,59 +73,29 @@ export interface ChatTurnBody {
 
 export interface StreamChatOptions {
   signal: AbortSignal
-  /** Durable opening user id, emitted before Agent execution begins. */
-  onTurnStarted?: (turnId: string) => void
+  /** Durable opening user id (and segment runId), emitted before Agent execution begins. */
+  onTurnStarted?: (turnId: string, runId?: string | null) => void
+  /** Two-phase commit: emitted immediately after a user decision commits to DB. */
+  onDecisionCommitted?: (payload: {
+    runId: string | null
+    turnId: string | null
+    answeredQuestion: QuestionMessage
+  }) => void
   /** Decoded prose fragment, in order — concatenate to render the preview. */
   onDelta?: (text: string, messageId: string | null) => void
-  /** System Status frame: fires with `{}` as a pure keepalive (reasoning
-   * fragments / non-prose JSON chunks — drive the indicator, never render),
-   * or with `{phase: <label>}` at a REAL macro-state switch (the surviving
-   * labels are the film design span's — capturing / storyboarding /
-   * storyboard_revision) — the client labels its status row from the phase
-   * and leaves it untouched on bare keepalives. Work evidence never rides
-   * this channel (Phase 3 Batch B ③:
-   * the retired drafting/inspecting/repairing labels live on the Activity
-   * channel).
-   * `{phase: null}` is the EXPLICIT phase clear
-   * (I-PFA-06 清除协议, 2026-09-18): every call's name-known moment ends
-   * the previous label — reset to the base label. The
-   * `"phase" in payload` check separates the clear from a bare keepalive. */
   onThinking?: (payload: ThinkingPayload) => void
-  /** A user-facing interim_prose (ADR-109 言语座位通用化): prose riding ANY
-   * non-terminal call — a phase-turn expectation sentence or a grounded
-   * result statement — the FULL text in one frame (quiet iterations stream
-   * nothing; the client paces it out under the typewriter law). Each
-   * interim_prose is its OWN bubble segment: finalize the current segment, type
-   * this into a new one, then the settled reply lands in a fresh segment —
-   * never merged into one message. Persisted server-side in a short
-   * transaction as an intent.type="interim_prose" row BEFORE this frame, so a
-   * failed/stopped turn keeps the visible interim_prose on refresh. `at` is the row's
-   * server-clock created_at (display stamp only — array position carries
-   * the order, ADR-108). */
   onInterimProse?: (
     text: string,
     at: string | undefined,
     turnId: string | null,
     messageId: string,
     seq: number | null,
+    runId?: string | null,
+    displayRole?: "stage_note" | "rail_note",
   ) => void
-  /** One activity frame (ADR-087 §3 Phase 2): append-oriented milestones of
-   * the agent's work — status flips arrive as new frames on the same
-   * activity_id; the server's terminal sweep guarantees zero active
-   * activities at the envelope (T16-B), the client sweeps defensively too. */
   onActivity?: (frame: ActivityFramePayload) => void
-  /** Candidate Surface (Workspace 合同 v4.2 C8-c): one ``assistant.candidates``
-   * event — a candidate set's full member payload at the door's success, or
-   * a selection repaint (the set's FULL current selection — replace, never
-   * union). Live cards roll back if the turn fails (the server persists the
-   * turn's events as ONE candidates_log row on the completed path only). */
   onCandidates?: (event: CandidateEventPayload) => void
-  /** Transcript array mirror (ADR-108 §3): a row's birth — append fixes its
-   * array position (today: activity rows). Rows persist even on a failed
-   * turn (诚实 transcript) — the client NEVER rolls them back. */
   onRowAppend?: (row: RowAppendPayload) => void
-  /** A row's in-place mutation (an open read span settling): same id, new
-   * frame — the array position never moves. */
   onRowUpdate?: (id: string, frame: ActivityRowFramePayload) => void
 }
 
@@ -147,15 +124,11 @@ export interface AnswerTurnBody {
  * asCreditsInsufficient & co. */
 export class StreamTurnError extends Error {
   detail: unknown
-  /** Turn durability (交互完整性批 A): the user message committed server-
-   * side before the turn died — the flow must KEEP the bubble (a refresh
-   * re-renders it from the DB), never roll the user's own words back.
-   * False for pre-persistence rejections (entry caps) and pre-stream HTTP
-   * failures, where the old rollback stays correct. */
   persisted: boolean
-  /** Opening user-turn identity from the failure frame; null on legacy or
-   * pre-prepare failures. Never inferred from the client's current turn. */
   turnId: string | null
+  runId: string | null
+  decisionCommitted: boolean
+  checkpoint?: FailureCheckpoint
 
   constructor(
     detail: unknown,
@@ -163,12 +136,20 @@ export class StreamTurnError extends Error {
     persisted = false,
     turnId: string | null = null,
     readonly messageId?: string,
+    opts?: {
+      runId?: string | null
+      decisionCommitted?: boolean
+      checkpoint?: FailureCheckpoint
+    },
   ) {
     super(typeof detail === "string" && detail ? detail : fallback)
     this.name = "StreamTurnError"
     this.detail = detail
     this.persisted = persisted
     this.turnId = turnId
+    this.runId = opts?.runId ?? null
+    this.decisionCommitted = Boolean(opts?.decisionCommitted)
+    this.checkpoint = opts?.checkpoint
   }
 }
 
@@ -197,6 +178,7 @@ function streamTurn<T>(
   {
     signal,
     onTurnStarted,
+    onDecisionCommitted,
     onDelta,
     onThinking,
     onInterimProse,
@@ -206,7 +188,8 @@ function streamTurn<T>(
     onRowUpdate,
   }: {
     signal?: AbortSignal
-    onTurnStarted?: (turnId: string) => void
+    onTurnStarted?: (turnId: string, runId?: string | null) => void
+    onDecisionCommitted?: StreamChatOptions["onDecisionCommitted"]
     onDelta?: (text: string, messageId: string | null) => void
     onThinking?: (payload: ThinkingPayload) => void
     onInterimProse?: StreamChatOptions["onInterimProse"]
@@ -283,7 +266,14 @@ function streamTurn<T>(
         }
         switch (frame.kind) {
           case "turn_started":
-            onTurnStarted?.(frame.turnId)
+            onTurnStarted?.(frame.turnId, frame.runId ?? null)
+            break
+          case "decision_committed":
+            onDecisionCommitted?.({
+              runId: frame.runId,
+              turnId: frame.turnId,
+              answeredQuestion: frame.answeredQuestion,
+            })
             break
           case "delta":
             onDelta?.(frame.text, frame.messageId)
@@ -292,7 +282,15 @@ function streamTurn<T>(
             onThinking?.(frame.payload)
             break
           case "interim_prose":
-            onInterimProse?.(frame.text, frame.at, frame.turnId, frame.messageId, frame.seq)
+            onInterimProse?.(
+              frame.text,
+              frame.at,
+              frame.turnId,
+              frame.messageId,
+              frame.seq,
+              frame.runId ?? null,
+              frame.displayRole,
+            )
             break
           case "activity":
             onActivity?.(frame.frame)
@@ -306,6 +304,9 @@ function streamTurn<T>(
           case "candidates":
             onCandidates?.(frame.event)
             break
+          case "title_updated":
+            notifyConversationsChanged(frame.projectId)
+            break
           case "completed":
             resolve(frame.envelope as T)
             break
@@ -317,9 +318,15 @@ function streamTurn<T>(
                 frame.persisted,
                 frame.turnId,
                 frame.messageId,
+                {
+                  runId: frame.runId ?? null,
+                  decisionCommitted: frame.decisionCommitted,
+                  checkpoint: frame.checkpoint,
+                },
               ),
             )
             break
+          case "run_synced":
           case "ignored":
             break
         }
@@ -375,15 +382,10 @@ export function streamAnswer<T>(
   messageId: string,
   body: AnswerTurnBody,
   handlers: {
-    /** The caller's dead-stream watchdog aborts through this (the chat
-     * turn's `signal` twin — answer turns share the server's keepalive
-     * guarantee, so silence means a dead pipe, never a slow model). */
     signal?: AbortSignal
+    onDecisionCommitted?: StreamChatOptions["onDecisionCommitted"]
     onDelta?: (text: string, messageId: string | null) => void
     onThinking?: (payload: ThinkingPayload) => void
-    /** The answer continuation CAN carry interim_prose prose (a pick that
-     * resumes into a design beat speaks its expectation sentence first) —
-     * the chat turn's segmentation law applies verbatim. */
     onInterimProse?: StreamChatOptions["onInterimProse"]
     onActivity?: StreamChatOptions["onActivity"]
     onCandidates?: StreamChatOptions["onCandidates"]
@@ -397,6 +399,144 @@ export function streamAnswer<T>(
     { completed: "answer.completed", failed: "answer.failed" },
     handlers,
   )
+}
+
+/** Resume a conversation from its latest failure checkpoint via SSE. */
+export function streamResume<T>(
+  conversationId: string,
+  handlers: StreamChatOptions,
+): Promise<T> {
+  return streamTurn(
+    `${API_URL}/api/v1/chat/conversations/${conversationId}/resume`,
+    {},
+    { completed: "turn.completed", failed: "turn.failed" },
+    handlers,
+  )
+}
+
+/** Re-attach to an in-flight conversation run after tab switch or reconnect. */
+export function streamConversationEvents(
+  conversationId: string,
+  afterSeq: number,
+  handlers: {
+    signal: AbortSignal
+    onSynced?: (payload: {
+      active: boolean
+      runId: string | null
+      turnId: string | null
+      liveFocus: string | null
+      steps: StepPlanItem[] | null
+    }) => void
+    onDelta?: (text: string, messageId: string | null) => void
+    onThinking?: (payload: ThinkingPayload) => void
+    onInterimProse?: StreamChatOptions["onInterimProse"]
+    onActivity?: StreamChatOptions["onActivity"]
+    onCandidates?: StreamChatOptions["onCandidates"]
+    onRowAppend?: StreamChatOptions["onRowAppend"]
+    onRowUpdate?: StreamChatOptions["onRowUpdate"]
+    onTerminal?: (kind: "completed" | "failed") => void
+  },
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const token = getToken()
+    if (!token) {
+      resolve()
+      return
+    }
+    fetchEventSource(
+      `${API_URL}/api/v1/chat/conversations/${conversationId}/events?after_seq=${Math.max(0, afterSeq)}`,
+      {
+        method: "GET",
+        openWhenHidden: true,
+        signal: handlers.signal,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "text/event-stream",
+          ...(i18n.language ? { "Accept-Language": i18n.language } : {}),
+        },
+        onopen: async (res) => {
+          if (!res.ok) throw new Error(`events: ${res.status}`)
+        },
+        onmessage: (msg) => {
+          const isAnswerTerminal =
+            msg.event === "answer.completed" || msg.event === "answer.failed"
+          const frame = routeStreamFrame(
+            msg.event,
+            msg.data,
+            isAnswerTerminal
+              ? { completed: "answer.completed", failed: "answer.failed" }
+              : { completed: "turn.completed", failed: "turn.failed" },
+          )
+          switch (frame.kind) {
+            case "run_synced":
+              handlers.onSynced?.({
+                active: frame.active,
+                runId: frame.runId,
+                turnId: frame.turnId,
+                liveFocus: frame.liveFocus,
+                steps: frame.steps,
+              })
+              if (!frame.active) resolve()
+              break
+            case "delta":
+              handlers.onDelta?.(frame.text, frame.messageId)
+              break
+            case "thinking":
+              handlers.onThinking?.(frame.payload)
+              break
+            case "interim_prose":
+              handlers.onInterimProse?.(
+                frame.text,
+                frame.at,
+                frame.turnId,
+                frame.messageId,
+                frame.seq,
+                frame.runId ?? null,
+              )
+              break
+            case "activity":
+              handlers.onActivity?.(frame.frame)
+              break
+            case "row_append":
+              handlers.onRowAppend?.(frame.row)
+              break
+            case "row_update":
+              handlers.onRowUpdate?.(frame.id, frame.frame)
+              break
+            case "candidates":
+              handlers.onCandidates?.(frame.event)
+              break
+            case "title_updated":
+              notifyConversationsChanged(frame.projectId)
+              break
+            case "completed":
+              window.dispatchEvent(new Event(WALLET_REFRESH_EVENT))
+              handlers.onTerminal?.("completed")
+              resolve()
+              break
+            case "failed":
+              window.dispatchEvent(new Event(WALLET_REFRESH_EVENT))
+              handlers.onTerminal?.("failed")
+              resolve()
+              break
+            default:
+              break
+          }
+        },
+        onclose: () => {
+          resolve()
+        },
+        onerror: (err) => {
+          throw err
+        },
+      },
+    )
+      .then(() => resolve())
+      .catch((err) => {
+        if (handlers.signal.aborted) resolve()
+        else reject(err)
+      })
+  })
 }
 
 /** One streamed chat turn. Resolves with the ChatResponse envelope (the

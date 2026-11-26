@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import { Plus } from "lucide-react"
+import { Plus } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 import { LANDING_CONTAINER } from "./layout"
 import { useReducedMotion } from "./motion"

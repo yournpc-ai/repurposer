@@ -1,8 +1,8 @@
 import type { ReactNode } from "react"
-import type { LucideIcon } from "lucide-react"
+import type { AppIcon } from "@/components/ui/icons"
 
 export interface MediaChip {
-  Icon: LucideIcon
+  Icon: AppIcon
   label: string
   title?: string
 }

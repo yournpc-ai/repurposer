@@ -345,7 +345,7 @@ class InsertTextArgs(BaseModel):
         description="Optional active-word highlight hex color for karaoke_focus (defaults to style accent or #FACC15).",
     )
     background: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$", description="Optional pill/chip background hex color.")
-    background_mode: TextBackgroundMode | None = Field(default=None, description="Optional background wrap mode ('box', 'pill', 'line').")
+    background_mode: TextBackgroundMode | None = Field(default=None, description="Optional background wrap mode ('pill' for tight text-hugging capsule, 'line' for per-line chips, 'box' for full safe-area banner — never use 'box' for captions).")
     background_opacity: float | None = Field(default=None, ge=0.0, le=1.0, description="Optional background opacity in [0, 1].")
     align: Literal["left", "center", "right"] | None = Field(default=None, description="Optional horizontal text alignment.")
     secondary_line_scale: float | None = Field(
@@ -417,7 +417,7 @@ class EditTextArgs(BaseModel):
     )
     background_mode: TextBackgroundMode | None = Field(
         default=None,
-        description="Optional background wrap mode: 'box' (full box), 'pill' (tight rounded pill), or 'line' (per-line tight sticker chips).",
+        description="Optional background wrap mode: 'pill' (recommended tight text-hugging rounded capsule), 'line' (per-line tight chips), or 'box' (fills entire layout safe-area box — never use 'box' for captions).",
     )
     background_opacity: float | None = Field(
         default=None, ge=0.0, le=1.0,
@@ -1824,12 +1824,14 @@ async def execute_editor(turn, name, args):
             )
         )
     if name == "create_video":
+        from contextlib import nullcontext
         from app.chat.editor_create import create_video
         from app.chat.editor_recovery import editor_lock_key
 
         if not turn.project or not turn.turn_id or not current_call_id():
             return ToolObservation("A project and persisted opening are required.", ok=False)
-        await turn.db.execute(select(func.pg_advisory_xact_lock(editor_lock_key(turn.turn_id))))
+        with getattr(turn.db, "no_autoflush", nullcontext()):
+            await turn.db.execute(select(func.pg_advisory_xact_lock(editor_lock_key(turn.turn_id))))
         async with AsyncSessionLocal() as db:
             try:
                 result = await create_video(db, turn, args)
@@ -1869,11 +1871,13 @@ async def execute_editor(turn, name, args):
                         raise ValueError("Observe the saved split before addressing the new clip or object.")
                 if not turn.turn_id or not current_call_id():
                     raise ValueError("A persisted turn and native call identity are required.")
+                from contextlib import nullcontext
                 from app.chat.editor_recovery import editor_lock_key
 
-                await turn.db.execute(
-                    select(func.pg_advisory_xact_lock(editor_lock_key(turn.turn_id)))
-                )
+                with getattr(turn.db, "no_autoflush", nullcontext()):
+                    await turn.db.execute(
+                        select(func.pg_advisory_xact_lock(editor_lock_key(turn.turn_id)))
+                    )
                 result = await edit_clip(
                     db,
                     name=name,
@@ -2089,8 +2093,11 @@ async def execute_editor(turn, name, args):
                     conversation_id=turn.conversation_id,
                     lock_on_session=False,
                 )
+                payload = dict(result)
+                if payload.get("skill_version_id"):
+                    payload["workbench_link"] = f"#workbench:skill/{payload['skill_version_id']}"
                 return ToolObservation(
-                    json.dumps(result),
+                    json.dumps(payload),
                     valid_for_key=version_key,
                     receipt=skill_saved_receipt(result),
                 )
@@ -2178,9 +2185,15 @@ async def execute_editor(turn, name, args):
                 "audio_available_to_model": evidence["audio_available_to_model"],
             }
             block = storyboard_block(read)
-            blocks = turn.__dict__.setdefault("_editor_preview_blocks", [])
+            version_id_str = str(version.id)
+            blocks = [
+                existing
+                for existing in turn.__dict__.get("_editor_preview_blocks", [])
+                if existing.get("composition_version_id") == version_id_str
+            ]
             if block not in blocks:
                 blocks.append(block)
+            turn._editor_preview_blocks = blocks
             turn._video_presentation_pending = read
             evidence["coverage"] = (
                 "Exact requested window of this version, across all tracks. Reuse for this window until the work changes."

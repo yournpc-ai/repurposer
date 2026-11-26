@@ -427,7 +427,24 @@ def test_caption_creation_defaults_inherit_style_or_clean_broadcast_without_blac
     )
     nar_cap_clip = next(op.clip for op in nar_ops if op.op == "add_clip" and op.clip.object.kind == "text")
     assert nar_cap_clip.object.style.color == "#111820"
-    assert nar_cap_clip.object.style.stroke == TextStroke(color="#F6F5F0", width=4.0)
+    assert nar_cap_clip.object.style.background == "#FFFFFF"
+    assert nar_cap_clip.object.style.background_mode == "pill"
+    assert nar_cap_clip.object.style.background_padding == (20.0, 8.0)
+    assert nar_cap_clip.object.style.background_radius == 10.0
+    assert nar_cap_clip.object.style.stroke is None
+
+    # Derived-caption edits upgrade accidental background_mode='box' to tight 'pill'
+    from app.editing.edits import apply_ops
+    derived_base = apply_ops(nar_base, nar_ops, {audio_id: audio_digest})
+    derived_bg_edited, _ = edit_text(
+        derived_base, scope="all_derived_captions", preset_id="clean_broadcast", background="#F6F5F0", background_mode="box"
+    )
+    derived_style = next(
+        c for t in derived_bg_edited.timeline.tracks for c in t.clips if c.object.kind == "text"
+    ).object.style
+    assert derived_style.background == "#F6F5F0"
+    assert derived_style.background_mode == "pill"
+    assert derived_style.background_padding == (20.0, 10.0)
 
 
 def test_catalog_prompt_index_exposes_all_24_text_style_presets():
@@ -566,7 +583,7 @@ def test_bilingual_cinema_theme_awareness_and_py_ts_resolver_parity():
     assert ed_style.background_radius == 10.0
     assert ed_style.background_opacity == 0.78
 
-    # Explicit background_mode='box' is still respected when deliberately requested
+    # Explicit background_mode='box' is still respected on single-clip edits
     edited_box, _ = edit_text(
         raw_updated, scope="clip", clip_id="clp_guard_edit", background="#111318", background_mode="box"
     )

@@ -386,6 +386,34 @@ export interface ImagePreviewBlock {
 
 export type MessageBlock = ImagePreviewBlock | VideoStoryboardBlock | SystemNoticeBlock | AudioPlaybackBlock
 
+export type DisplayRole =
+  | "prose"
+  | "stage_note"
+  | "rail_note"
+  | "question_framing"
+  | "question_framing_stub"
+  | "decision"
+  | "activity"
+  | "failure_checkpoint"
+
+export interface FailureCheckpoint {
+  code?: string
+  run_id?: string | null
+  retryable?: boolean
+  decision_committed?: boolean
+  user_message?: string
+}
+
+export interface ActiveRunSummary {
+  run_id: string
+  turn_id?: string | null
+  status: "running" | "completed" | "failed" | "cancelled"
+  live_focus?: string | null
+  steps?: StepPlanItem[] | null
+  latest_seq?: number | null
+  started_at?: string | null
+}
+
 /** One message row in the dock's flow (live-pushed or replayed). */
 export interface OverlayMessage {
   jobReceipt?: NativeJobReceipt
@@ -406,6 +434,10 @@ export interface OverlayMessage {
   /** Opening user-message id for facts born in that turn. Missing on legacy
    * rows and independent world facts; never inferred from adjacency. */
   turnId?: string
+  /** Execution segment identity (Turn -> Run): isolates pre-QA / post-QA / retry runs. */
+  runId?: string
+  /** Server-adjudicated presentation role shared identically by Live SSE and History Replay. */
+  displayRole?: DisplayRole
   /** A deterministic option answer's persisted question association. The real
    * user row still owns the Turn; only its duplicate visible bubble is suppressed. */
   answeredQuestionId?: string
@@ -433,9 +465,17 @@ export interface OverlayMessage {
   /** Files uploaded mid-conversation (the chat's attach button) — rendered
    * as attachment chips on the user bubble. */
   assets?: ProjectAsset[]
+  /** Framing prose echoed right above an ask_user question card (live or replayed).
+   * Never a settled final reply — never renders MessageActionBar (copy/like/dislike). */
+  questionEcho?: boolean
   /** Live SSE preview bubble: deltas append until the turn.completed
    * envelope replaces it (the envelope always wins). */
   streaming?: boolean
+  /** Settled turn-end / async-handoff assistant reply stamped by the server.
+   * Always stays visible in the conversation stream as a natural prose boundary
+   * instead of being swallowed back into a preceding work fold when background
+   * continuations resume the same turn. */
+  turnProse?: boolean
   /** Mounted from the persisted history projection: hydrate current state
    * directly, never replay live entrance/typewriter choreography. */
   hydrated?: boolean
@@ -476,6 +516,8 @@ export interface OverlayMessage {
    * on a failed turn, so a refresh drops it (the conversation stays honest:
    * nothing was answered). */
   meta?: "error"
+  /** Structured failure checkpoint metadata (stage, retryability, preserved decision). */
+  failureCheckpoint?: FailureCheckpoint
   /** Local insufficient-credit action attached to a failed-turn gray row.
    * Never persisted; the row and its purchase context disappear on refresh. */
   creditTopup?: CreditTopupRequest
@@ -504,6 +546,11 @@ export interface OverlayMessage {
   /** Server-stamped system notices and domain component references.
    * Absent/empty on every legacy row (读容忍). */
   blocks?: MessageBlock[]
+  /** Mid-turn colleague progress note (intent.type === "interim_prose").
+   * Stays inside the active work fold and never shows final-reply actions. */
+  interim?: boolean
+  /** True when this message originated as a media/export job receipt row. */
+  fromJobReceipt?: boolean
   /** Finalized step checklist persisted on assistant messages. */
   steps?: StepPlanItem[]
   /** Current user's good/bad feedback on an assistant reply. */
@@ -568,6 +615,10 @@ export interface QuestionMessage {
   answer: QuestionAnswer | null
   /** Opening user-turn association, when this row belongs to one. */
   turn_id?: string | null
+  /** Execution segment identity (Turn -> Run). */
+  run_id?: string | null
+  /** Server-adjudicated presentation role shared by Live & Replay. */
+  display_role?: DisplayRole | null
   /** 建议谱系交互块 (ADR-099 §4): the row's persisted non-blocking
    * suggestion records (empty on every older row — 读容忍). */
   suggestions?: unknown
@@ -647,6 +698,7 @@ export type ConversationUnit =
       activity: ActivityRowFrame
       rowKey: string
       turnId?: string
+      runId?: string
       independentKind?: OverlayMessage["independentKind"]
       workStartedAtMs?: number
       workEndedAtMs?: number
@@ -671,6 +723,7 @@ export type ConversationUnit =
       openTail: boolean
       rowKey: string
       turnId?: string
+      runId?: string
       independentKind?: OverlayMessage["independentKind"]
     }
 

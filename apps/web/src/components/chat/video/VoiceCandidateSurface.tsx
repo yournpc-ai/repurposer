@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
-import { Check, ChevronDown, Loader2, Pause, Play } from "lucide-react"
+import { Check, ChevronDown, Loader2, Pause, Play } from "@/components/ui/icons"
 
 import { VoiceOrb, type VoiceOrbState } from "@/components/ui/voice-orb"
 import { cn } from "@/lib/utils"

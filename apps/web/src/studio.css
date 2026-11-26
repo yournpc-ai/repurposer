@@ -1,18 +1,45 @@
-/* Content slots extracted from affectUI App Shell Inset and Assistant Home. */
+/* Content slots extracted from affectUI App Shell Inset and Assistant Home.
+   Avoid redefining Tailwind semantic tokens (--muted, --card, etc.) here so
+   utilities like bg-muted keep resolving to styles.css. */
 .ui-as-app {
-  --line: var(--aui-border);
-  --ink: var(--aui-ink);
-  --panel: var(--aui-surface);
+  --page: #f8f8f8;
+  --panel: #ffffff;
+  --line: rgba(0, 0, 0, 0.06);
+  --line-strong: rgba(0, 0, 0, 0.1);
+  --strong: #000000;
+  --ink: rgba(0, 0, 0, 0.88);
+  --text: rgba(0, 0, 0, 0.61);
+  --as-muted: rgba(0, 0, 0, 0.45);
+  --faint: rgba(0, 0, 0, 0.27);
+  --hover: rgba(0, 0, 0, 0.03);
+  --select: rgba(0, 0, 0, 0.055);
+  --chip: rgba(0, 0, 0, 0.04);
   --frame-gap: 8px;
   --radius-panel: calc(var(--aui-radius-lg) + 2px);
   display: flex;
   height: 100dvh;
   min-height: 0;
-  background: var(--aui-subtle);
+  background: var(--page);
+  color: var(--ink);
 }
-.ui-as-side { display: flex; flex-direction: column; flex: none; gap: 12px; width: 48px; min-height: 0; padding: 12px 8px; }
+:where(.dark, [data-theme="dark"]) .ui-as-app {
+  --page: #0e0e10;
+  --panel: #141416;
+  --line: rgba(255, 255, 255, 0.08);
+  --line-strong: rgba(255, 255, 255, 0.14);
+  --strong: #ffffff;
+  --ink: rgba(255, 255, 255, 0.9);
+  --text: rgba(255, 255, 255, 0.62);
+  --as-muted: rgba(255, 255, 255, 0.45);
+  --faint: rgba(255, 255, 255, 0.28);
+  --hover: rgba(255, 255, 255, 0.05);
+  --select: rgba(255, 255, 255, 0.08);
+  --chip: rgba(255, 255, 255, 0.06);
+}
+.ui-as-side { display: flex; flex-direction: column; flex: none; gap: 12px; width: 48px; min-height: 0; padding: 10px 8px 8px 10px; }
 .ui-as-side[data-expanded="true"] { width: 240px; }
-.ui-as-side__item { display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 6px 8px; border-radius: var(--aui-radius); font-size: 13px; }
+.ui-as-side__item { display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 6px 8px; border-radius: calc(var(--aui-radius-sm, 5px) + 3px); font-size: 13px; color: var(--text); transition: background-color 140ms ease, color 140ms ease; }
+.ui-as-side__item svg { flex: none; color: var(--as-muted); }
 .ui-as-side .ui-as-side__toggle { --size: 32px; --icon: 16px; }
 .ui-as-side .ui-as-side__item { width: 100%; min-width: 0; min-height: 32px; padding: 4px 8px; overflow: hidden; white-space: nowrap; }
 .ui-as-side .ui-as-side__item[aria-haspopup="dialog"] { padding-inline: 4px; }
@@ -23,7 +50,9 @@
   .ui-as-side__label { transition: opacity 260ms ease, visibility 0s; }
   .ui-as-side[data-expanded="false"] .ui-as-side__label { transition: opacity 200ms ease, visibility 0s 200ms; }
 }
-.ui-as-side__item:hover, .ui-as-side__item[aria-current="page"] { background: var(--aui-surface); }
+.ui-as-side__item:hover { background: var(--hover); color: var(--ink); }
+.ui-as-side__item[aria-current="page"] { background: var(--select); color: var(--ink); font-weight: 500; }
+.ui-as-side__item[aria-current="page"] svg { color: var(--ink); }
 .ui-as-side__item:focus-visible { outline: 2px solid var(--aui-focus); }
 @media (max-width: 767px) { .ui-as-side { display: none; } .ui-as-side__item { min-height: 44px; } }
 .ui-as-main {
@@ -116,17 +145,19 @@
   max-width: 48rem;
   margin: 0 auto;
   padding: 16px 24px 32px;
+  font-size: 14px;
+  line-height: 1.6;
   color: var(--ink);
   overflow-wrap: anywhere;
 }
 @media (max-width: 767px) {
   .ui-th-col { gap: 20px; padding: 12px 16px 24px; }
 }
-@media (min-width: 768px) {
+@container ui-th-lane (max-width: 54rem) {
   .ui-th-col[data-has-minimap] {
     --ui-th-table-gutter: 96px;
     --ui-th-table-shift: -12px;
-    padding-left: 48px;
+    padding-left: 44px;
   }
 }
 
@@ -152,9 +183,9 @@
   max-width: 100%;
   margin-inline: auto;
   overflow-x: auto;
-  border: 1px solid var(--aui-border);
+  border: 1px solid var(--border);
   border-radius: var(--aui-radius-lg);
-  background: var(--aui-surface);
+  background: var(--card);
 }
 .ui-th-table {
   width: 100%;
@@ -162,35 +193,35 @@
   font-size: 13px;
   line-height: 1.5;
   text-align: left;
-  color: var(--aui-ink);
+  color: var(--foreground);
   overflow-wrap: break-word;
 }
 .ui-th-table__head {
-  background: var(--aui-subtle);
-  border-bottom: 1px solid var(--aui-border);
+  background: var(--muted);
+  border-bottom: 1px solid var(--border);
 }
 .ui-th-table__th {
   padding: 10px 14px;
   font-size: 12px;
   font-weight: 500;
-  color: var(--aui-muted);
+  color: var(--muted-foreground);
   white-space: nowrap;
   text-align: left;
   overflow-wrap: normal;
 }
 .ui-th-table__body .ui-th-table__row {
-  border-bottom: 1px solid var(--aui-border);
+  border-bottom: 1px solid var(--border);
   transition: background-color 120ms ease;
 }
 .ui-th-table__body .ui-th-table__row:last-child {
   border-bottom: 0;
 }
 .ui-th-table__body .ui-th-table__row:hover {
-  background: color-mix(in srgb, var(--aui-subtle) 55%, transparent);
+  background: color-mix(in srgb, var(--muted) 55%, transparent);
 }
 .ui-th-table__td {
   padding: 10px 14px;
-  color: var(--aui-ink);
+  color: var(--foreground);
   vertical-align: top;
   min-width: 6.5rem;
   overflow-wrap: break-word;
@@ -199,7 +230,7 @@
   font-weight: 500;
 }
 .ui-th-user { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
-.ui-th-user__bubble { max-width: 80%; margin: 0; padding: 8px 14px; border-radius: calc(var(--aui-radius-lg) + 6px); background: var(--aui-subtle); color: var(--aui-ink); white-space: pre-wrap; overflow-wrap: anywhere; }
+.ui-th-user__bubble { max-width: 80%; margin: 0; padding: 8px 14px; border-radius: calc(var(--aui-radius-lg) + 6px); background: var(--chip, var(--muted)); color: var(--foreground); white-space: pre-wrap; overflow-wrap: anywhere; }
 .ui-th-user__files { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; max-width: 80%; margin: 0; padding: 0; list-style: none; }
 @media (max-width: 767px) { .ui-th-user__bubble, .ui-th-user__files { max-width: 88%; } }
 
@@ -211,8 +242,8 @@
 
 /* Files overview, inside the studio header and its own scroll area. */
 .projects-page { width: 100%; padding: 0 32px 56px; display: grid; gap: 36px; }
-.project-section-title { display: flex; align-items: baseline; gap: 6px; margin: 0 0 12px; color: var(--aui-muted); font-size: 11px; line-height: 16px; font-weight: 500; letter-spacing: .5px; text-transform: uppercase; }
-.project-skeleton { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 8px 12px; border-radius: var(--aui-radius-lg); background: var(--aui-surface); box-shadow: var(--aui-shadow-card); }
+.project-section-title { display: flex; align-items: baseline; gap: 6px; margin: 0 0 12px; color: var(--muted-foreground); font-size: 11px; line-height: 16px; font-weight: 500; letter-spacing: .5px; text-transform: uppercase; }
+.project-skeleton { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 8px 12px; border-radius: var(--aui-radius-lg); background: var(--card); box-shadow: var(--shadow-card); }
 .project-entry .ui-crdc { justify-content: center; min-height: 56px; padding: 7px 12px; }
 .project-toolbar, .project-tools { display: flex; align-items: center; gap: 8px; }
 .project-toolbar { flex-wrap: wrap; justify-content: space-between; gap: 12px; }
@@ -248,8 +279,8 @@
   --settings-shell: #f8f8f8;
   --settings-panel: #fff;
   --settings-card: #fff;
-  --settings-line: var(--aui-border);
-  --settings-muted: var(--aui-muted);
+  --settings-line: var(--border);
+  --settings-muted: var(--muted-foreground);
   --settings-selected: #ededee;
 }
 .dark .account-settings, [data-theme="dark"] .account-settings {
@@ -283,13 +314,26 @@
   --panel: var(--settings-panel);
   --card: var(--settings-card);
 }
-.settings-page { box-sizing: border-box; max-width: 760px; margin: 0 auto; }
+.settings-page {
+  box-sizing: border-box;
+  max-width: 760px;
+  margin: 0 auto;
+  /* Restore Tailwind semantic tokens shadowed by AffectUI AppShell (.ui-au-shell). */
+  --muted: #f4f4f4;
+  --accent: rgba(0, 0, 0, 0.055);
+  --disabled: #f8f8f8;
+}
+:where(.dark, [data-theme="dark"]) .settings-page {
+  --muted: #212124;
+  --accent: rgba(255, 255, 255, 0.08);
+  --disabled: #111113;
+}
 .settings-intro { margin-bottom: 24px; }
 .settings-intro h3 { margin: 0; font-size: 24px; line-height: 32px; font-weight: 500; letter-spacing: -.24px; }
 .settings-intro p { margin: 4px 0 0; color: var(--settings-muted); font-size: 13px; line-height: 20px; }
 .settings-note { display: flex; align-items: center; gap: 8px; padding: 10px 12px; font-size: 13px; line-height: 20px; color: var(--settings-muted); }
 .settings-note, .settings-card {
-  border-radius: 12px; background: var(--settings-card); box-shadow: var(--aui-shadow-card), inset 0 0 0 .5px var(--settings-line);
+  border-radius: 12px; background: var(--settings-card); box-shadow: var(--shadow-card), inset 0 0 0 .5px var(--settings-line);
 }
 .settings-note svg, .settings-row svg { flex: none; }
 .settings-note + .settings-card { margin-top: 16px; }
@@ -311,4 +355,28 @@
   .account-settings.ui-dlgc { align-items: center; padding: 12px; }
   .account-settings .ui-dlgc__panel { width: 100%; max-width: 100%; margin: 0; border-radius: 14px; }
   .account-settings .settings-shell, .settings-loading { height: min(40rem, 84dvh); }
+}
+
+/* Antigravity-style 2×2 working dot matrix in sidebar conversations */
+.ui-conv-dots {
+  display: inline-grid;
+  grid-template-columns: repeat(2, 4px);
+  grid-template-rows: repeat(2, 4px);
+  gap: 2.5px;
+  align-items: center;
+  justify-items: center;
+}
+.ui-conv-dots > i {
+  display: block;
+  width: 4px;
+  height: 4px;
+  border-radius: 9999px;
+  animation: ui-conv-dot-wave 1.15s ease-in-out infinite;
+}
+@keyframes ui-conv-dot-wave {
+  0%, 100% { opacity: 0.25; transform: scale(0.82); }
+  45% { opacity: 0.95; transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ui-conv-dots > i { animation: none; opacity: 0.75; }
 }

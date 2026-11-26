@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react"
-import { ArrowUp, ChevronDown, Clapperboard, FileText, LayoutGrid, Plus } from "lucide-react"
+import { ArrowUp, ChevronDown, Clapperboard, FileText, LayoutGrid, Plus } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 import { LANDING_GALLERY, type LandingGalleryItem } from "./content"
 import { LogoMark } from "@/components/LogoMark"

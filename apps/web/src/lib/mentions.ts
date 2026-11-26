@@ -23,8 +23,8 @@ import {
   Layers,
   Paperclip,
   Workflow,
-  type LucideIcon,
-} from "lucide-react"
+  type AppIcon,
+} from "@/components/ui/icons"
 
 import i18n from "@/lib/i18n"
 import type { MediaRegionSelection } from "@/lib/mediaRegionSelection"
@@ -53,7 +53,7 @@ export interface MentionCandidate {
   /** Serialized chip label when it carries more identity than the picker row. */
   chipLabel?: string
   hint?: string
-  icon?: LucideIcon
+  icon?: AppIcon
 }
 
 /** The file-kind vocabulary the asset feed speaks (the `mentions.fileType.*`
@@ -114,7 +114,7 @@ export interface MentionContext {
 
 export interface MentionTypeDef {
   type: ChatMention["type"]
-  icon: LucideIcon
+  icon: AppIcon
   /** i18n key root for the type's display name: mentions.types.<type>. */
   i18nKey: string
   /** Candidate supply for the picker (asset: the surface's files/assets via

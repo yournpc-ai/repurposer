@@ -12,10 +12,10 @@ export function LandingHero() {
     <section className="pt-12 pb-14 text-center sm:pt-16 sm:pb-16 lg:pt-8 lg:pb-12">
       <div className={LANDING_CONTAINER}>
         <p className="text-sm text-muted-foreground sm:text-base">{t("landing.heroEyebrow")}</p>
-        <h1 className="mx-auto mt-6 max-w-6xl font-hero text-[clamp(40px,6.3vw,72px)] leading-[1.06] font-normal tracking-tight text-balance">
+        <h1 className="mx-auto mt-6 mb-8 max-w-6xl font-hero text-[clamp(40px,6.3vw,72px)] leading-[1.06] font-normal tracking-tight text-balance sm:mb-12">
           {t("landing.heroTitle")}
         </h1>
-        <Button size="lg" className="mt-12 rounded-full px-8 text-sm font-normal sm:text-base" onClick={() => {
+        <Button size="lg" className="landing-cta" onClick={() => {
           if (isAuthenticated) void navigate({ to: "/home" })
           else setLoginOpen(true)
         }}>{t("landing.heroCta")}</Button>

@@ -7,7 +7,7 @@ import {
   Undo2,
   Upload,
   X,
-} from "lucide-react"
+} from "@/components/ui/icons"
 
 import { apiFetch } from "@/lib/api"
 import {
@@ -17,7 +17,9 @@ import {
 } from "@/lib/chatAttachments"
 import { armAnswerWatchdog } from "@/lib/answerWatchdog"
 import { inferAssetType } from "@/lib/asset-type"
-import { streamAnswer, streamChat, StreamTurnError, questionSettledCode } from "@/lib/chat-stream"
+import { streamAnswer, streamChat, streamResume, StreamTurnError, questionSettledCode } from "@/lib/chat-stream"
+import { useQuestionDockController } from "./hooks/useQuestionDockController"
+import { useRunReattach } from "./hooks/useRunReattach"
 import { StreamTransportError } from "@/lib/streamTransport"
 import { sseProbe } from "@/lib/sse-probe" // TEMPORARY forensics — delete with the probe
 import {
@@ -69,6 +71,8 @@ import { AsyncJobStrip } from "@/components/workbench/AsyncJobStrip"
 import { useOptionalWorkbench } from "@/components/workbench/WorkbenchContext"
 import {
   notifyConversationsChanged,
+  setConversationBusy,
+  setConversationPendingQuestion,
   type CompactSummary,
   type MessageFeedbackSummary,
   type StepPlanItem,
@@ -119,7 +123,6 @@ import {
   stampMessagePresentation,
 } from "./liveMessageReconcile"
 import { matchOptionByText } from "./optionMatch"
-import { loadQuestionGroupDrafts, saveQuestionGroupDrafts } from "./questionGroupDrafts"
 import {
   resetActivities,
   sweepActivities,
@@ -129,6 +132,7 @@ import {
   QuestionDock,
 } from "@/components/chat/QuestionDock"
 import { ChatConversation } from "./ChatConversation"
+import { ThreadLoadingSkeleton } from "./ThreadLoadingSkeleton"
 import { assetTypeIcon } from "./rows/UserMessage"
 import type { ChatAttachment, ChatOutputEntry, Output } from "@/lib/types"
 import {
@@ -327,45 +331,24 @@ export function AgentThread({
   )
   const [compactSummary, setCompactSummary] = useState<CompactSummary | null>(null)
   const [liveSteps, setLiveSteps] = useState<StepPlanItem[] | null>(null)
+  const [activeRunId, setActiveRunIdState] = useState<string | null>(null)
+  const activeRunIdRef = useRef<string | null>(null)
+  const setActiveRunId = useCallback((runId: string | null) => {
+    activeRunIdRef.current = runId
+    setActiveRunIdState(runId)
+  }, [])
   const conversationResolvedRef = useRef(onConversationResolved)
   conversationResolvedRef.current = onConversationResolved
   const conversationQuery = conversationId
     ? `project_id=${projectId}&conversation_id=${encodeURIComponent(conversationId)}`
     : `project_id=${projectId}`
-  const [pendingQuestion, setPendingQuestion] = useState<QuestionMessage | null>(null)
-  const [questionGroupDrafts, setQuestionGroupDrafts] = useState<Record<string, BriefAnswerItem[]>>({})
-  const groupDraftsHydrationRef = useRef({ projectId: "", skipSave: true })
-  const groupDraftKey = (question: QuestionMessage) =>
-    `${question.id}:${question.question?.group_digest ?? ""}`
-  const groupDraftAnswers = (question: QuestionMessage) =>
-    (questionGroupDrafts[groupDraftKey(question)] ?? []).filter((answer) =>
-      question.question?.items?.some((item) => item.slot === answer.slot))
-  useEffect(() => {
-    groupDraftsHydrationRef.current = { projectId, skipSave: true }
-    setQuestionGroupDrafts(loadQuestionGroupDrafts(projectId))
-  }, [projectId])
-  useEffect(() => {
-    const hydration = groupDraftsHydrationRef.current
-    if (hydration.projectId !== projectId) return
-    if (hydration.skipSave) {
-      hydration.skipSave = false
-      return
-    }
-    saveQuestionGroupDrafts(projectId, questionGroupDrafts)
-  }, [projectId, questionGroupDrafts])
-  useEffect(() => {
-    const digest = pendingQuestion?.question?.group_digest
-    if (!pendingQuestion || !digest || !(pendingQuestion.question?.items?.length)) return
-    const targetKey = groupDraftKey(pendingQuestion)
-    setQuestionGroupDrafts((previous) => {
-      if (previous[targetKey]) return previous
-      const sourceKey = Object.keys(previous).find((key) => key.endsWith(`:${digest}`) && key !== targetKey)
-      if (!sourceKey) return previous
-      const next = { ...previous, [targetKey]: previous[sourceKey] }
-      delete next[sourceKey]
-      return next
-    })
-  }, [pendingQuestion?.id, pendingQuestion?.question?.group_digest])
+  const {
+    pendingQuestion,
+    setPendingQuestion,
+    groupDraftAnswers,
+    setGroupDraftAnswers,
+    clearGroupDraftByDigest,
+  } = useQuestionDockController(projectId)
   // Read projection of pending_brief.video_presentation. It can only unlock
   // the exact server-authorized delayed-start ACK; it never creates intent.
   const [presentationRecovery, setPresentationRecovery] =
@@ -490,7 +473,29 @@ export function AgentThread({
   const settleActivities = useCallback(
     (status: "completed" | "failed" | "cancelled") => {
       setLiveFocus(null)
-      setLiveSteps(null)
+      if (status === "failed") {
+        // Preserve StepsPlanCard on failure and stamp in-progress step red,
+        // mirroring the server's persisted steps onto the opening user row.
+        setLiveSteps((prev) => {
+          if (!prev?.length) return prev
+          const failedPlan: StepPlanItem[] = prev.map((item) =>
+            item.status === "in_progress" ? { ...item, status: "failed" as const } : item,
+          )
+          const turnId = currentTurnRef.current?.serverId ?? currentTurnRef.current?.localId
+          if (turnId) {
+            setMessages((rows) =>
+              rows.map((m) =>
+                m.role === "user" && (m.id === turnId || m.serverMessageId === turnId || m.turnId === turnId)
+                  ? { ...m, steps: failedPlan }
+                  : m,
+              ),
+            )
+          }
+          return null
+        })
+      } else {
+        setLiveSteps(null)
+      }
       setActivities((prev) => sweepActivities(prev, status))
       setMessages((prev) =>
         prev.map((m) =>
@@ -515,16 +520,31 @@ export function AgentThread({
     const row = wire
     noteObservedSeq(row.seq)
     const turnId = row.turn_id ? adoptCurrentTurnId(row.turn_id) : undefined
+    const intentObj = row.intent && typeof row.intent === "object"
+      ? (row.intent as Record<string, unknown>)
+      : null
+    const rowRunId =
+      typeof row.run_id === "string" && row.run_id
+        ? row.run_id
+        : typeof intentObj?.run_id === "string" && intentObj.run_id
+          ? intentObj.run_id
+          : activeRunIdRef.current ?? undefined
     const frame = activityRowFrame(row.intent)
     if (!frame) {
+      if (isNonRenderIntent(row.intent, row.blocks)) return
       const facts = messageReceiptFacts(row.intent)
       const { jobReceipt } = facts
       if (row.role !== "assistant" || (!jobReceipt && !row.content && !row.blocks?.length)) return
+      const isFailure = intentObj?.type === "turn_failed"
+      const checkpoint =
+        intentObj?.checkpoint && typeof intentObj.checkpoint === "object"
+          ? (intentObj.checkpoint as OverlayMessage["failureCheckpoint"])
+          : undefined
       setMessages((prev) => {
         const reconciled = reconcileCurrentTurnRows(prev)
-        if (reconciled.some((m) => m.id === row.id)) {
+        if (reconciled.some((m) => m.id === row.id || m.serverMessageId === row.id)) {
           if (!jobReceipt) return reconciled
-          return reconciled.map((m) => m.id === row.id
+          return reconciled.map((m) => m.id === row.id || m.serverMessageId === row.id
             ? { ...m, jobReceipt, content: row.content ?? m.content, blocks: row.blocks ?? m.blocks }
             : m)
         }
@@ -536,10 +556,15 @@ export function AgentThread({
             role: "assistant" as const,
             ...facts,
             content: row.content ?? "",
+            ...(isFailure ? { meta: "error" as const, displayRole: "failure_checkpoint" as const } : {}),
+            ...(checkpoint ? { failureCheckpoint: checkpoint } : {}),
+            ...(row.display_role && !isFailure ? { displayRole: row.display_role } : {}),
+            ...(intentObj?.type === "interim_prose" ? { interim: true, displayRole: "stage_note" as const } : {}),
             outputRefs: deliveryOutputRefs(row.intent),
             clientVisibleAtMs: row.content?.trim() ? Date.now() : undefined,
             proseDrainedAtMs: row.blocks?.some((block) => block.kind === "audio_playback" || block.kind === "image_preview") ? Date.now() : undefined,
             turnId,
+            ...(rowRunId ? { runId: rowRunId } : {}),
             seq: row.seq ?? undefined,
             at: row.created_at ?? undefined,
             blocks: row.blocks?.length ? row.blocks : undefined,
@@ -560,12 +585,12 @@ export function AgentThread({
           role: "assistant" as const,
           content: "",
           turnId,
+          ...(rowRunId ? { runId: rowRunId } : {}),
           seq: row.seq ?? undefined,
           at: row.created_at ?? undefined,
           activity: frame,
           blocks: row.blocks?.length ? row.blocks : undefined,
           outputRefs: deliveryOutputRefs(row.intent),
-          activityDisplayHeld: interimActivityGatesRef.current.size > 0 || undefined,
         },
       ]
     })
@@ -606,7 +631,7 @@ export function AgentThread({
         const marked = prev.map((m) =>
           m.id === rowId ? { ...m, clientVisibleAtMs: atMs } : m,
         )
-        return rowKeys
+        return rowKeys && !target.interim
           ? closeWorkSegment(marked, rowKeys, atMs, undefined, rowId)
           : marked
       })
@@ -684,6 +709,21 @@ export function AgentThread({
     rememberSkillOption(option)
   }, [rememberSkillOption])
   const [chatBusy, setChatBusy] = useState(false)
+  const [recoveredJobTurn, setRecoveredJobTurn] = useState<string | null>(null)
+  const liveConversationKey = resolvedConversationId ?? conversationId ?? null
+  const isTurnWorking = chatBusy || answering || recoveredJobTurn !== null
+  useEffect(() => {
+    setConversationBusy(projectId, liveConversationKey, isTurnWorking)
+  }, [projectId, liveConversationKey, isTurnWorking])
+  useEffect(() => {
+    return () => {
+      // Unmounting when navigating away (e.g. to /presets) must never stamp a
+      // fake "Completed" badge; release the local override and let the sidebar
+      // reflect the server's live has_active_job state.
+      setConversationBusy(projectId, liveConversationKey, false, { markCompleted: false })
+      notifyConversationsChanged(projectId)
+    }
+  }, [projectId, liveConversationKey])
   const [stopPending, setStopPending] = useState(false)
   // Typewriter busy/idle edge. The bottom now seat also requires an actually
   // released non-whitespace fragment: buffered envelope text is not visible
@@ -714,9 +754,13 @@ export function AgentThread({
   const firstMessageSentRef = useRef(false)
   const [openingHistory, setOpeningHistory] = useState<"loading" | "empty" | "occupied" | "failed">("loading")
   const [historyAttempt, setHistoryAttempt] = useState(0)
-  const [recoveredJobTurn, setRecoveredJobTurn] = useState<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
   const activeChatStopRef = useRef<ActiveChatStop | null>(null)
+  const activeAnswerStopRef = useRef<{
+    controller: AbortController
+    turnId: string | null
+    markStopped: () => void
+  } | null>(null)
   /** The Turn owning the global pending flag; late old requests cannot clear
    * or retain a successor Turn's Stop control. */
   const stopPendingOwnerRef = useRef<ActiveChatStop | null>(null)
@@ -887,11 +931,25 @@ export function AgentThread({
           return
         }
         if (!convRes.ok) throw new Error("Conversation unavailable")
-        const conv = (await convRes.json()) as { id?: string }
+        const conv = (await convRes.json()) as {
+          id?: string
+          active_run?: {
+            run_id: string
+            turn_id?: string | null
+            status: string
+            live_focus?: string | null
+            steps?: StepPlanItem[] | null
+          } | null
+        }
         if (!conv.id) throw new Error("Conversation unavailable")
         if (!cancelled) {
           setResolvedConversationId(conv.id)
           conversationResolvedRef.current?.(conv.id)
+          if (conv.active_run && conv.active_run.status === "running") {
+            setActiveRunId(conv.active_run.run_id)
+            if (conv.active_run.live_focus) setLiveFocus(conv.active_run.live_focus)
+            if (conv.active_run.steps?.length) setLiveSteps(conv.active_run.steps)
+          }
         }
         const res = await apiFetch(`/api/v1/chat/conversations/${conv.id}/messages`, {
           toast: false,
@@ -912,13 +970,27 @@ export function AgentThread({
           const intent = row.intent as { media_job?: string; export_job?: string } | null
           return row.turn_id && active.has(row.turn_id) && (intent?.media_job || intent?.export_job)
         })
+        const pendingQ = rows.slice().reverse().find((row) => row.question && !row.answer)
+        const dockPendingQ = dockWorthyQuestion(pendingQ ?? null)
+        const recentInFlightRow =
+          !dockPendingQ
+            ? rows.slice().reverse().find((row) => {
+                if (row.turn_state !== "in_flight") return false
+                const ts = Date.parse(row.updated_at ?? row.created_at ?? "")
+                return !Number.isNaN(ts) && Date.now() - ts < 15 * 60_000
+              })
+            : undefined
+        const liveServerTurnId =
+          conv.active_run && conv.active_run.status === "running"
+            ? (conv.active_run.turn_id ?? conv.active_run.run_id)
+            : null
+        const activeTurnId = liveServerTurnId ?? receipt?.turn_id ?? recentInFlightRow?.id ?? null
         const previouslyWatching = watchingMedia
-        watchingMedia = !!receipt
+        watchingMedia = Boolean(activeTurnId)
         if (!cancelled) {
-          setRecoveredJobTurn(receipt?.turn_id ?? null)
-          if (receipt || previouslyWatching) {
-            const question = rows.slice().reverse().find((row) => row.question && !row.answer)
-            setPendingQuestion(dockWorthyQuestion(question ?? null))
+          setRecoveredJobTurn(activeTurnId)
+          if (activeTurnId || previouslyWatching) {
+            setPendingQuestion(dockPendingQ)
           }
         }
         const history = mapHistoryRows(rows, { t })
@@ -950,6 +1022,33 @@ export function AgentThread({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, conversationQuery, historyAttempt])
+
+  useRunReattach({
+    conversationId: resolvedConversationId ?? conversationId ?? null,
+    enabled: Boolean(recoveredJobTurn && !chatBusy),
+    getAfterSeq: () => observedSeqRef.current ?? 0,
+    onSynced: ({ active, runId, liveFocus: syncedFocus, steps: syncedSteps }) => {
+      if (active) {
+        if (runId) setActiveRunId(runId)
+        if (syncedFocus) setLiveFocus(syncedFocus)
+        if (syncedSteps?.length) setLiveSteps(syncedSteps)
+      } else {
+        setActiveRunId(null)
+        setLiveFocus(null)
+        setHistoryAttempt((attempt) => attempt + 1)
+      }
+    },
+    onActivity: (frame) => handleActivityFrame(frame),
+    onRowAppend: (row) => handleRowAppend(row),
+    onRowUpdate: (id, frame) => handleRowUpdate(id, frame),
+    onTerminal: () => {
+      setActiveRunId(null)
+      setLiveFocus(null)
+      setHistoryAttempt((attempt) => attempt + 1)
+      void fetchAssets()
+      void workbench?.refresh()
+    },
+  })
 
   const messagesRef = useRef<OverlayMessage[]>(messages)
   // Stop reads the latest committed render synchronously; an effect-deferred
@@ -1094,35 +1193,48 @@ export function AgentThread({
     sseProbe("state.chatBusy", { value: chatBusy })
   }, [chatBusy])
 
-  // Visibility trigger (same machinery): a page frozen mid-turn (background
-  // tab / screen lock suspends the typewriter's timers — the SSE pipe itself
-  // stays alive) wakes to a stream whose continuation may never run; a pipe
-  // that died while hidden wakes to a fetch that will never error. Either
-  // way the signature is identical: busy + no frame for longer than the
-  // server's guaranteed cadence. Abandon the zombie and reconcile.
+  // Visibility recovery: switching tabs NEVER aborts backend execution.
+  // When returning to a tab after a long hidden period, first grant a short
+  // wake grace window so a merely throttled socket can resume delivering
+  // frames without interruption. Only if the local socket stays completely
+  // dead after waking do we quietly detach the stale reader and hand off to
+  // RunEventBus reattach / history reconcile (zero error cards, zero aborts).
   useEffect(() => {
+    let wakeTimer: ReturnType<typeof setTimeout> | null = null
     const onVisible = () => {
       sseProbe("visibility", {
         state: document.visibilityState,
         busy: abortRef.current !== null,
         silenceMs: Date.now() - lastFrameAtRef.current,
       })
-      if (document.visibilityState !== "visible") return
+      if (document.visibilityState !== "visible") {
+        if (wakeTimer != null) {
+          clearTimeout(wakeTimer)
+          wakeTimer = null
+        }
+        return
+      }
       if (abortRef.current === null) return
-      // Post-terminal the pipe is DONE by definition: the wake's "no frame
-      // for >45s" signature misfires on a healthy completed turn whose
-      // typewriter is still pacing (hidden-tab throttle stretches the drain
-      // past the silence gate) — reconcile here would only twin the row the
-      // envelope is already rendering.
       if (terminalReceivedRef.current) return
       if (Date.now() - lastFrameAtRef.current <= STREAM_SILENCE_DEAD_MS) return
-      sseProbe("visibility.dead")
-      deadStreamRef.current = true
-      abortRef.current?.abort()
-      void reconcileTurnRef.current(turnStartMsRef.current, reconcileGenRef.current)
+      const wakeAt = Date.now()
+      if (wakeTimer != null) clearTimeout(wakeTimer)
+      wakeTimer = setTimeout(() => {
+        wakeTimer = null
+        if (document.visibilityState !== "visible") return
+        if (abortRef.current === null || terminalReceivedRef.current) return
+        if (lastFrameAtRef.current >= wakeAt) return
+        sseProbe("visibility.dead")
+        deadStreamRef.current = true
+        abortRef.current?.abort()
+        void reconcileTurnRef.current(turnStartMsRef.current, reconcileGenRef.current)
+      }, 3_500)
     }
     document.addEventListener("visibilitychange", onVisible)
-    return () => document.removeEventListener("visibilitychange", onVisible)
+    return () => {
+      if (wakeTimer != null) clearTimeout(wakeTimer)
+      document.removeEventListener("visibilitychange", onVisible)
+    }
   }, [])
 
   // Refresh the project lifecycle when a staged asset finishes processing.
@@ -1199,14 +1311,29 @@ export function AgentThread({
     output && isChatVideoOutput(output) ? [output] : []), [chatOutputEntries])
 
   // One Chat-hosted viewer: message rows supply only the exact Output id.
+  // When inside the Studio Workbench shell, open delivered videos side-by-side
+  // in the right Artifact pane instead of blocking the conversation with a modal.
   const viewerTriggerRef = useRef<HTMLElement | null>(null)
   const chatContainerRef = useRef<HTMLDivElement>(null)
   const openOutputViewer = useCallback((outputId: string) => {
+    if (workbench) {
+      const matched = chatOutputs.find((o) => o.id === outputId)
+      const compName = workbench.workbench?.compositions.find(
+        (c) => c.composition_id === matched?.composition_id,
+      )?.name
+      workbench.openArtifact({
+        key: `output:${outputId}`,
+        kind: "output",
+        outputId,
+        title: compName ?? undefined,
+      })
+      return
+    }
     viewerTriggerRef.current = document.activeElement instanceof HTMLElement
       ? document.activeElement
       : null
     setViewerOutputId(outputId)
-  }, [])
+  }, [workbench, chatOutputs])
   const closeOutputViewer = useCallback(() => {
     setViewerOutputId(null)
     requestAnimationFrame(() => {
@@ -1600,6 +1727,7 @@ export function AgentThread({
           pushMessage({
             role: "assistant",
             serverMessageId: message.id,
+            questionEcho: true,
             blocks: message.blocks?.length ? message.blocks : undefined,
             outputRefs: deliveryOutputRefs(message.intent),
             proseDrainedAtMs: Date.now(),
@@ -1701,12 +1829,27 @@ export function AgentThread({
       lastFrameAtRef.current = Date.now()
     }
     sseProbe("turn.start", {})
+    let watchdogWasHidden =
+      typeof document !== "undefined" && document.visibilityState === "hidden"
     const watchdog = setInterval(() => {
       // Retired post-terminal (terminalReceivedRef): after turn.completed no
       // frame will ever arrive, so silence past the envelope is the drain's
       // own pacing (a hidden tab's throttled timers stretch it to minutes) —
       // never a dead pipe.
       if (terminalReceivedRef.current) return
+      // Background tabs throttle network readers and timers; never abort an
+      // active stream while hidden. Reset the grace clock when waking back up.
+      const hidden =
+        typeof document !== "undefined" && document.visibilityState === "hidden"
+      if (hidden) {
+        watchdogWasHidden = true
+        return
+      }
+      if (watchdogWasHidden) {
+        watchdogWasHidden = false
+        lastFrameAtRef.current = Date.now()
+        return
+      }
       if (Date.now() - lastFrameAtRef.current > STREAM_SILENCE_DEAD_MS) {
         sseProbe("watchdog.dead", {
           silenceMs: Date.now() - lastFrameAtRef.current,
@@ -1778,6 +1921,7 @@ export function AgentThread({
         if (ownsTurn()) settleInterimActivityGate(rowId)
       },
       turnId: () => adoptTurnId(),
+      runId: () => activeRunIdRef.current ?? undefined,
     })
     /** In-place finalize: the preview bubble becomes the settled message
      * under the SAME key (the envelope's content wins); never a remount.
@@ -1887,10 +2031,12 @@ export function AgentThread({
         },
         {
           signal: ctrl.signal,
-          onTurnStarted: ownFrame((turnId) => {
+          onTurnStarted: ownFrame((turnId, runId) => {
             adoptTurnId(turnId)
+            if (runId) setActiveRunId(runId)
             stopContext.resolveTurnId(turnId)
             setMessages((prev) => reconcileTurnRows(stampServerMessageId(prev, localTurnId, turnId)))
+            notifyConversationsChanged(projectId)
           }),
           onDelta: ownFrame((delta, messageId) => {
             if (delta) speechStarted = true
@@ -1915,9 +2061,38 @@ export function AgentThread({
               setThinkingPhase(payload.phase ?? null)
             }
           }),
-          onInterimProse: ownFrame((text, at, turnId, messageId, seq) => {
+          onInterimProse: ownFrame((text, at, turnId, messageId, seq, runId, displayRole) => {
+            if (displayRole === "rail_note") {
+              noteObservedSeq(seq)
+              if (text.trim()) {
+                setMessages((prev) =>
+                  prev.some((m) => m.id === messageId || m.serverMessageId === messageId)
+                    ? prev
+                    : [
+                        ...prev,
+                        {
+                          id: messageId,
+                          serverMessageId: messageId,
+                          birthKey: messageId,
+                          role: "assistant" as const,
+                          content: text,
+                          interim: true,
+                          displayRole: "rail_note" as const,
+                          turnId: turnId ?? adoptTurnId(),
+                          ...(runId ?? activeRunIdRef.current
+                            ? { runId: (runId ?? activeRunIdRef.current) ?? undefined }
+                            : {}),
+                          seq: seq ?? undefined,
+                          at: at ?? new Date().toISOString(),
+                        },
+                      ],
+                )
+              }
+              return
+            }
             if (text.trim()) speechStarted = true
-            segments.onInterimProse(text, at, turnId, messageId, seq)
+            setLiveFocus(null)
+            segments.onInterimProse(text, at, turnId, messageId, seq, runId)
           }),
           onActivity: ownFrame((frame) => {
             handleActivityFrame(frame)
@@ -2252,6 +2427,11 @@ export function AgentThread({
         )
       } else {
         const detail = e instanceof Error ? e.message : t("chat.failed")
+        const checkpoint = e instanceof StreamTurnError ? e.checkpoint : undefined
+        const failedRunId =
+          e instanceof StreamTurnError && e.runId
+            ? e.runId
+            : activeRunIdRef.current ?? undefined
         setMessages((prev) => [
           ...prev,
           {
@@ -2262,7 +2442,10 @@ export function AgentThread({
               e instanceof StreamTurnError
                 ? e.turnId ?? undefined
                 : adoptCurrentTurnId(),
+            ...(failedRunId ? { runId: failedRunId } : {}),
             meta: "error",
+            displayRole: "failure_checkpoint",
+            ...(checkpoint ? { failureCheckpoint: checkpoint } : {}),
             at: new Date().toISOString(),
           },
         ])
@@ -2281,6 +2464,7 @@ export function AgentThread({
         if (abortRef.current === ctrl) {
           abortRef.current = null
           setChatBusy(false)
+          setActiveRunId(null)
         }
         currentTurnRef.current = releaseTurnOwner(currentTurnRef.current, turnOwner)
       }
@@ -2398,6 +2582,16 @@ export function AgentThread({
       ownsTurn() ? adoptCurrentTurnId(serverId) : undefined
     const reconcileTurnRows = (rows: OverlayMessage[]) =>
       ownsTurn() ? reconcileCurrentTurnRows(rows) : rows
+    const answerCtrl = new AbortController()
+    let answerUserStopped = false
+    abortRef.current = answerCtrl
+    activeAnswerStopRef.current = {
+      controller: answerCtrl,
+      turnId: question.turn_id ?? null,
+      markStopped: () => {
+        answerUserStopped = true
+      },
+    }
     setAnswering(true)
     setChatBusy(true)
     setProseActive(false)
@@ -2408,15 +2602,14 @@ export function AgentThread({
     currentActivityRowKeysRef.current = new Set()
     const workRowKeys = currentActivityRowKeysRef.current
     let terminalAtMs: number | null = null
-    const mediaApproval = isMediaApproval(question)
-    if (!mediaApproval) setPendingQuestion(null)
+    setPendingQuestion(null)
     setMessages((prev) => [...prev, {
       id: optimisticId,
       role: "assistant",
       content: "",
       turnId: question.turn_id ?? undefined,
       independentKind: "qa",
-      qa: mediaApproval ? undefined : buildQaBlock(question, displayText, false, group),
+      qa: buildQaBlock(question, displayText, false, group),
       at: new Date().toISOString(),
       clientVisibleAtMs: Date.now(),
     }])
@@ -2446,18 +2639,31 @@ export function AgentThread({
         if (ownsTurn()) settleInterimActivityGate(rowId)
       },
       turnId: () => adoptTurnId(),
+      runId: () => activeRunIdRef.current ?? undefined,
     })
-    // Dead-stream watchdog (the chat turn's machinery twin): answer turns
-    // have no user stop and no reconcile — a silently dead pipe would
-    // otherwise leave chatBusy stuck forever (the now-line shimmering, the
-    // composer dead until refresh). The abort lands in the catch below.
+    // Dead-stream watchdog (the chat turn's machinery twin): bridge watchdog
+    // aborts into answerCtrl so both silence timeouts and explicit user Stop
+    // share one AbortSignal while keeping distinct recovery semantics.
+    const reconcileGen = ++reconcileGenRef.current
+    deadStreamRef.current = false
+    terminalReceivedRef.current = false
+    const answerTurnStartMs = Date.now()
+    turnStartMsRef.current = answerTurnStartMs
+    lastFrameAtRef.current = answerTurnStartMs
     const answerWatchdog = armAnswerWatchdog(
       STREAM_SILENCE_DEAD_MS,
       STREAM_WATCHDOG_TICK_MS,
     )
+    const onWatchdogAbort = () => {
+      deadStreamRef.current = true
+      answerCtrl.abort()
+    }
+    answerWatchdog.signal.addEventListener("abort", onWatchdogAbort, { once: true })
+    let decisionCommitted = false
     const ownFrame = <Args extends unknown[]>(handler: (...args: Args) => void) =>
       (...args: Args) => {
         if (!ownsTurn()) return
+        lastFrameAtRef.current = Date.now()
         answerWatchdog.poke()
         handler(...args)
       }
@@ -2466,29 +2672,69 @@ export function AgentThread({
         answered_question: QuestionMessage
         follow_up: QuestionMessage | null
       }>(question.id, body, {
-        signal: answerWatchdog.signal,
+        signal: answerCtrl.signal,
+        onDecisionCommitted: ownFrame(({ runId, answeredQuestion }) => {
+          decisionCommitted = true
+          if (runId) setActiveRunId(runId)
+          if (body.kind === "group") {
+            clearGroupDraftByDigest(body.group_digest)
+          }
+          const committedRow = buildAnsweredQuestionRow(answeredQuestion)
+          noteObservedSeq(answeredQuestion.seq)
+          if (committedRow) {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === optimisticId
+                  ? {
+                      ...committedRow,
+                      id: answeredQuestion.id,
+                      serverMessageId: answeredQuestion.id,
+                      birthKey: m.birthKey ?? m.id,
+                    }
+                  : m,
+              ),
+            )
+          }
+        }),
         onDelta: ownFrame((text) => {
-          // 出生钉位 lives inside the segments machine: the preview row is
-          // born at the delta's RECEIPT — a hidden tab throttles the
-          // typewriter's timer while a read's row-append lands
-          // synchronously and would otherwise claim the array position
-          // ahead of the speech.
           segments.onDelta(text)
         }),
         onThinking: ownFrame((payload) => {
-          // Same protocol as the sendChat handler above: `"phase" in
-          // payload` = a labelled hand-over or the explicit clear
-          // (phase: null); bare keepalives leave the label untouched.
           if ("phase" in payload) {
             setThinkingPhase(payload.phase ?? null)
           }
         }),
-        // The answer continuation's interim_prose channel (the design beat
-        // rides this path): without it the pre-read speech merged into the
-        // follow-up bubble and the live order contradicted the persisted
-        // one (interim_prose → activity rows → reply).
-        onInterimProse: ownFrame((text, at, turnId, messageId, seq) => {
-          segments.onInterimProse(text, at, turnId, messageId, seq)
+        onInterimProse: ownFrame((text, at, turnId, messageId, seq, runId, displayRole) => {
+          if (displayRole === "rail_note") {
+            noteObservedSeq(seq)
+            if (text.trim()) {
+              setMessages((prev) =>
+                prev.some((m) => m.id === messageId || m.serverMessageId === messageId)
+                  ? prev
+                  : [
+                      ...prev,
+                      {
+                        id: messageId,
+                        serverMessageId: messageId,
+                        birthKey: messageId,
+                        role: "assistant" as const,
+                        content: text,
+                        interim: true,
+                        displayRole: "rail_note" as const,
+                        turnId: turnId ?? adoptTurnId(),
+                        ...(runId ?? activeRunIdRef.current
+                          ? { runId: (runId ?? activeRunIdRef.current) ?? undefined }
+                          : {}),
+                        seq: seq ?? undefined,
+                        at: at ?? new Date().toISOString(),
+                      },
+                    ],
+              )
+            }
+            return
+          }
+          setLiveFocus(null)
+          segments.onInterimProse(text, at, turnId, messageId, seq, runId)
         }),
         onActivity: ownFrame((frame) => {
           handleActivityFrame(frame)
@@ -2504,12 +2750,10 @@ export function AgentThread({
         }),
       })
       if (!ownsTurn()) return
+      terminalReceivedRef.current = true
       terminalAtMs = Date.now()
-      if (mediaApproval) setPendingQuestion(null)
       if (body.kind === "group") {
-        setQuestionGroupDrafts((previous) => Object.fromEntries(
-          Object.entries(previous).filter(([key]) => !key.endsWith(`:${body.group_digest}`)),
-        ))
+        clearGroupDraftByDigest(body.group_digest)
       }
       // Envelope wins (2026-09-06 原地落定，与 sendChat 的 finalizePreview
       // 同一纪律): the optimistic block becomes the real answered row AT
@@ -2590,6 +2834,7 @@ export function AgentThread({
       // rollback + the restored dock below are the recovery, and a retry
       // settles quietly if so (the settled-question codes).
       const aborted = e instanceof DOMException && e.name === "AbortError"
+      const transportError = e instanceof StreamTransportError
       // The stream helper rejects with the server's detail (the JSON path's
       // toast semantics — manual here, apiFetch is not in the loop). flush
       // stops the pacing clock — a lingering tick would re-create the
@@ -2599,56 +2844,151 @@ export function AgentThread({
       segments.flush()
       if (!ownsTurn()) return
       setThinkingPhase(null)
-      settleActivities(aborted ? "cancelled" : "failed") // T16-B: the failed answer leaves nothing spinning
       rollbackCandidateRows()
-      setMessages((prev) =>
-        prev.filter(
-          (m) => m.id !== optimisticId && !isSpeechSegmentRow(m.id, previewId),
-        ),
-      )
-      const settledCode =
-        e instanceof StreamTurnError ? questionSettledCode(e.detail) : null
-      if (settledCode) {
-        // A settled question never re-docks (2026-09-28 — the「点击回答
-        // 仍然报错」loop): the click raced the question's own settlement
-        // (a newer question superseded it / it was answered already), so
-        // the server recorded nothing — the pill stays GONE and a quiet
-        // localized line replaces the raw English error toast.
-        setPendingQuestion(null)
-        toast.info(
-          t(
-            settledCode === "question.superseded"
-              ? "chat.questionOutdated"
-              : "chat.questionAnswered",
+      const committed =
+        decisionCommitted ||
+        (e instanceof StreamTurnError && e.decisionCommitted)
+      const silentBackgroundDetach =
+        !answerUserStopped && committed && (aborted || transportError || deadStreamRef.current)
+      if (!silentBackgroundDetach) {
+        settleActivities(aborted ? "cancelled" : "failed") // T16-B: the failed answer leaves nothing spinning
+      }
+      if (answerUserStopped) {
+        // Explicit user Stop during post-QA continuation: the answer was
+        // already submitted, so keep the QA block in place, drop any empty
+        // preview shell, and reconcile quietly from history without an error
+        // toast or re-docking the answered card.
+        setMessages((prev) =>
+          prev.filter(
+            (m) => !isSpeechSegmentRow(m.id, previewId) || m.content.trim().length > 0,
           ),
         )
-      } else {
-        setPendingQuestion(question)
+        setHistoryAttempt((attempt) => attempt + 1)
+      } else if (silentBackgroundDetach) {
+        // Client HTTP reader detached (tab switch / network blip) AFTER the
+        // decision committed. The server keeps running uninterrupted on
+        // RunEventBus — NEVER render "The operation was aborted." or kill
+        // StepsPlanCard! Hand off quietly to useRunReattach + history sync.
+        setMessages((prev) =>
+          prev
+            .filter(
+              (m) => !isSpeechSegmentRow(m.id, previewId) || m.content.trim().length > 0,
+            )
+            .map((m) =>
+              isSpeechSegmentRow(m.id, previewId) ? { ...m, streaming: false } : m,
+            ),
+        )
+        const resumeTurnId = question.turn_id ?? adoptTurnId() ?? activeRunIdRef.current
+        if (resumeTurnId) setRecoveredJobTurn(resumeTurnId)
+        setHistoryAttempt((attempt) => attempt + 1)
+        void reconcileTurn(answerTurnStartMs, reconcileGen)
+      } else if (committed) {
+        // Two-Phase Decision Commit: the user's QA decision IS committed in DB.
+        // NEVER delete the AnsweredQuestion row or resurrect QuestionDock!
+        // Keep stage notes static, drop only empty preview shells, and land a
+        // durable FailureCheckpointCard in-flow for one-click resume.
         const credits =
           e instanceof StreamTurnError ? asCreditsInsufficient(e.detail) : null
+        const detail = e instanceof Error ? e.message : t("chat.failed")
+        const checkpoint =
+          e instanceof StreamTurnError && e.checkpoint
+            ? e.checkpoint
+            : { retryable: true, decision_committed: true, user_message: detail }
+        const failedRunId =
+          e instanceof StreamTurnError && e.runId
+            ? e.runId
+            : activeRunIdRef.current ?? undefined
+        setMessages((prev) => {
+          const cleaned = prev
+            .filter(
+              (m) => !isSpeechSegmentRow(m.id, previewId) || m.content.trim().length > 0,
+            )
+            .map((m) =>
+              isSpeechSegmentRow(m.id, previewId) ? { ...m, streaming: false } : m,
+            )
+          if (credits) return cleaned
+          const failedMsgId =
+            (e instanceof StreamTurnError && e.messageId) || crypto.randomUUID()
+          if (cleaned.some((m) => m.id === failedMsgId || m.serverMessageId === failedMsgId)) {
+            return cleaned
+          }
+          return [
+            ...cleaned,
+            {
+              id: failedMsgId,
+              serverMessageId:
+                e instanceof StreamTurnError && e.messageId ? e.messageId : undefined,
+              role: "assistant" as const,
+              content: detail,
+              turnId:
+                (e instanceof StreamTurnError && e.turnId) ||
+                question.turn_id ||
+                adoptTurnId(),
+              ...(failedRunId ? { runId: failedRunId } : {}),
+              meta: "error" as const,
+              displayRole: "failure_checkpoint" as const,
+              failureCheckpoint: checkpoint,
+              at: new Date().toISOString(),
+            },
+          ]
+        })
         if (credits) {
           pushCreditsGreyRow(
             credits,
-            e instanceof StreamTurnError ? e.turnId : undefined,
+            e instanceof StreamTurnError ? e.turnId : question.turn_id,
+          )
+        }
+      } else {
+        setMessages((prev) =>
+          prev.filter(
+            (m) => m.id !== optimisticId && !isSpeechSegmentRow(m.id, previewId),
+          ),
+        )
+        const settledCode =
+          e instanceof StreamTurnError ? questionSettledCode(e.detail) : null
+        if (settledCode) {
+          setPendingQuestion(null)
+          toast.info(
+            t(
+              settledCode === "question.superseded"
+                ? "chat.questionOutdated"
+                : "chat.questionAnswered",
+            ),
           )
         } else {
-          // An aborted pipe never toasts the raw DOMException — the
-          // localized failure word + the restored dock say it (retry).
-          toast.error(
-            aborted
-              ? t("chat.failed")
-              : e instanceof Error
-                ? e.message
-                : t("chat.failed"),
-          )
+          setPendingQuestion(question)
+          const credits =
+            e instanceof StreamTurnError ? asCreditsInsufficient(e.detail) : null
+          if (credits) {
+            pushCreditsGreyRow(
+              credits,
+              e instanceof StreamTurnError ? e.turnId : undefined,
+            )
+          } else {
+            toast.error(
+              aborted
+                ? t("chat.failed")
+                : e instanceof Error
+                  ? e.message
+                  : t("chat.failed"),
+            )
+          }
         }
       }
     } finally {
+      answerWatchdog.signal.removeEventListener("abort", onWatchdogAbort)
       answerWatchdog.disarm()
+      if (abortRef.current === answerCtrl) {
+        abortRef.current = null
+      }
+      if (activeAnswerStopRef.current?.controller === answerCtrl) {
+        activeAnswerStopRef.current = null
+      }
       if (ownsTurn()) {
         sealCurrentWorkSegment(workRowKeys, terminalAtMs ?? Date.now())
         setAnswering(false)
         setChatBusy(false)
+        setActiveRunId(null)
         currentTurnRef.current = releaseTurnOwner(currentTurnRef.current, turnOwner)
       }
     }
@@ -2701,9 +3041,7 @@ export function AgentThread({
       const data = (await res.json()) as { answered_question: QuestionMessage }
       setPendingQuestion(null)
       if (groupDigest) {
-        setQuestionGroupDrafts((previous) => Object.fromEntries(
-          Object.entries(previous).filter(([key]) => !key.endsWith(`:${groupDigest}`)),
-        ))
+        clearGroupDraftByDigest(groupDigest)
       }
       // A task_book bail tears the draft graph down server-side — the page
       // morphs back to the chat world (K5 条款: bail 拆图).
@@ -2769,8 +3107,19 @@ export function AgentThread({
     }
     const context = activeChatStopRef.current
     if (!context || context.controller !== controller) {
-      // Answer streams keep their existing abort/answer settlement; the Chat
-      // Stop control protocol must not turn an OPTIONS answer into a prompt.
+      // Answer streams keep their own cancellation settlement; cancel the
+      // detached backend answer task too so Stop truly halts server work.
+      const answerStop = activeAnswerStopRef.current
+      if (answerStop && answerStop.controller === controller) {
+        answerStop.markStopped()
+        if (answerStop.turnId) {
+          void apiFetch(`/api/v1/chat/turns/${answerStop.turnId}/stop`, {
+            method: "POST",
+            body: stopFrontier(answerStop.turnId),
+            toast: false,
+          }).catch(() => {})
+        }
+      }
       controller.abort()
       if (abortRef.current === controller) {
         abortRef.current = null
@@ -2831,6 +3180,22 @@ export function AgentThread({
     // land.
     if ((!text && ready.length === 0) || chatBusy || answering ) return
     if (staged.some((s) => s.status === "uploading")) return
+    // When a single pending question or media approval is docked above the
+    // live composer, plain text sent in the composer settles it directly
+    // (option hit or freeform answer) instead of needing a separate input box.
+    const activeSingleQuestion =
+      pendingQuestion &&
+      dockWorthyQuestion(pendingQuestion) &&
+      !(pendingQuestion.question?.items?.length) &&
+      !messagesRef.current.some((m) => m.qa?.questionId === pendingQuestion.id)
+        ? pendingQuestion
+        : null
+    if (activeSingleQuestion && text && ready.length === 0 && !selectedSkill) {
+      editorRef.current?.clear()
+      scrollerSendRef.current?.()
+      void handleFreeformAnswer(text)
+      return
+    }
     const sentAssets = ready.map((s) => s.asset)
     // The assets state learns the upload at SEND, never at stage (the send
     // gate — 暂存 ≠ 交付, 2026-09-28). The merge arms the processing watch
@@ -2911,6 +3276,11 @@ export function AgentThread({
       ? pendingQuestion
       : null
 
+  useEffect(() => {
+    if (openingHistory === "loading") return
+    setConversationPendingQuestion(projectId, liveConversationKey, Boolean(pillQuestion))
+  }, [openingHistory, projectId, liveConversationKey, pillQuestion])
+
   // The NON-run timeline (ADR-108): every transcript row renders at its array
   // position. Run anchors join this same unit stream in ChatConversation's
   // block projection; no timestamp-based insertion lives here.
@@ -2971,6 +3341,270 @@ export function AgentThread({
     void sendChat(text)
   }
 
+  const handleRetryCheckpoint = useCallback(async () => {
+    const convId = resolvedConversationId ?? conversationId
+    if (!convId || chatBusy || answering) return
+    const ctrl = new AbortController()
+    abortRef.current = ctrl
+    const previewId = crypto.randomUUID()
+    const turnOwner = {
+      localId: previewId,
+      serverId: null as string | null,
+      adoptLocal: false,
+    }
+    currentTurnRef.current = turnOwner
+    const ownsTurn = () => isTurnOwner(currentTurnRef.current, turnOwner)
+    const adoptTurnId = (serverId?: string | null) => {
+      if (serverId) turnOwner.serverId = serverId
+      return turnOwner.serverId ?? serverId ?? undefined
+    }
+    setChatBusy(true)
+    const reconcileGen = ++reconcileGenRef.current
+    deadStreamRef.current = false
+    terminalReceivedRef.current = false
+    const resumeTurnStartMs = Date.now()
+    turnStartMsRef.current = resumeTurnStartMs
+    lastFrameAtRef.current = resumeTurnStartMs
+    setProseActive(false)
+    setThinkingPhase(null)
+    setLiveFocus(null)
+    resetInterimActivityGates()
+    setActivities(resetActivities())
+    currentActivityRowKeysRef.current = new Set()
+    const workRowKeys = currentActivityRowKeysRef.current
+    let terminalAtMs: number | null = null
+    const pokeResume = () => {
+      lastFrameAtRef.current = Date.now()
+    }
+    // Flip any failed step on the latest opening row back to in_progress optimistically
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.role === "user" && m.steps?.some((s) => s.status === "failed")
+          ? {
+              ...m,
+              steps: m.steps.map((s) =>
+                s.status === "failed" ? { ...s, status: "in_progress" as const } : s,
+              ),
+            }
+          : m,
+      ),
+    )
+    const segments = createSpeechSegments({
+      baseId: previewId,
+      apply: (update) => setMessages((prev) => (ownsTurn() ? update(prev) : prev)),
+      setProseActive: (active) => {
+        if (ownsTurn()) setProseActive(active)
+      },
+      onVisible: (rowId, atMs) => {
+        if (ownsTurn()) noteSpeechVisible(rowId, atMs, workRowKeys)
+      },
+      onInterimStart: (rowId) => {
+        if (ownsTurn()) beginInterimActivityGate(rowId)
+      },
+      onInterimSettled: (rowId) => {
+        if (ownsTurn()) settleInterimActivityGate(rowId)
+      },
+      turnId: () => adoptTurnId(),
+      runId: () => activeRunIdRef.current ?? undefined,
+    })
+    try {
+      const data = await streamResume<{
+        conversation_id?: string
+        user_message: QuestionMessage
+        assistant_message: QuestionMessage | null
+      }>(convId, {
+        signal: ctrl.signal,
+        onTurnStarted: (turnId, runId) => {
+          if (!ownsTurn()) return
+          pokeResume()
+          adoptTurnId(turnId)
+          if (runId) setActiveRunId(runId)
+        },
+        onDelta: (text, messageId) => {
+          if (!ownsTurn()) return
+          pokeResume()
+          segments.onDelta(text, messageId)
+        },
+        onThinking: (payload) => {
+          if (!ownsTurn()) return
+          pokeResume()
+          if ("phase" in payload) setThinkingPhase(payload.phase ?? null)
+        },
+        onInterimProse: (text, at, turnId, messageId, seq, runId, displayRole) => {
+          if (!ownsTurn()) return
+          pokeResume()
+          if (displayRole === "rail_note") {
+            noteObservedSeq(seq)
+            if (text.trim()) {
+              setMessages((prev) =>
+                prev.some((m) => m.id === messageId || m.serverMessageId === messageId)
+                  ? prev
+                  : [
+                      ...prev,
+                      {
+                        id: messageId,
+                        serverMessageId: messageId,
+                        birthKey: messageId,
+                        role: "assistant" as const,
+                        content: text,
+                        interim: true,
+                        displayRole: "rail_note" as const,
+                        turnId: turnId ?? adoptTurnId(),
+                        ...(runId ?? activeRunIdRef.current
+                          ? { runId: (runId ?? activeRunIdRef.current) ?? undefined }
+                          : {}),
+                        seq: seq ?? undefined,
+                        at: at ?? new Date().toISOString(),
+                      },
+                    ],
+              )
+            }
+            return
+          }
+          setLiveFocus(null)
+          segments.onInterimProse(text, at, turnId, messageId, seq, runId)
+        },
+        onActivity: (frame) => {
+          if (!ownsTurn()) return
+          pokeResume()
+          handleActivityFrame(frame)
+        },
+        onCandidates: (event) => {
+          if (!ownsTurn()) return
+          pokeResume()
+          handleCandidatesFrame(event)
+        },
+        onRowAppend: (row) => {
+          if (!ownsTurn()) return
+          pokeResume()
+          handleRowAppend(row)
+        },
+        onRowUpdate: (id, frame) => {
+          if (!ownsTurn()) return
+          pokeResume()
+          handleRowUpdate(id, frame)
+        },
+      })
+      if (!ownsTurn()) return
+      terminalReceivedRef.current = true
+      terminalAtMs = Date.now()
+      await segments.drain()
+      if (!ownsTurn()) return
+      setThinkingPhase(null)
+      settleActivities("completed")
+      void fetchAssets()
+      void workbench?.refresh()
+      notifyConversationsChanged(projectId)
+      const message = data.assistant_message
+      if (message) {
+        noteObservedSeq(message.seq)
+        if (!segments.streamedAny && (message.content ?? "").trim()) {
+          segments.push(message.content ?? "")
+          await segments.drain()
+        }
+        if (!ownsTurn()) return
+        setMessages((prev) =>
+          stampMessagePresentation(
+            stampServerMessageId(
+              prev.map((m) =>
+                m.id === previewId
+                  ? {
+                      ...m,
+                      content: message.content ?? m.content,
+                      turnId: adoptTurnId(message.turn_id ?? data.user_message.id),
+                      seq: message.seq ?? m.seq,
+                      streaming: false,
+                      proseDrainedAtMs: m.proseDrainedAtMs ?? Date.now(),
+                    }
+                  : m,
+              ),
+              previewId,
+              message.id,
+            ),
+            previewId,
+            message,
+          ),
+        )
+        await handleAssistantMessage(message, { echoCarried: segments.streamedAny || Boolean((message.content ?? "").trim()) })
+      } else {
+        setMessages((prev) => prev.filter((m) => m.id !== previewId))
+      }
+    } catch (e) {
+      terminalAtMs ??= Date.now()
+      const aborted = e instanceof DOMException && e.name === "AbortError"
+      const transportError = e instanceof StreamTransportError
+      segments.flush()
+      if (!ownsTurn()) return
+      setThinkingPhase(null)
+      if (aborted || transportError || deadStreamRef.current) {
+        // Tab switch or transient disconnect while server keeps executing on
+        // RunEventBus — never show "The operation was aborted."; hand off
+        // silently to background reattach + history reconcile.
+        setMessages((prev) =>
+          prev
+            .filter((m) => !isSpeechSegmentRow(m.id, previewId) || m.content.trim().length > 0)
+            .map((m) => (isSpeechSegmentRow(m.id, previewId) ? { ...m, streaming: false } : m)),
+        )
+        const resumeTurnId = adoptTurnId() ?? activeRunIdRef.current
+        if (resumeTurnId) setRecoveredJobTurn(resumeTurnId)
+        setHistoryAttempt((attempt) => attempt + 1)
+        void reconcileTurn(resumeTurnStartMs, reconcileGen)
+        return
+      }
+      settleActivities("failed")
+      const detail = e instanceof Error ? e.message : t("chat.failed")
+      const checkpoint =
+        e instanceof StreamTurnError && e.checkpoint
+          ? e.checkpoint
+          : { retryable: true, decision_committed: true, user_message: detail }
+      setMessages((prev) => [
+        ...prev
+          .filter((m) => !isSpeechSegmentRow(m.id, previewId) || m.content.trim().length > 0)
+          .map((m) => (isSpeechSegmentRow(m.id, previewId) ? { ...m, streaming: false } : m)),
+        {
+          id: (e instanceof StreamTurnError && e.messageId) || crypto.randomUUID(),
+          role: "assistant" as const,
+          content: detail,
+          turnId: (e instanceof StreamTurnError && e.turnId) || adoptTurnId(),
+          ...(activeRunIdRef.current ? { runId: activeRunIdRef.current } : {}),
+          meta: "error" as const,
+          displayRole: "failure_checkpoint" as const,
+          failureCheckpoint: checkpoint,
+          at: new Date().toISOString(),
+        },
+      ])
+    } finally {
+      if (abortRef.current === ctrl) abortRef.current = null
+      if (ownsTurn()) {
+        sealCurrentWorkSegment(workRowKeys, terminalAtMs ?? Date.now())
+        setChatBusy(false)
+        setActiveRunId(null)
+        currentTurnRef.current = releaseTurnOwner(currentTurnRef.current, turnOwner)
+      }
+    }
+  }, [
+    answering,
+    beginInterimActivityGate,
+    chatBusy,
+    conversationId,
+    fetchAssets,
+    handleActivityFrame,
+    handleCandidatesFrame,
+    handleRowAppend,
+    handleRowUpdate,
+    noteObservedSeq,
+    noteSpeechVisible,
+    projectId,
+    resetInterimActivityGates,
+    resolvedConversationId,
+    sealCurrentWorkSegment,
+    setActiveRunId,
+    settleActivities,
+    settleInterimActivityGate,
+    t,
+    workbench,
+  ])
+
   const canStop = (chatBusy && abortRef.current !== null) || recoveredJobTurn !== null
   const chatScroller = (
     <ChatConversation
@@ -2994,23 +3628,12 @@ export function AgentThread({
       nowRow={nowRow}
       bottomNowRow={bottomNowRow}
       activeTurnId={adoptCurrentTurnId() ?? null}
+      activeRunId={activeRunId}
+      onRetryCheckpoint={handleRetryCheckpoint}
       scrollerSendRef={scrollerSendRef}
     />
   )
 
-  // The question docks render as chromeless content (plain) — the floating
-  // question pill in the bottom row owns the frost and rounding (2026-09-02
-  // 拆粘: they used to be square children of the ONE frosted container).
-  // 形态律 (ADR-053 R1, 阻塞形态 2026-09-04 翻回): while an OPTIONS question
-  // is pending the dock MORPHS — the input row and the disclaimer hide, and
-  // the pill (its options + the pencil freeform row) owns the bottom row
-  // (FLORA/Opus 同款). A text question never docks (plain flow speech,
-  // input live); the task-book pill stays non-blocking.
-  // Phase 3 Batch B: the retired `phase !== "confirm"` conjunct was
-  // defensive-only — an options question never coexists with a parked
-  // task_book server-side (判词⑦ 扩座: an ask while a question is pending
-  // is an interjection, never a new dock), and pillQuestion's kind filter
-  // already excludes task_book rows. No replacement guard.
   const pillDock =
     pillQuestion ? (
       <QuestionDock
@@ -3023,8 +3646,7 @@ export function AgentThread({
         groupDigest={pillQuestion.question?.group_digest ?? null}
         groupAnswers={groupDraftAnswers(pillQuestion)}
         onGroupAnswersChange={(answers) => {
-          const key = groupDraftKey(pillQuestion)
-          setQuestionGroupDrafts((previous) => ({ ...previous, [key]: answers }))
+          setGroupDraftAnswers(pillQuestion, answers)
         }}
         onGroupSubmit={handleGroupSubmit}
         recommendedId={pillQuestion.question?.recommended_id ?? null}
@@ -3032,7 +3654,6 @@ export function AgentThread({
         answering={answering}
         onBail={handleBailQuestion}
         bailLabel={t("questionDock.skip")}
-        onFreeform={handleFreeformAnswer}
         freeformDisabled={chatBusy}
       />
     ) : null
@@ -3149,21 +3770,24 @@ export function AgentThread({
     <div ref={chatContainerRef} tabIndex={-1} className="ui-th-body" data-slot="agent-thread">
       <div className="min-h-0 flex-1">
             {openingHistory === "failed" && <Button variant="secondary" size="sm" onClick={() => setHistoryAttempt((n) => n + 1)}>{t("common.retryHistory")}</Button>}
-        {chatScroller}
+        {openingHistory === "loading" && messages.length === 0 && !chatBusy && !firstMessage ? (
+          <ThreadLoadingSkeleton label={t("common.loading")} />
+        ) : (
+          chatScroller
+        )}
       </div>
-      <div className={cn("mx-auto w-full shrink-0 px-4 pb-4 pt-2", pillDock ? "max-w-3xl" : "max-w-2xl")}>
-          {pillDock && <div className="mb-2 max-h-[55dvh] overflow-y-auto">{pillDock}</div>}
+      <div className="mx-auto w-full max-w-3xl shrink-0 px-4 pb-4 pt-2 md:px-6">
+          {pillDock && <div className="-mx-1 mb-2 max-h-[55dvh] overflow-y-auto px-1 pt-1">{pillDock}</div>}
           <AsyncJobStrip />
           <Card
             data-slot="chat-composer"
             className={cn(
-              "relative w-full rounded-[22px] border border-border bg-card shadow-sm",
+              "relative w-full rounded-[22px] bg-card",
               fileDragging && "outline-2 outline-dashed outline-ring",
             )}
             style={{
               ["--ui-crdc-radius" as string]: "22px",
               ["--ui-crdc-pad" as string]: "12px 14px",
-              ...(pillDock ? { display: "none" } : {}),
             }}
             {...fileDropProps}
           >

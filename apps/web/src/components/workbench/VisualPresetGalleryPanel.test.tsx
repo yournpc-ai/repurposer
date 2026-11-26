@@ -7,7 +7,10 @@ import { createI18n } from "@/lib/i18n"
 import VisualPresetGalleryPanel from "./VisualPresetGalleryPanel"
 
 const { cite, play } = vi.hoisted(() => ({ cite: vi.fn(() => true), play: vi.fn() }))
-vi.mock("./WorkbenchContext", () => ({ useWorkbench: () => ({ citeText: cite }) }))
+vi.mock("./WorkbenchContext", () => ({
+  useWorkbench: () => ({ citeText: cite }),
+  useOptionalWorkbench: () => ({ citeText: cite }),
+}))
 vi.mock("@/lib/api", () => ({ apiFetch: vi.fn() }))
 vi.mock("motion/react", () => ({ useReducedMotion: () => false }))
 vi.mock("@/components/chat/video/MotionPresetPlayer", () => ({

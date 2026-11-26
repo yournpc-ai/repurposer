@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useState } from "react"
-import { Maximize2 } from "lucide-react"
+import { Maximize2 } from "@/components/ui/icons"
 
 import { useTranslation } from "react-i18next"
 

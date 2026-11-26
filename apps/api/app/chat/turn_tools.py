@@ -264,6 +264,7 @@ def _video_material_tools() -> list[ChatTool]:
         ChatTool(
             name="analyze_brand",
             terminal=False,
+            batchable=True,
             description="读取当前网站已固定的可引用原文及实际采集的 PNG，在待处理的 CreativeState 中保存带来源引用的 BrandProfile。这是证据准备，不启动付费媒体 Run。视觉推断保留 inferred 标记；失败时不保存档案。",
             params_model=AnalyzeBrandArgs,
             presentation=ToolPresentation(
@@ -320,12 +321,28 @@ def _explicit_constraint_wire(
 
 
 
+_CATALOG_TOOL_KEYS: dict[str, tuple[str, str]] = {
+    "get_music": ("chat.inspecting.music", "chat.inspectingDone.music"),
+    "get_voices": ("chat.inspecting.voices", "chat.inspectingDone.voices"),
+    "search_blocks": ("chat.activity.searchBlocks", "chat.activity.searchBlocksDone"),
+    "get_blocks": ("chat.activity.getBlocks", "chat.activity.getBlocksDone"),
+    "search_text_presets": ("chat.activity.searchTextPresets", "chat.activity.searchTextPresetsDone"),
+    "get_text_presets": ("chat.activity.getTextPresets", "chat.activity.getTextPresetsDone"),
+    "search_sfx_library": ("chat.activity.searchSfxLibrary", "chat.activity.searchSfxLibraryDone"),
+    "get_sfx": ("chat.activity.getSfx", "chat.activity.getSfxDone"),
+}
+
+
 def _video_project_tools() -> list[ChatTool]:
     return [
         *(ChatTool(name=name, params_model=model, terminal=False, batchable=True,
                    description=(f"Find {kind} outlines in the permanent catalog." if name.startswith("search")
                                 else f"Read complete parameters for up to eight selected {kind} IDs."),
-                   presentation=NATIVE_PRESENTATION)
+                   presentation=ToolPresentation(
+                       kind="read",
+                       active_key=_CATALOG_TOOL_KEYS[name][0],
+                       done_key=_CATALOG_TOOL_KEYS[name][1],
+                   ) if name in _CATALOG_TOOL_KEYS else NATIVE_PRESENTATION)
           for name,(kind,model) in CATALOG_TOOLS.items()),
         _LOAD_SKILL_TOOL,
         *_skill_authoring_read_tools(),

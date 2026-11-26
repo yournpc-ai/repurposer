@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react"
 import { motion, useMotionValueEvent, useScroll } from "motion/react"
-import { ArrowDown, ArrowUp, FileText, Plus } from "lucide-react"
+import { ArrowDown, ArrowUp, FileText, Plus } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 import { Badge } from "@/components/ui/badge-clean"
 import { LANDING_GALLERY } from "./content"

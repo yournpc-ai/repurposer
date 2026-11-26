@@ -1,5 +1,5 @@
 import { useId, useEffect, useState } from "react"
-import { SlidersHorizontal } from "lucide-react"
+import { SlidersHorizontal } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 

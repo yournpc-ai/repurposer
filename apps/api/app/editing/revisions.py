@@ -2008,7 +2008,7 @@ def edit_text_ops(
         if (
             not clear_background
             and background is not None
-            and background_mode is None
+            and (background_mode is None or (scope == "all_derived_captions" and background_mode == "box"))
             and new_style.background_mode == "box"
             and (track.role == "caption" or obj.caption is not None or obj.style.background_mode == "box")
         ):

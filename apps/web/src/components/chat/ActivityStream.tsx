@@ -2,7 +2,7 @@
 import { lazy, Suspense, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
-import { ChevronRight, Film, TriangleAlert } from "lucide-react"
+import { AlertCircle, CheckCircle2, ChevronRight, Circle, Film, MinusCircle, Play, TriangleAlert, Video } from "@/components/ui/icons"
 
 import type {
   ActivityReceipt,
@@ -24,9 +24,13 @@ import type {
 } from "./timeline/types"
 import { activityCategoryKey, activityFailureKey } from "./timeline/activity"
 import { formatElapsed } from "@/components/chat/workTiming"
+import { OutputPosterImage } from "@/components/chat/OutputDeliveryCard"
 import { useMessageScrollerViewportAnchor } from "@/components/chat/MessageScroller"
 import { Button } from "@/components/ui/button-clean"
+import { Card } from "@/components/ui/card-clean"
 import { ThinkingState, type ThinkingTrailStep } from "@/components/ui/thinking-state-clean"
+import { outputAspect } from "@/lib/outputAspect"
+import type { Output } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
 const LazySlotPreviewDialog = lazy(() =>
@@ -149,11 +153,16 @@ export function activityText(activity: NowRowPayload, t: TFunction): string {
   const { status } = activity
   if (activity.jobReceipt) {
     const jobState = jobStatus(activity.jobReceipt)
-    if (jobState !== "running" && jobState !== "success" && jobState !== "outputGenerated") {
+    if (
+      jobState !== "running" &&
+      jobState !== "accepted" &&
+      jobState !== "queued" &&
+      jobState !== "success" &&
+      jobState !== "outputGenerated"
+    ) {
       return t(`agentReceipt.${jobState}`)
     }
   }
-  if (activity.call_state === "queued") return t("agentReceipt.queued")
   if ((status === "active" || status === "completed") && activity.detail) {
     const semantic = semanticActivityLabel(activity.detail, status === "completed", t)
     if (semantic) return semantic
@@ -522,20 +531,52 @@ function jobStatus(job: NativeJobReceipt): ToolCallStatus {
   return callStatuses[job.status] ?? "unknown"
 }
 
-function JobDetails({ job, onOpen }: { job: NativeJobReceipt; onOpen?: (id: string) => void }) {
+function JobDetails({
+  job,
+  outputs,
+  onOpen,
+}: {
+  job: NativeJobReceipt
+  outputs?: Output[]
+  onOpen?: (id: string) => void
+}) {
   const { t } = useTranslation()
-  const output = job.outputId
+  const outputId = job.outputId
+  const matchedOutput = outputId ? outputs?.find((item) => item.id === outputId) : undefined
+  const showThumb = Boolean(outputId && job.role === "export" && job.status === "available" && onOpen)
+  const aspect = matchedOutput ? outputAspect(matchedOutput) : 16 / 9
+  const portrait = aspect < 1
+  if (!job.error && !showThumb) return null
   return (
-    <>
-      {job.error && <p>{job.error}</p>}
-      {job.chargedCredits !== undefined && <p>{t("agentReceipt.chargedCredits", { count: job.chargedCredits })}</p>}
-      {job.reservedCredits !== undefined && job.reservedCredits > 0 && (
-        <p>{t("agentReceipt.reservedCredits", { count: job.reservedCredits })}</p>
+    <div className="mt-1.5 flex flex-col gap-1.5">
+      {job.error && <p className="text-xs text-muted-foreground">{job.error}</p>}
+      {showThumb && outputId && onOpen && (
+        <button
+          type="button"
+          aria-label={t("common.preview")}
+          onClick={() => onOpen(outputId)}
+          className={
+            portrait
+              ? "group relative block h-28 w-fit overflow-hidden rounded-md border border-border bg-muted text-left transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-ring"
+              : "group relative block w-36 overflow-hidden rounded-md border border-border bg-muted text-left transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-ring"
+          }
+          style={{ aspectRatio: aspect }}
+        >
+          {matchedOutput ? (
+            <OutputPosterImage output={matchedOutput} />
+          ) : (
+            <span className="flex h-full w-full items-center justify-center text-muted-foreground">
+              <Video className="size-4" />
+            </span>
+          )}
+          <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/20 opacity-85 transition-opacity group-hover:opacity-100">
+            <span className="flex size-7 items-center justify-center rounded-full bg-background/90 text-foreground shadow-sm">
+              <Play className="ml-0.5 size-3.5 fill-current" />
+            </span>
+          </span>
+        </button>
       )}
-      {output && job.role === "export" && job.status === "available" && onOpen && (
-        <Button size="sm" variant="secondary" onClick={() => onOpen(output)}>{t("common.preview")}</Button>
-      )}
-    </>
+    </div>
   )
 }
 
@@ -582,9 +623,23 @@ export const TOOL_ACTIONS: Readonly<Record<string, string>> = {
   prepare_video_materials: "videoMaterials",
   capture_web: "videoCapturePlan",
   analyze_brand: "brandAnalyze",
+  search_web: "webSearch",
+  get_web_page: "viewWebPage",
+  load_skill: "skillRead",
+  search_blocks: "searchBlocks",
+  get_blocks: "getBlocks",
+  search_text_presets: "searchTextPresets",
+  get_text_presets: "getTextPresets",
+  search_sfx_library: "searchSfxLibrary",
+  get_sfx: "getSfx",
+  get_music: "getMusic",
+  get_voices: "getVoices",
   search_music: "musicSearch",
   show_music_candidates: "musicSearch",
   select_music: "musicSelection",
+  search_voices: "voiceSearch",
+  show_voice_candidates: "voiceSearch",
+  select_voice: "voiceSelection",
   list_project_media: "listProjectMedia",
   get_asset: "inspectAsset",
   get_understanding: "inspectUnderstanding",
@@ -610,7 +665,21 @@ function CollapsibleReceipt({ receipt }: { receipt: ActivityReceipt }) {
   )
 }
 
-function trailStep(entry: WorkTrailEntry, live: boolean, t: TFunction, onOpen?: (id: string) => void): ThinkingTrailStep {
+const INTERNAL_SCHEMA_ERROR_RE =
+  /Invalid\s+\w+\s+props|Check\s+get_\w+|Field\s+required|Extra\s+inputs\s+are\s+not\s+permitted|Input\s+should\s+be|String\s+should\s+have|ValidationError|Include\s+the\s+complete\s+transition|Unknown\s+block_id|candidate_id|content_digest|base_version_id|already has these prop values/i
+
+function visibleActivityError(error: string | undefined): string | undefined {
+  if (!error) return undefined
+  return INTERNAL_SCHEMA_ERROR_RE.test(error) ? undefined : error
+}
+
+function trailStep(
+  entry: WorkTrailEntry,
+  live: boolean,
+  t: TFunction,
+  onOpen?: (id: string) => void,
+  outputs?: Output[],
+): ThinkingTrailStep {
   if (entry.kind === "note") return { id: entry.rowKey, kind: "note", label: entry.text, status: "done" }
   const row = entry.activity
   const job = row.jobReceipt
@@ -641,16 +710,27 @@ function trailStep(entry: WorkTrailEntry, live: boolean, t: TFunction, onOpen?: 
   if (success && receipt?.kind === "video_revision") statusMeta = t("agentReceipt.versionSaved")
   else if (status === "running" && !live) statusMeta = t("agentReceipt.unsettled")
   else if (status !== "success" && !running && !(failed && !tool && !job)) statusMeta = t(`agentReceipt.${status}`)
+  const creditsMeta =
+    job?.chargedCredits !== undefined
+      ? t("agentReceipt.chargedCredits", { count: job.chargedCredits })
+      : job?.reservedCredits !== undefined && job.reservedCredits > 0
+        ? t("agentReceipt.reservedCredits", { count: job.reservedCredits })
+        : undefined
   const duration = row.duration_ms != null ? formatElapsed(row.duration_ms) : undefined
-  const hasDetail = Boolean((row.error && row.error !== job?.error) || job || receipt)
+  const cleanError = visibleActivityError(row.error)
+  const hasJobMedia = Boolean(
+    job &&
+    (job.error || (job.outputId && job.role === "export" && job.status === "available" && onOpen)),
+  )
+  const hasDetail = Boolean((cleanError && cleanError !== job?.error) || hasJobMedia || receipt)
   return {
-    id: entry.rowKey, label, chips, meta: [statusMeta, duration].filter(Boolean).join(" · "),
-    kind: failed ? "error" : row.assetType === "web_page" || row.key?.includes("viewWebPage") || tool === "capture_web" ? "web" : "step",
+    id: entry.rowKey, label, chips, meta: [statusMeta, creditsMeta, duration].filter(Boolean).join(" · "),
+    kind: failed ? "error" : row.assetType === "web_page" || row.key?.includes("viewWebPage") || tool === "capture_web" || tool === "search_web" || tool === "get_web_page" ? "web" : "step",
     status: failed ? "error" : running ? "running" : "done",
     detail: hasDetail ? (
       <>
-        {row.error && row.error !== job?.error && <p>{row.error}</p>}
-        {job && <JobDetails job={job} onOpen={onOpen} />}
+        {cleanError && cleanError !== job?.error && <p className="text-xs text-muted-foreground">{cleanError}</p>}
+        {hasJobMedia && job && <JobDetails job={job} outputs={outputs} onOpen={onOpen} />}
         {receipt && (
           receipt.kind === "skill_saved"
             ? <SkillSavedEvidence receipt={receipt} />
@@ -661,8 +741,71 @@ function trailStep(entry: WorkTrailEntry, live: boolean, t: TFunction, onOpen?: 
   }
 }
 
+export function StepsPlanCard({ steps }: { steps: StepPlanItem[] }) {
+  const { t } = useTranslation()
+  if (!steps.length) return null
+  return (
+    <Card
+      as="section"
+      data-testid="steps-plan-card"
+      className="w-full"
+      style={{
+        ["--ui-crdc-pad" as string]: "12px 14px",
+        ["--ui-crdc-radius" as string]: "12px",
+      }}
+    >
+      <ul
+        className="flex flex-col gap-2"
+        aria-label={t("chat.steps.ariaLabel")}
+      >
+        {steps.map((item, idx) => (
+          <li
+            key={`${idx}:${item.title}`}
+            data-status={item.status}
+            className="flex items-center gap-2.5 text-[13px] leading-5"
+          >
+            <span className="flex size-4 shrink-0 items-center justify-center" aria-hidden="true">
+              {item.status === "done" ? (
+                <CheckCircle2 className="size-3.5 text-muted-foreground/75" />
+              ) : item.status === "in_progress" ? (
+                <span className="ui-conv-dots">
+                  <i className="bg-foreground/85" style={{ animationDelay: "0ms" }} />
+                  <i className="bg-foreground/85" style={{ animationDelay: "180ms" }} />
+                  <i className="bg-foreground/85" style={{ animationDelay: "180ms" }} />
+                  <i className="bg-foreground/85" style={{ animationDelay: "360ms" }} />
+                </span>
+              ) : item.status === "failed" ? (
+                <AlertCircle className="size-3.5 text-destructive" />
+              ) : item.status === "skipped" ? (
+                <MinusCircle className="size-3.5 text-muted-foreground/55" />
+              ) : (
+                <Circle className="size-3.5 text-muted-foreground/35" />
+              )}
+            </span>
+            <span
+              dir="auto"
+              className={cn(
+                "min-w-0 flex-1 break-words",
+                item.status === "in_progress"
+                  ? "font-medium text-foreground"
+                  : item.status === "failed"
+                    ? "text-destructive"
+                    : item.status === "skipped"
+                      ? "text-muted-foreground/65 line-through"
+                      : "text-muted-foreground",
+              )}
+            >
+              {item.title}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </Card>
+  )
+}
+
 export function WorkSegmentRow({
-  trail = [], elapsedMs, startedAtMs, liveLabel, postToolThinking, failure, onOpen, stepsPlan,
+  trail = [], elapsedMs, startedAtMs, liveLabel, postToolThinking, failure, recovered = false, onOpen, outputs, stepsPlan, attachedSteps,
 }: {
   trail?: WorkTrailEntry[]
   elapsedMs?: number | null
@@ -670,8 +813,14 @@ export function WorkSegmentRow({
   liveLabel?: string | null
   postToolThinking?: { label: string; startedAtMs: number | null } | null
   failure?: ActivityRowFrame | null
+  /** True when later steps in the same turn continued past this fold. */
+  recovered?: boolean
   onOpen?: (id: string) => void
+  outputs?: Output[]
   stepsPlan?: StepPlanItem[]
+  /** Standalone macro step plan paired with this work segment: open above while
+   * live/in-progress, collapsed to a compact toggle pill beside "Worked for …" once settled. */
+  attachedSteps?: StepPlanItem[]
 }) {
   const { t } = useTranslation()
   const live = liveLabel != null
@@ -679,8 +828,55 @@ export function WorkSegmentRow({
   const anchor = useMessageScrollerViewportAnchor(rowRef, live)
   let error: ThinkingTrailStep | undefined
   let group: string | undefined
-  const steps = trail.map(entry => {
-    const step = trailStep(entry, live, t, onOpen)
+  const succeededTools = new Set<string>()
+  for (const entry of trail) {
+    if (
+      entry.kind === "activity" &&
+      entry.activity.tool_name &&
+      entry.activity.status === "completed"
+    ) {
+      succeededTools.add(entry.activity.tool_name)
+    }
+  }
+  const filteredTrail = trail.filter((entry) => {
+    if (entry.kind !== "activity") return true
+    const { status, call_state, tool_name, error: rawError, key, kind } = entry.activity
+    // Synthetic non-tool repair/exhaustion markers ("这次没能完成 · 0s") belong
+    // to the assistant's own status reply, never inside the tool work trail.
+    if (!tool_name && (kind === "repair" || key === "chat.activity.repair")) {
+      return false
+    }
+    // Hide self-healed internal schema validation retries and non-batchable
+    // sibling skips once the same tool runs or succeeds in the segment.
+    if (
+      call_state === "not_executed" &&
+      !entry.activity.jobReceipt &&
+      (tool_name === "ask_user" ||
+        tool_name === "answer" ||
+        (tool_name &&
+          trail.some(
+            (other) =>
+              other !== entry &&
+              other.kind === "activity" &&
+              other.activity.tool_name === tool_name &&
+              other.activity.group_id !== entry.activity.group_id &&
+              (other.activity.status === "completed" || other.activity.status === "active"),
+          )))
+    ) {
+      return false
+    }
+    if (
+      status === "failed" &&
+      tool_name &&
+      succeededTools.has(tool_name) &&
+      (!rawError || INTERNAL_SCHEMA_ERROR_RE.test(rawError))
+    ) {
+      return false
+    }
+    return true
+  })
+  const steps = filteredTrail.map(entry => {
+    const step = trailStep(entry, live, t, onOpen, outputs)
     if (entry.kind === "activity" && (entry.activity.status !== "cancelled" || step.kind === "error")) {
       // Keep failures in the final batch visible. A later successful call
       // leaves earlier errors inspectable inside the completed trail.
@@ -699,26 +895,69 @@ export function WorkSegmentRow({
       startedAtMs: postToolThinking.startedAtMs,
     })
   }
-  if (failure) {
+  if (failure && !(!failure.tool_name && (failure.kind === "repair" || failure.key === "chat.activity.repair"))) {
     error = trailStep({ kind: "activity", activity: failure, rowKey: failure.activity_id }, false, t, onOpen)
     steps.push(error)
   }
   const elapsed = elapsedMs != null ? formatElapsed(elapsedMs) : null
-  const header = liveLabel ?? (error
+  const header = liveLabel ?? (error && !recovered
     ? [error.label, error.meta].filter(Boolean).join(" · ")
     : elapsed ? t("chat.activityFold.worked", { elapsed }) : t("chat.activityFold.workedWithoutTime"))
   const [override, setOverride] = useState<{ live: boolean; open: boolean } | null>(null)
   if (override && override.live !== live) setOverride(null)
-  const open = override?.live === live ? override.open : live
+  // All status rows default collapsed (both live and settled); users can click
+  // any row to inspect its underlying tool trail on demand. While live and
+  // collapsed, surface the latest stage notes as a clean narrative brief stream
+  // that automatically folds away into the single "Worked for …" row on finish.
+  const open = override?.live === live ? override.open : false
+  const hasAttachedSteps = Boolean(attachedSteps && attachedSteps.length >= 2)
+  const attachedStepsSettled =
+    hasAttachedSteps &&
+    !live &&
+    !attachedSteps!.some((s) => s.status === "in_progress" || s.status === "failed")
+  const [stepsExpanded, setStepsExpanded] = useState(false)
   const doneStepsCount = stepsPlan?.filter((s) => s.status === "done").length ?? 0
   const stepsProgressLabel =
     stepsPlan && stepsPlan.length > 0
       ? t("chat.activityFold.stepsProgress", { done: doneStepsCount, total: stepsPlan.length })
       : undefined
+  const doneAttachedCount = attachedSteps?.filter((s) => s.status === "done").length ?? 0
+  const attachedStepsPill =
+    attachedStepsSettled && attachedSteps ? (
+      <button
+        type="button"
+        data-testid="steps-toggle-pill"
+        aria-expanded={stepsExpanded}
+        onClick={() => {
+          anchor(rowRef.current)
+          setStepsExpanded((current) => !current)
+        }}
+        className={cn(
+          "inline-flex h-6 shrink-0 items-center gap-1.5 rounded-md border px-2 text-xs font-medium tabular-nums transition-colors outline-none focus-visible:bg-accent/60",
+          stepsExpanded
+            ? "border-border-strong bg-muted/70 text-foreground"
+            : "border-border bg-transparent text-muted-foreground hover:border-border-strong hover:bg-muted/40 hover:text-foreground",
+        )}
+      >
+        <Circle className="size-3 shrink-0 stroke-[2]" aria-hidden="true" />
+        <span>
+          {t("chat.activityFold.stepsProgress", {
+            done: doneAttachedCount,
+            total: attachedSteps.length,
+          })}
+        </span>
+      </button>
+    ) : undefined
   return (
     <div ref={rowRef}>
+      {hasAttachedSteps && !attachedStepsSettled && attachedSteps ? (
+        <div className="mb-2.5">
+          <StepsPlanCard steps={attachedSteps} />
+        </div>
+      ) : null}
       <ThinkingState steps={steps} live={live} headerLabel={header} startedAtMs={startedAtMs}
         open={open}
+        headerTrailing={attachedStepsPill}
         stepsPlan={stepsPlan}
         stepsProgressLabel={stepsProgressLabel}
         stepsAriaLabel={t("chat.steps.ariaLabel")}
@@ -727,6 +966,11 @@ export function WorkSegmentRow({
           setOverride({ live, open: nextOpen })
         }}
       />
+      {attachedStepsSettled && stepsExpanded && attachedSteps ? (
+        <div className="mt-2">
+          <StepsPlanCard steps={attachedSteps} />
+        </div>
+      ) : null}
     </div>
   )
 }

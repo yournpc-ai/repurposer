@@ -1,11 +1,24 @@
 "use client"
 
 import { useId } from "react"
+import { X } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 import { Button } from "./button-clean"
+import { IconButton } from "./icon-button-clean"
 
 /** Controlled projection of one server authorization. Amounts include their currency or credit unit. */
-export function ApprovalCard({ title, quote, limit, approveLabel, declineLabel, status, submitting, onDecision }: {
+export function ApprovalCard({
+  title,
+  quote,
+  limit,
+  approveLabel,
+  declineLabel,
+  status,
+  submitting,
+  onDecision,
+  onDismiss,
+  dismissLabel,
+}: {
   title: string
   quote?: string
   limit?: string
@@ -14,6 +27,8 @@ export function ApprovalCard({ title, quote, limit, approveLabel, declineLabel, 
   status: "pending" | "approved" | "denied"
   submitting: boolean
   onDecision: (approve: boolean) => void
+  onDismiss?: () => void
+  dismissLabel?: string
 }) {
   const { t } = useTranslation()
   const titleId = useId()
@@ -22,8 +37,20 @@ export function ApprovalCard({ title, quote, limit, approveLabel, declineLabel, 
       <style href="ui-approval-card-clean" precedence="default">{css}</style>
       <div className="ui-apc__pending">
         <div className="ui-apc__card">
-          <h3 className="ui-apc__title" id={titleId}>{title}</h3>
-          <p className="ui-apc__desc" role="status">{t(`agentReceipt.${status}`)}</p>
+          <div className="ui-apc__head">
+            <h3 className="ui-apc__title" id={titleId}>{title}</h3>
+            {status === "pending" && onDismiss ? (
+              <IconButton
+                icon={<X />}
+                label={dismissLabel ?? t("questionDock.bail")}
+                disabled={submitting}
+                onClick={onDismiss}
+              />
+            ) : null}
+          </div>
+          {status !== "pending" ? (
+            <p className="ui-apc__desc" role="status">{t(`agentReceipt.${status}`)}</p>
+          ) : null}
           {(quote || limit) && <div className="ui-apc__preview">
             <dl className="ui-apc__details">
               {quote && <div className="ui-apc__detail"><dt>{t("agentReceipt.quote")}</dt><dd>{quote}</dd></div>}
@@ -31,6 +58,7 @@ export function ApprovalCard({ title, quote, limit, approveLabel, declineLabel, 
             </dl>
           </div>}
           {status === "pending" && <div className="ui-apc__foot">
+            <p className="ui-apc__desc ui-apc__desc--foot" role="status">{t(`agentReceipt.${status}`)}</p>
             <div className="ui-apc__actions">
               <Button disabled={submitting} variant="secondary" onClick={() => onDecision(false)}>{declineLabel ?? t("agentReceipt.decline")}</Button>
               <Button disabled={submitting} onClick={() => onDecision(true)}>{approveLabel ?? t("agentReceipt.approve")}</Button>
@@ -106,7 +134,16 @@ const css = /* css */ `
   box-shadow: var(--aui-shadow-card, 0 0 0 1px var(--ui-apc-line), 0 1px 2px rgba(0, 0, 0, 0.04));
 }
 .ui-apc__pending > .ui-apc__card {
-  padding: 16px;
+  padding: 14px 16px;
+}
+.ui-apc__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.ui-apc__head > .ui-apc__title {
+  flex: 1;
+  min-width: 0;
 }
 .ui-apc[data-busy] .ui-apc__pending {
   pointer-events: none;
@@ -115,8 +152,8 @@ const css = /* css */ `
   margin: 0;
   overflow: hidden;
   color: var(--ui-apc-ink);
-  font-size: 14px;
-  font-weight: 550;
+  font-size: 13.5px;
+  font-weight: 500;
   line-height: 20px;
   letter-spacing: -0.011em;
   text-align: start;
@@ -124,13 +161,17 @@ const css = /* css */ `
   overflow-wrap: anywhere;
 }
 .ui-apc__desc {
-  margin: 1px 0 0;
+  margin: 4px 0 0;
   overflow: hidden;
-  font-size: 13px;
+  font-size: 12.5px;
   line-height: 18px;
+  color: var(--ui-apc-muted);
   text-align: start;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+.ui-apc__desc--foot {
+  margin: 0;
 }
 .ui-apc__preview {
   display: grid;
@@ -166,15 +207,15 @@ const css = /* css */ `
   text-align: start;
   overflow-wrap: anywhere;
 }
-.ui-apc[data-actions="card"] { padding: 0; border-radius: calc(var(--aui-radius-lg, 10px) + 6px); background: transparent; }
-.ui-apc[data-actions="card"] .ui-apc__card { box-shadow: inset 0 0 0 1px var(--ui-apc-line); }
-.ui-apc__card > .ui-apc__foot { min-height: 0; margin-top: 16px; padding: 14px 0 0; border-top: 1px solid var(--ui-apc-line); }
+.ui-apc[data-actions="card"] { padding: 0; border-radius: 18px; background: transparent; }
+.ui-apc[data-actions="card"] .ui-apc__card { border-radius: 18px; background: var(--card, var(--ui-apc-bg)); box-shadow: inset 0 0 0 1px var(--border, var(--ui-apc-line)); }
+.ui-apc__card > .ui-apc__foot { min-height: 0; margin-top: 12px; padding: 10px 0 0; border-top: 1px solid var(--border, var(--ui-apc-line)); }
 .ui-apc__foot {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px 12px;
-  min-height: 44px;
+  gap: 8px 12px;
+  min-height: 36px;
   padding: 6px 2px 2px 10px;
 }
 .ui-apc__actions {

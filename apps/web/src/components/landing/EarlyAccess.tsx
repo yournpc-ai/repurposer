@@ -18,7 +18,7 @@ export function EarlyAccess() {
           {t("landing.earlyAccess.description")}
         </p>
         <div className="mt-8 sm:mt-10">
-          <Button size="lg" className="w-full rounded-full px-8 text-sm font-normal sm:w-auto sm:text-base" onClick={() => create()}>
+          <Button size="lg" className="landing-cta w-full sm:w-auto" onClick={() => create()}>
             {t("landing.openStudio")}
           </Button>
           <p className="mt-3 text-sm leading-6 text-muted-foreground">

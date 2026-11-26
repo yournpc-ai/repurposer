@@ -1,20 +1,18 @@
 import { Link, createFileRoute, useLocation, useNavigate } from "@tanstack/react-router"
-import { Minimize2, PanelRight } from "lucide-react"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { PanelRight } from "@/components/ui/icons"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { toast } from "sonner"
 
 import { AgentThread } from "@/components/chat/AgentThread"
-import { ProjectMenu } from "@/components/project/ProjectMenu"
+import { ThreadLoadingSkeleton } from "@/components/chat/ThreadLoadingSkeleton"
 import { useStudioHeader } from "@/components/StudioHeaderContext"
 import { IconButton } from "@/components/ui/icon-button-clean"
 import { Tooltip } from "@/components/ui/tooltip-clean"
-import { WorkbenchProvider, useWorkbench } from "@/components/workbench/WorkbenchContext"
-import { WorkbenchPane } from "@/components/workbench/WorkbenchPane"
+import { useWorkbench } from "@/components/workbench/WorkbenchContext"
 import { apiFetch } from "@/lib/api"
 import type { FirstMessageHandoff } from "@/lib/chatAttachments"
 import type { Project } from "@/lib/types"
-import { compactConversation, type CompactSummary } from "@/lib/workbench"
+import { CONVERSATION_DELETED_EVENT } from "@/lib/workbench"
 
 interface ProjectResults {
   project: Project
@@ -34,13 +32,11 @@ function ProjectDetailPage() {
   const { id: projectId } = Route.useParams()
   const { c: conversationId } = Route.useSearch()
   return (
-    <WorkbenchProvider key={projectId} projectId={projectId}>
-      <ProjectThreadPage
-        key={projectId}
-        projectId={projectId}
-        conversationId={conversationId}
-      />
-    </WorkbenchProvider>
+    <ProjectThreadPage
+      key={projectId}
+      projectId={projectId}
+      conversationId={conversationId}
+    />
   )
 }
 
@@ -55,21 +51,25 @@ function ProjectThreadPage({
   const navigate = useNavigate()
   const location = useLocation()
   const firstMessage = (location.state as { firstMessage?: FirstMessageHandoff }).firstMessage
-  const splitRef = useRef<HTMLDivElement>(null)
   const { isOpen: workbenchOpen, toggleWorkbench } = useWorkbench()
   const [results, setResults] = useState<ProjectResults | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [activeConversationId, setActiveConversationId] = useState<string | null>(
-    conversationId ?? null,
-  )
-  const [compacting, setCompacting] = useState(false)
-  const [compactOverride, setCompactOverride] = useState<CompactSummary | null>(null)
+  const [threadResetNonce, setThreadResetNonce] = useState(0)
 
   useEffect(() => {
-    setActiveConversationId(conversationId ?? null)
-    setCompactOverride(null)
-  }, [conversationId])
+    const onDeleted = (event: Event) => {
+      const detail = (
+        event as CustomEvent<{ conversationId?: string; projectId?: string }>
+      ).detail
+      if (detail?.projectId && detail.projectId !== projectId) return
+      if (!conversationId || detail?.conversationId === conversationId) {
+        setThreadResetNonce((n) => n + 1)
+      }
+    }
+    window.addEventListener(CONVERSATION_DELETED_EVENT, onDeleted)
+    return () => window.removeEventListener(CONVERSATION_DELETED_EVENT, onDeleted)
+  }, [projectId, conversationId])
 
   const fetchResults = useCallback(async () => {
     try {
@@ -100,36 +100,13 @@ function ProjectThreadPage({
     return () => clearInterval(interval)
   }, [materialPending, fetchResults])
 
-  const handleCompact = useCallback(async () => {
-    const targetId = activeConversationId ?? conversationId
-    if (!targetId || compacting) return
-    setCompacting(true)
-    try {
-      const res = await compactConversation(targetId, projectId)
-      setCompactOverride({
-        summary: res.summary,
-        key_decisions: res.key_decisions,
-        compacted_through_seq: res.compacted_through_seq,
-        compacted_at: res.compacted_at,
-        message_count: res.message_count,
-      })
-      toast.success(
-        t("conversations.compactSuccess", { count: res.message_count }),
-      )
-    } catch {
-      // apiFetch displays toast
-    } finally {
-      setCompacting(false)
-    }
-  }, [activeConversationId, conversationId, compacting, projectId, t])
-
   const project = results?.project ?? null
 
   const headerSlot = useMemo(() => {
     if (!project) return null
     return {
       left: (
-        <div className="flex min-w-0 items-center gap-1.5">
+        <div className="flex min-w-0 flex-1 items-center gap-1.5">
           <Link
             to="/projects"
             className="hidden shrink-0 rounded-md px-1.5 py-1 text-[13px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground sm:inline"
@@ -142,61 +119,49 @@ function ProjectThreadPage({
           >
             /
           </span>
-          <ProjectMenu
-            projectId={project.id}
+          <span
             title={project.title}
-            onRenamed={(title) =>
-              setResults((current) =>
-                current ? { ...current, project: { ...current.project, title } } : current,
-              )
-            }
-            onDeleted={() => navigate({ to: "/projects" })}
-          />
+            className="min-w-0 flex-1 truncate px-1 text-[13px] font-medium text-foreground select-text"
+          >
+            {project.title}
+          </span>
         </div>
       ),
       actions: (
-        <>
-          <Tooltip content={t("conversations.compactTooltip")} side="bottom">
-            <IconButton
-              size="md"
-              variant="ghost"
-              icon={<Minimize2 className="size-4" />}
-              label={t("conversations.compact")}
-              disabled={compacting || !(activeConversationId ?? conversationId)}
-              onClick={() => {
-                void handleCompact()
-              }}
-            />
-          </Tooltip>
-          <Tooltip content={t(workbenchOpen ? "workbench.close" : "workbench.open")} side="bottom">
-            <IconButton
-              size="md"
-              variant="ghost"
-              pressed={workbenchOpen}
-              icon={<PanelRight className="size-4" />}
-              label={t(workbenchOpen ? "workbench.close" : "workbench.open")}
-              onClick={toggleWorkbench}
-            />
-          </Tooltip>
-        </>
+        <Tooltip content={t(workbenchOpen ? "workbench.close" : "workbench.open")} side="bottom">
+          <IconButton
+            size="md"
+            variant="ghost"
+            pressed={workbenchOpen}
+            icon={<PanelRight className="size-4" />}
+            label={t(workbenchOpen ? "workbench.close" : "workbench.open")}
+            onClick={toggleWorkbench}
+          />
+        </Tooltip>
       ),
+      hideNotifications: true,
     }
   }, [
     project,
     t,
-    navigate,
-    compacting,
-    activeConversationId,
-    conversationId,
-    handleCompact,
     workbenchOpen,
     toggleWorkbench,
   ])
 
   useStudioHeader(headerSlot)
 
+  useEffect(() => {
+    const projectTitle = project?.title?.trim()
+    if (!projectTitle) return
+    const prevTitle = document.title
+    document.title = `${projectTitle} — Rookie`
+    return () => {
+      document.title = prevTitle
+    }
+  }, [project?.title])
+
   if (loading) {
-    return <div className="grid h-full place-items-center bg-background text-muted-foreground">{t("common.loading")}</div>
+    return <ThreadLoadingSkeleton label={t("common.loading")} includeComposer />
   }
   if (error || !results) {
     return <div className="grid h-full place-items-center bg-background text-destructive">{error || "Project not found"}</div>
@@ -205,28 +170,23 @@ function ProjectThreadPage({
   const { prompt } = results
   return (
     <div className="relative flex h-full flex-col overflow-hidden bg-background">
-      <div ref={splitRef} className="flex min-h-0 flex-1 overflow-hidden">
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-          <AgentThread
-            key={`${projectId}:${conversationId ?? "latest"}`}
-            projectId={projectId}
-            conversationId={conversationId}
-            prompt={firstMessage?.text ?? prompt ?? ""}
-            firstMessage={conversationId ? undefined : firstMessage}
-            onConversationResolved={setActiveConversationId}
-            externalCompactSummary={compactOverride}
-            onFirstMessageRetracted={() => {
-              void navigate({
-                to: "/projects/$id",
-                params: { id: projectId },
-                replace: true,
-                state: {} as Record<string, unknown>,
-              })
-            }}
-            onProjectChanged={fetchResults}
-          />
-        </div>
-        <WorkbenchPane containerRef={splitRef} />
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <AgentThread
+          key={`${projectId}:${conversationId ?? "latest"}:${threadResetNonce}`}
+          projectId={projectId}
+          conversationId={conversationId}
+          prompt={firstMessage?.text ?? prompt ?? ""}
+          firstMessage={conversationId ? undefined : firstMessage}
+          onFirstMessageRetracted={() => {
+            void navigate({
+              to: "/projects/$id",
+              params: { id: projectId },
+              replace: true,
+              state: {} as Record<string, unknown>,
+            })
+          }}
+          onProjectChanged={fetchResults}
+        />
       </div>
     </div>
   )

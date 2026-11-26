@@ -76,6 +76,62 @@ describe("conversation channel", () => {
     expect(routeStreamFrame("question.preview", JSON.stringify(payload), CHAT_TERMINAL))
       .toEqual({ kind: "ignored" })
   })
+
+  it("routes decision.committed, run.synced, and structured answer.failed checkpoint frames", () => {
+    const answered = { id: "q-1", content: "summary", question: { kind: "question" }, answer: { kind: "group", text: "45s" } }
+    expect(
+      routeStreamFrame(
+        "decision.committed",
+        JSON.stringify({ run_id: "run-2", turn_id: "turn-1", answered_question: answered }),
+        ANSWER_TERMINAL,
+      ),
+    ).toEqual({
+      kind: "decision_committed",
+      runId: "run-2",
+      turnId: "turn-1",
+      answeredQuestion: answered,
+    })
+
+    expect(
+      routeStreamFrame(
+        "run.synced",
+        JSON.stringify({ active: true, run_id: "run-2", turn_id: "turn-1", live_focus: "正在编排", steps: [{ title: "s1", status: "done" }] }),
+        CHAT_TERMINAL,
+      ),
+    ).toEqual({
+      kind: "run_synced",
+      active: true,
+      runId: "run-2",
+      turnId: "turn-1",
+      liveFocus: "正在编排",
+      steps: [{ title: "s1", status: "done" }],
+    })
+
+    expect(
+      routeStreamFrame(
+        "answer.failed",
+        JSON.stringify({
+          detail: "创建初稿时遇到系统异常",
+          persisted: true,
+          turn_id: "turn-1",
+          run_id: "run-2",
+          decision_committed: true,
+          message_id: "err-1",
+          checkpoint: { code: "execution_error", retryable: true, decision_committed: true },
+        }),
+        ANSWER_TERMINAL,
+      ),
+    ).toEqual({
+      kind: "failed",
+      detail: "创建初稿时遇到系统异常",
+      persisted: true,
+      turnId: "turn-1",
+      runId: "run-2",
+      decisionCommitted: true,
+      messageId: "err-1",
+      checkpoint: { code: "execution_error", retryable: true, decision_committed: true },
+    })
+  })
 })
 
 describe("candidate live reducer identity", () => {

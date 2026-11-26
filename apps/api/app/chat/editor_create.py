@@ -182,7 +182,7 @@ class FirstMotionBlock(SelectedMotionBlock):
     )
     transition_after: TransitionKind | None = Field(
         default=None,
-        description="Optional centered transition into the next adjacent motion block ('crossfade', 'whip_pan', 'wipe_reveal', 'zoom_through', 'iris_focus').",
+        description="Centered transition into the next adjacent motion block ('whip_pan', 'zoom_through', 'wipe_reveal', 'iris_focus', 'crossfade'). Actively vary across scene changes; leave null for crisp hard cuts between sub-1.5s punch beats.",
     )
     transition_duration_seconds: float = Field(
         default=0.5,
@@ -195,7 +195,7 @@ class FirstMotionBlock(SelectedMotionBlock):
         default=None,
         min_length=1,
         max_length=2000,
-        description="Optional spoken voiceover script for this motion block act (concise 12-22 EN words or 22-38 ZH chars per act).",
+        description="Optional spoken voiceover script for this act. Omit on 0.6-1.6s visual punch-cut / beat acts so cutting stays kinetic; keep narrated acts vivid and concise (8-20 EN words or 14-34 ZH chars).",
     )
     caption_translations: list[str] | None = Field(
         default=None,
@@ -986,6 +986,29 @@ async def create_video(db, turn, args: CreateVideoArgs):
         _, saved, _ = await apply_composition_edits(db, owner_id=owner, origin_project_id=project,
                                                     name=args.name, content=content, request_id=identity,
                                                     skill_provenance=provenance or None)
+        if args.name and turn.conversation_id:
+            from app.chat.titles import refine_title_from_composition, should_auto_upgrade_title
+            from app.models.tables import Conversation
+
+            conv_row = await db.get(Conversation, turn.conversation_id)
+            proj_row = await db.get(Project, project)
+            conv_ctx = conv_row.context or {} if conv_row is not None else {}
+            if conv_row is not None and should_auto_upgrade_title(
+                conv_row.title,
+                auto_title=conv_ctx.get("auto_title"),
+                user_edited=bool(conv_row.title_user_edited or conv_ctx.get("title_user_edited")),
+            ):
+                refined = refine_title_from_composition(
+                    args.name,
+                    project_title=proj_row.title if proj_row is not None else None,
+                )
+                if refined:
+                    conv_row.title = refined
+                    conv_row.context = {
+                        **conv_ctx,
+                        "auto_title": refined,
+                        "title_stage": "composition",
+                    }
     settle = getattr(turn, "_settle_pending_by_disposition", None) or getattr(turn, "_settle_by_disposition", None)
     if settle is not None:
         await settle(args.pending_disposition)
@@ -1022,6 +1045,8 @@ async def create_video(db, turn, args: CreateVideoArgs):
         "version": saved.version,
         "content_digest": saved.content_digest,
         "duration_seconds": total_duration_seconds,
+        "workbench_link": f"#workbench:version/{saved.id}",
+        "storyboard_link": f"#workbench:storyboard/{saved.id}",
         "saved": True,
         "shots": [
             {

@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Check } from "lucide-react"
+import { Check } from "@/components/ui/icons"
 
 import { cn } from "@/lib/utils"
 import type {

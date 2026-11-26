@@ -39,7 +39,7 @@
 - Frontend framework: TanStack Router / TanStack Start (React 19 + SSR)
 - UI components: affectUI Clean (React 19)
 - Styling: Tailwind CSS v4
-- Icons: lucide-react (sole icon source)
+- Icons: Hugeicons (`@hugeicons/core-free-icons` via `@/components/ui/icons`, aligned with affectUI iconography)
 - Internationalization: i18next + react-i18next
 - State: React Context + hooks (no Redux / Zustand in this project)
 
@@ -49,7 +49,7 @@
 
 ### Icons
 
-Use lucide-react for application icons. Third-party logos and the existing brand mark retain their own geometry.
+Use Hugeicons (`@/components/ui/icons` or `@hugeicons/core-free-icons` for affectUI Clean primitives) for application icons. Third-party logos and the existing brand mark retain their own geometry.
 
 ## Studio 界面约定
 

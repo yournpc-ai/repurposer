@@ -1,4 +1,4 @@
-import { ChevronDown } from "lucide-react"
+import { ChevronDown } from "@/components/ui/icons"
 import { useEffect, useId, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { LogoMark } from "@/components/LogoMark"
@@ -11,6 +11,8 @@ import { cn } from "@/lib/utils"
 import { LANDING_HEADER_CONTAINER } from "./layout"
 import { useLandingCreate } from "./useLandingCreate"
 import { MobileNavigation } from "./MobileNavigation"
+
+const navItemClass = "inline-flex h-10 items-center gap-1.5 rounded-md px-2 text-sm font-normal text-foreground transition-colors hover:text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring"
 
 export function LandingHeader() {
   const { t } = useTranslation()
@@ -52,16 +54,17 @@ export function LandingHeader() {
             if (!event.currentTarget.contains(event.relatedTarget)) setFeaturesOpen(false)
           }}
         >
-          <Button
-            variant="ghost"
+          <button
+            type="button"
+            className={navItemClass}
             aria-expanded={featuresOpen}
             aria-controls={featuresOpen ? featuresId : undefined}
             onFocus={() => setFeaturesOpen(true)}
             onClick={() => setFeaturesOpen(true)}
-            iconRight={<ChevronDown aria-hidden="true" />}
           >
             {t("landing.nav.features")}
-          </Button>
+            <ChevronDown aria-hidden="true" className="size-4" />
+          </button>
           <Popover
             open={featuresOpen}
             onClose={() => setFeaturesOpen(false)}
@@ -78,9 +81,9 @@ export function LandingHeader() {
             <FeatureList className="overlay-surface grid grid-cols-2 gap-x-7 gap-y-5 rounded-xl p-6 supports-[backdrop-filter:blur(1px)]:bg-popover/90" />
           </Popover>
         </div>
-        <a href="#faq" className="text-sm transition-colors hover:text-muted-foreground">{t("landing.nav.faq")}</a>
+        <a href="#faq" className={navItemClass}>{t("landing.nav.faq")}</a>
       </nav>
-      <div className="hidden items-center justify-self-end gap-3 md:flex">{!condensed && <><ThemeToggle /><LanguageSwitcher /></>}<Button size="md" className="rounded-full px-5 text-sm font-normal" onClick={() => create()}>{t("landing.headerCta")}</Button></div>
+      <div className="hidden items-center justify-self-end gap-3 md:flex">{!condensed && <><ThemeToggle /><LanguageSwitcher /></>}<Button size="md" className="landing-cta" onClick={() => create()}>{t("landing.headerCta")}</Button></div>
       <MobileNavigation />
     </div>
   </header>

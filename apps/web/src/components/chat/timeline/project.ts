@@ -69,7 +69,7 @@ function appendUnits(messages: OverlayMessage[], units: ConversationUnit[]) {
         const pending = ["accepted", "queued", "active", "running"].includes(job.status)
         const failed = job.status === "failed" || job.status === "provider_unknown"
         units.push({
-          kind: "activity", rowKey: `job:${m.birthKey ?? m.id}`, turnId: m.turnId,
+          kind: "activity", rowKey: `job:${m.birthKey ?? m.id}`, turnId: m.turnId, runId: m.runId,
           activity: {
             activity_id: job.callId, call_id: job.callId, tool_name: job.operation,
             kind: "run", key: null, jobReceipt: job,
@@ -77,8 +77,17 @@ function appendUnits(messages: OverlayMessage[], units: ConversationUnit[]) {
           },
         })
       }
-      if (m.content || m.blocks?.length || m.qa || m.outputRefs?.length || m.candidates || m.suggestions?.length || m.meta) {
-        units.push({ kind: "message", message: { ...m, jobReceipt: undefined } })
+      const hasStructuredContent = Boolean(
+        m.blocks?.length || m.qa || m.outputRefs?.length || m.candidates || m.suggestions?.length || m.meta,
+      )
+      // Export completion already renders its status, credits, and clickable
+      // thumbnail on the tool-call row; suppress the redundant boilerplate
+      // "正式 MP4 已导出，待审片。" text row that otherwise duplicates the
+      // agent's own follow-up prose.
+      const redundantExportReceiptText =
+        !hasStructuredContent && job.role === "export" && job.status === "available"
+      if ((m.content && !redundantExportReceiptText) || hasStructuredContent) {
+        units.push({ kind: "message", message: { ...m, jobReceipt: undefined, fromJobReceipt: true } })
       }
       continue
     }
@@ -90,6 +99,7 @@ function appendUnits(messages: OverlayMessage[], units: ConversationUnit[]) {
         activity: { ...a, receipt: parseActivityReceipt(a.receipt), ...(jobReceipt && { jobReceipt }) },
         rowKey: m.birthKey ?? m.id,
         turnId: m.turnId,
+        runId: m.runId,
         independentKind: m.independentKind,
         workStartedAtMs: m.workStartedAtMs,
         workEndedAtMs: m.workEndedAtMs,

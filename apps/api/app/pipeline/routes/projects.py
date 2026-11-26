@@ -1,6 +1,6 @@
 """Project router."""
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -206,6 +206,8 @@ async def update_project(
     update_data = data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(project, field, value)
+    if "title" in update_data and str(update_data["title"] or "").strip():
+        project.title_user_edited = True
 
     await db.commit()
     await db.refresh(project)
@@ -411,7 +413,32 @@ async def list_project_conversations(
             )
         )
     )
-    active_convs = active_export_convs | active_media_convs
+    in_flight_cutoff = datetime.now(UTC) - timedelta(minutes=15)
+    active_turn_convs = set(
+        await db.scalars(
+            select(Message.conversation_id).where(
+                Message.conversation_id.in_(conv_ids),
+                Message.turn_state == "in_flight",
+                func.coalesce(Message.updated_at, Message.created_at) >= in_flight_cutoff,
+            )
+        )
+    )
+
+    pending_question_rows = (
+        await db.execute(
+            select(Message.conversation_id, Message.question).where(
+                Message.conversation_id.in_(conv_ids),
+                Message.question.isnot(None),
+                Message.answer.is_(None),
+            )
+        )
+    ).all()
+    pending_question_convs = {
+        cid
+        for cid, question in pending_question_rows
+        if isinstance(question, dict) and bool(question.get("options") or question.get("items"))
+    }
+    active_convs = active_export_convs | active_media_convs | (active_turn_convs - pending_question_convs)
 
     summaries: list[ProjectConversationSummary] = []
     for conv in conversations:
@@ -425,6 +452,7 @@ async def list_project_conversations(
                 updated_at=conv.updated_at,
                 message_count=counts.get(conv.id, 0),
                 has_active_job=conv.id in active_convs,
+                has_pending_question=conv.id in pending_question_convs,
                 compacted=bool(isinstance(compact, dict) and compact.get("summary")),
                 compacted_at=compact.get("compacted_at") if isinstance(compact, dict) else None,
             )
@@ -465,6 +493,7 @@ async def create_project_conversation(
         updated_at=conv.updated_at,
         message_count=0,
         has_active_job=False,
+        has_pending_question=False,
         compacted=False,
         compacted_at=None,
     )

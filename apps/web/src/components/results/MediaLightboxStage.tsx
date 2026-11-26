@@ -26,7 +26,7 @@ import {
   X,
   ZoomIn,
   ZoomOut,
-} from "lucide-react"
+} from "@/components/ui/icons"
 import { toast } from "sonner"
 import { useTranslation } from "react-i18next"
 

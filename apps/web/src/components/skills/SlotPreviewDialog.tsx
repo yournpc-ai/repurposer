@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { Player } from "@remotion/player"
 import { Video } from "@repurposer/video-remotion"
 import type { VideoSpec } from "@repurposer/video-spec"
-import { Check, Copy, Download, Film, RefreshCw } from "lucide-react"
+import { Check, Copy, Download, Film, RefreshCw } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 
@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge-clean"
 import { Button } from "@/components/ui/button-clean"
 import { Dialog } from "@/components/ui/dialog-clean"
 import { SegmentedControl } from "@/components/ui/segmented-control-clean"
+import { Loading, Skeleton } from "@/components/ui/skeleton-clean"
 import { Spinner } from "@/components/ui/spinner-clean"
 import {
   exportSlotPreviewMp4,
@@ -226,10 +227,9 @@ export function SlotPreviewContent({
                 numberOfSharedAudioTags={0}
               />
             ) : (
-              <div className="flex h-full items-center justify-center gap-2 text-xs text-muted-foreground">
-                <Spinner size={16} />
-                <span>{t("common.loading")}</span>
-              </div>
+              <Loading label={t("common.loading")} className="h-full w-full">
+                <Skeleton width="100%" height="100%" radius={0} />
+              </Loading>
             )}
           </div>
           {loading && spec ? (

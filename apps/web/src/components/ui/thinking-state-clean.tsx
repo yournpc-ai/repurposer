@@ -34,6 +34,8 @@ export interface ThinkingStateProps {
   open?: boolean;
   defaultOpen?: boolean;
   onOpenChange?: (open: boolean) => void;
+  /** Optional trailing control placed beside the header toggle on the same baseline (e.g. a collapsed steps pill). */
+  headerTrailing?: ReactNode;
   /** Optional dynamic task checklist from update_steps. */
   stepsPlan?: StepPlanItem[];
   /** Localized count label beside the progress ring, e.g. "3/5 steps". */
@@ -44,7 +46,7 @@ export interface ThinkingStateProps {
 
 export function ThinkingState({
   steps, live, headerLabel, startedAtMs, open: controlledOpen, defaultOpen = false, onOpenChange,
-  stepsPlan, stepsProgressLabel, stepsAriaLabel,
+  headerTrailing, stepsPlan, stepsProgressLabel, stepsAriaLabel,
 }: ThinkingStateProps) {
   const bodyId = useId();
   const prefersReducedMotion = useReducedMotion();
@@ -62,6 +64,50 @@ export function ThinkingState({
   const ringCircumference = 2 * Math.PI * ringRadius;
   const ringOffset = ringCircumference * (1 - planRatio);
   const planTone = planHasFailed ? "error" : planDone === planTotal && planTotal > 0 ? "done" : "active";
+  const renderTrailList = (items: ThinkingTrailStep[]) => (
+    <ol className="ui-thinkc__list" aria-live="polite">
+      {items.map((step) => {
+        const isActive = live && step.status === "running";
+        return (
+          <li key={step.id} className="ui-thinkc__item" data-kind={step.kind} data-active={isActive || undefined}>
+            <span className="ui-thinkc__node" aria-hidden="true">
+              {step.kind === "note" ? null : step.kind === "web" ? (
+                <svg viewBox="0 0 24 24" className="ui-thinkc__globe">
+                  <path d="M22 12A10 10 0 1 0 12 22" />
+                  <path d="M20 5.7c-.93.07-2.13.43-2.96 1.5-1.5 1.94-3 2.1-4 1.46-1.5-.97-.24-2.54-2-3.4-1.15-.56-1.31-2.07-.67-3.26" />
+                  <path d="M2 11c.76.66 1.83 1.27 3.09 1.27 2.6 0 3.12.5 3.12 2.48s0 1.99.52 3.48c.34.97.46 1.94-.22 2.77" />
+                  <path d="m19.9 19.93 2.1 2.07m-.89-4.95a4.05 4.05 0 1 1-8.11 0 4.05 4.05 0 0 1 8.11 0Z" />
+                </svg>
+              ) : (
+                <span className="ui-thinkc__dot" />
+              )}
+            </span>
+            <div className="ui-thinkc__content">
+              <span className={isActive ? "ui-thinkc__label ui-thinkc__shimmer" : "ui-thinkc__label"}
+                data-text={step.label} dir="auto">{step.label}</span>
+              {isActive && step.startedAtMs != null && (
+                <>
+                  {" "}
+                  <Elapsed since={step.startedAtMs} />
+                </>
+              )}
+              {step.meta && <span className="ui-thinkc__time"> · {step.meta}</span>}
+              {!!step.chips?.length && (
+                <div className="ui-thinkc__sources">
+                  {step.chips.map(chip => (
+                    <span key={chip} className="ui-thinkc__source" data-count>
+                      <span className="ui-thinkc__source-label" dir="auto" title={chip}>{chip}</span>
+                    </span>
+                  ))}
+                </div>
+              )}
+              {step.detail}
+            </div>
+          </li>
+        );
+      })}
+    </ol>
+  );
   return (
     <div className="ui-thinkc" data-done={!live || undefined}>
       {/* React 19 hoists this into <head> once, no matter how many panels render */}
@@ -69,7 +115,8 @@ export function ThinkingState({
         {css}
       </style>
 
-      <Header className="ui-thinkc__head" {...(expandable ? {
+      <div className="ui-thinkc__head-row">
+      <Header className="ui-thinkc__head group/head outline-none! focus-visible:bg-accent/60 focus-visible:outline-none!" {...(expandable ? {
         type: "button" as const,
         "aria-controls": bodyId,
         "aria-expanded": open,
@@ -78,21 +125,20 @@ export function ThinkingState({
           onOpenChange?.(!open);
         },
       } : {})}>
-        {/* A 3×3 pixel mark: the squares twinkle while it thinks and settle once it's done */}
-        <span className="ui-thinkc__mark" aria-hidden="true">
-          {Array.from({ length: 9 }, (_, i) => (
-            <i key={i} style={{ animationDelay: `${PIXEL_DELAYS[i]}ms` }} />
-          ))}
-        </span>
         <span className="ui-thinkc__title" key={live ? "busy" : "done"}>
           <span className={live ? "ui-thinkc__shimmer" : undefined} data-text={headerLabel}>{headerLabel}</span>
           {live && startedAtMs != null && <Elapsed since={startedAtMs} />}
         </span>
-        {expandable && <span className="ui-thinkc__chevron" aria-hidden="true">
-          <svg viewBox="0 0 16 16">
-            <path d="M4.5 6.25 8 9.75l3.5-3.5" />
-          </svg>
-        </span>}
+        {expandable && (
+          <span
+            className="ui-thinkc__chevron opacity-0! transition-opacity duration-150 group-hover/head:opacity-90! group-focus-visible/head:opacity-90!"
+            aria-hidden="true"
+          >
+            <svg viewBox="0 0 16 16">
+              <path d="M4.5 6.25 8 9.75l3.5-3.5" />
+            </svg>
+          </span>
+        )}
         {hasPlan && (
           <span className="ui-thinkc__steps-badge" data-tone={planTone}>
             <svg viewBox="0 0 14 14" className="ui-thinkc__ring" aria-hidden="true">
@@ -112,6 +158,8 @@ export function ThinkingState({
           </span>
         )}
       </Header>
+      {headerTrailing}
+      </div>
 
       {/* Only the steps fold away – the header row always stays in view */}
       <div className="ui-thinkc__body" id={bodyId} data-open={open} inert={!open} aria-hidden={!open}>
@@ -124,7 +172,7 @@ export function ThinkingState({
             >
               {stepsPlan.map((planItem, idx) => (
                 <motion.li
-                  key={`${idx}:${planItem.title}`}
+                  key={idx}
                   layout={prefersReducedMotion ? false : "position"}
                   initial={prefersReducedMotion ? false : { opacity: 0, y: 3 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -159,58 +207,12 @@ export function ThinkingState({
               ))}
             </ul>
           )}
-          {steps.length > 0 && (
-          <ol className="ui-thinkc__list" aria-live="polite">
-            {steps.map((step) => {
-              const isActive = live && step.status === "running";
-              return (
-                <li key={step.id} className="ui-thinkc__item" data-kind={step.kind} data-active={isActive || undefined}>
-                  <span className="ui-thinkc__node" aria-hidden="true">
-                    {step.kind === "note" ? null : step.kind === "web" ? (
-                      <svg viewBox="0 0 24 24" className="ui-thinkc__globe">
-                        <path d="M22 12A10 10 0 1 0 12 22" />
-                        <path d="M20 5.7c-.93.07-2.13.43-2.96 1.5-1.5 1.94-3 2.1-4 1.46-1.5-.97-.24-2.54-2-3.4-1.15-.56-1.31-2.07-.67-3.26" />
-                        <path d="M2 11c.76.66 1.83 1.27 3.09 1.27 2.6 0 3.12.5 3.12 2.48s0 1.99.52 3.48c.34.97.46 1.94-.22 2.77" />
-                        <path d="m19.9 19.93 2.1 2.07m-.89-4.95a4.05 4.05 0 1 1-8.11 0 4.05 4.05 0 0 1 8.11 0Z" />
-                      </svg>
-                    ) : (
-                      <span className="ui-thinkc__dot" />
-                    )}
-                  </span>
-                  <div className="ui-thinkc__content">
-                    <span className={isActive ? "ui-thinkc__label ui-thinkc__shimmer" : "ui-thinkc__label"}
-                      data-text={step.label} dir="auto">{step.label}</span>
-                    {isActive && step.startedAtMs != null && (
-                      <>
-                        {" "}
-                        <Elapsed since={step.startedAtMs} />
-                      </>
-                    )}
-                    {step.meta && <span className="ui-thinkc__time"> · {step.meta}</span>}
-                    {!!step.chips?.length && (
-                      <div className="ui-thinkc__sources">
-                        {step.chips.map(chip => (
-                          <span key={chip} className="ui-thinkc__source" data-count>
-                            <span className="ui-thinkc__source-label" dir="auto" title={chip}>{chip}</span>
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    {step.detail}
-                  </div>
-                </li>
-              );
-            })}
-          </ol>
-          )}
+          {steps.length > 0 ? renderTrailList(steps) : null}
         </div>
       </div>
     </div>
   );
 }
-
-/** Twinkle order of the 3×3 pixel mark – a diagonal wave */
-const PIXEL_DELAYS = [0, 120, 240, 120, 240, 360, 240, 360, 480];
 
 function Elapsed({ since }: { since: number }) {
   const now = useNow(true);
@@ -264,8 +266,15 @@ const css = /* css */ `
 :where(.ui-thinkc) svg { display: block; flex: none; }
 .ui-thinkc button:focus-visible,
 .ui-thinkc a:focus-visible {
-  outline: 2px solid var(--ui-tkc-focus);
-  outline-offset: 2px;
+  outline: none;
+  background: var(--ui-tkc-wash);
+}
+
+.ui-thinkc__head-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
 }
 
 /* Header row: pixel mark + "Thinking 4s" / "Worked for 18s" + chevron – only as wide as its words, so only they take the hover */
@@ -307,8 +316,14 @@ const css = /* css */ `
   transition: color 160ms ease;
   animation: ui-thinkc-in 420ms var(--ui-tkc-ease) both;
 }
-/* Hover: no fill – the words just lighten */
-.ui-thinkc__head:hover .ui-thinkc__title { color: var(--ui-tkc-muted); }
+.ui-thinkc[data-done] .ui-thinkc__title {
+  color: var(--ui-tkc-muted);
+}
+/* Hover / expanded: brighten muted settled title and reveal chevron */
+.ui-thinkc__head:is(:hover, :focus-visible) .ui-thinkc__title,
+.ui-thinkc__head[aria-expanded="true"] .ui-thinkc__title {
+  color: var(--ui-tkc-ink);
+}
 .ui-thinkc__title .ui-thinkc__shimmer {
   color: var(--ui-tkc-muted);
 }
@@ -317,7 +332,7 @@ const css = /* css */ `
   font-variant-numeric: tabular-nums;
   color: var(--aui-placeholder, var(--ui-tkc-faint));
 }
-/* The chevron sits right after the words so collapsed "Worked for Xm >" is always discoverable */
+/* Chevron appears only on hover/focus (visible on touch devices) */
 .ui-thinkc__chevron {
   display: grid;
   place-items: center;
@@ -325,11 +340,16 @@ const css = /* css */ `
   height: 16px;
   margin-left: -4px;
   color: var(--ui-tkc-icon);
-  opacity: 0.5;
-  transition: opacity 160ms ease;
+  opacity: 0;
+  transition: opacity 160ms ease, color 160ms ease;
 }
-.ui-thinkc__head:is(:hover, :focus-visible) .ui-thinkc__chevron,
-.ui-thinkc__head[aria-expanded="true"] .ui-thinkc__chevron { opacity: 0.85; }
+.ui-thinkc__head:is(:hover, :focus-visible) .ui-thinkc__chevron {
+  opacity: 0.9;
+  color: var(--ui-tkc-ink);
+}
+@media (hover: none) {
+  .ui-thinkc__chevron { opacity: 0.55; }
+}
 .ui-thinkc__chevron svg {
   width: 16px;
   height: 16px;
@@ -491,6 +511,73 @@ const css = /* css */ `
 }
 .ui-thinkc__plan-item[data-status="failed"] .ui-thinkc__plan-title {
   color: var(--aui-danger, #dc2626);
+}
+.ui-thinkc__plan-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 2px;
+}
+.ui-thinkc__live-pulse-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ui-tkc-muted);
+}
+.ui-thinkc__live-pulse-dot {
+  width: 5px;
+  height: 5px;
+  margin-left: 5.5px;
+  margin-right: 5.5px;
+  flex: none;
+  border-radius: 1.5px;
+  background: var(--ui-tkc-accent);
+  animation: ui-thinkc-pulse 1.1s ease-in-out infinite;
+}
+.ui-thinkc__live-pulse-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ui-thinkc__trail-fold {
+  margin-top: 2px;
+}
+.ui-thinkc__trail-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ui-tkc-muted);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  transition: color 140ms ease;
+}
+.ui-thinkc__trail-summary::-webkit-details-marker {
+  display: none;
+}
+.ui-thinkc__trail-summary:hover {
+  color: var(--ui-tkc-ink);
+}
+.ui-thinkc__trail-chevron {
+  width: 14px;
+  height: 14px;
+  margin-left: 1px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 200ms var(--ui-tkc-ease);
+}
+.ui-thinkc__trail-fold[open] > .ui-thinkc__trail-summary .ui-thinkc__trail-chevron {
+  transform: rotate(90deg);
 }
 
 

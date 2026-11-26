@@ -143,4 +143,27 @@ describe("MessageActionBar", () => {
       })
     })
   })
+
+  it("stays hidden at rest without inline opacity override in revealOnHover mode", () => {
+    const twoMinAgo = new Date(Date.now() - 120_000).toISOString()
+    const { container } = render(
+      <MessageActionBar
+        messageId="msg-hover"
+        text="Substantive framing summary"
+        createdAt={twoMinAgo}
+        revealOnHover
+        hideTimestamp
+      />,
+    )
+
+    const bar = container.querySelector<HTMLElement>('[data-slot="message-action-bar"]')
+    expect(bar).toBeTruthy()
+    expect(bar?.dataset.revealMode).toBe("hover")
+    expect(bar?.className).toContain("opacity-0")
+    expect(bar?.className).toContain("group-hover/msg:opacity-100")
+    expect(bar?.className).toContain("group-has-[:focus-visible]/msg:opacity-100")
+    // Critical regression guard: Framer Motion inline opacity must NOT override opacity-0
+    expect(bar?.style.opacity).toBe("")
+    expect(screen.queryByText(/notifications\.minutesAgo/)).toBeNull()
+  })
 })

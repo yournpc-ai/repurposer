@@ -27,7 +27,21 @@ export interface AnswerWatchdog {
 export function armAnswerWatchdog(deadMs: number, tickMs: number): AnswerWatchdog {
   const ctrl = new AbortController()
   let lastFrameAt = Date.now()
+  let wasHidden = typeof document !== "undefined" && document.visibilityState === "hidden"
   const id = setInterval(() => {
+    // Background tabs throttle network reads and timers; never abort an
+    // active stream just because the user switched tabs. When the tab wakes
+    // back to visible, grant a fresh grace window before declaring silence.
+    const hidden = typeof document !== "undefined" && document.visibilityState === "hidden"
+    if (hidden) {
+      wasHidden = true
+      return
+    }
+    if (wasHidden) {
+      wasHidden = false
+      lastFrameAt = Date.now()
+      return
+    }
     if (Date.now() - lastFrameAt > deadMs) {
       clearInterval(id) // one-shot — the chat watchdog's same law
       ctrl.abort()

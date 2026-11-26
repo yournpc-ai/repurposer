@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router"
-import { MoreHorizontal, Pencil, Trash2 } from "lucide-react"
+import { MoreHorizontal, Pencil, Trash2 } from "@/components/ui/icons"
 import { useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 

@@ -21,7 +21,7 @@
 
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { ChevronDown } from "lucide-react"
+import { ChevronDown } from "@/components/ui/icons"
 
 import { cn } from "@/lib/utils"
 import {

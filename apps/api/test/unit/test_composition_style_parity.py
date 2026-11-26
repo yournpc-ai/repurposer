@@ -154,7 +154,8 @@ process.stdout.write(JSON.stringify({ presets: STYLE_PRESETS, results }));
 
     # Verify preset-level accent_ink & caption background laws
     assert STYLE_PRESETS["institutional_dark"]["caption_style"]["background"] is None
-    assert STYLE_PRESETS["swiss_paper"]["caption_style"]["background"] is None
+    assert STYLE_PRESETS["swiss_paper"]["caption_style"]["background"] == "#FFFFFF"
+    assert STYLE_PRESETS["swiss_paper"]["caption_style"]["background_mode"] == "pill"
     assert STYLE_PRESETS["kinetic_anime"]["caption_style"]["background"] is None
     assert STYLE_PRESETS["vox_editorial"]["caption_style"]["background"] == "#141413"
     assert STYLE_PRESETS["vox_editorial"]["caption_style"]["color"] == "#FFFDF7"

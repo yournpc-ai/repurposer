@@ -532,9 +532,38 @@ export function activityRowFrame(intent: unknown): ActivityRowFrame | undefined 
   }
 }
 
-export function isNonRenderIntent(intent: unknown): boolean {
+const AUDIO_PREVIEW_TOOLS = new Set(["generate_music", "generate_voice", "generate_sfx"])
+const AUDIO_PREVIEW_ROLES = new Set(["music", "narration", "effect"])
+
+export function isNonRenderIntent(intent: unknown, blocks?: readonly unknown[] | null): boolean {
   const data = (intent ?? {}) as Record<string, unknown>
-  return data.type === "activity_forensics"
+  if (data.type === "activity_forensics" || data.silent_chat_receipt === true) {
+    return true
+  }
+  const hasAudioPlaybackBlock =
+    Array.isArray(blocks) &&
+    blocks.some(
+      (block) =>
+        block !== null &&
+        typeof block === "object" &&
+        (block as { kind?: unknown }).kind === "audio_playback",
+    )
+  // Suppress standalone mid-turn audio preview receipts ("配乐/旁白/音效已生成，可以试听。")
+  // on both live SSE and refresh (even when ChatMessageResponse projects only native_call_id + media_result).
+  if ((data.editor_media || typeof data.native_call_id === "string") && !Array.isArray(data.output_refs)) {
+    if (hasAudioPlaybackBlock) return true
+    const tool = typeof data.tool === "string" ? data.tool : typeof data.operation === "string" ? data.operation : ""
+    const mediaResult = data.media_result as { role?: unknown; status?: unknown } | undefined
+    const role = mediaResult?.role
+    const status = mediaResult?.status
+    if (
+      (AUDIO_PREVIEW_TOOLS.has(tool) || (typeof role === "string" && AUDIO_PREVIEW_ROLES.has(role))) &&
+      (status === "available" || status === "completed" || status === "succeeded")
+    ) {
+      return true
+    }
+  }
+  return false
 }
 
 export function activityAssetKey(base: string, assetType?: string | null): string {
@@ -768,6 +797,7 @@ export function bareQuestion(m: QuestionMessage): string {
  * wire — QuestionMessage plus the user-row extras). */
 export interface HistoryRow extends QuestionMessage {
   turn_state?: string | null
+  updated_at?: string | null
   role: "user" | "assistant"
   focus_output?: { id: string; label: string } | null
   attachments?: MessageAttachment[]
@@ -797,15 +827,27 @@ export function mapHistoryRows(
   const cardBySetId = new Map<string, OverlayMessage>()
   for (const m of rows) {
     const facts = m.role === "assistant" ? messageReceiptFacts(m.intent) : undefined
-    const rowSteps = m.role === "assistant" ? parseStepsPlan(m.steps, m.intent) : undefined
+    const rowSteps =
+      m.role === "assistant" || m.role === "user"
+        ? parseStepsPlan(m.steps, m.intent)
+        : undefined
     const rowFeedback = m.role === "assistant" ? parseFeedbackSummary(m.feedback) : undefined
+    const intentRecord = (m.intent && typeof m.intent === "object" ? m.intent : null) as Record<string, unknown> | null
+    const rowRunId =
+      typeof m.run_id === "string" && m.run_id
+        ? m.run_id
+        : typeof intentRecord?.run_id === "string" && intentRecord.run_id
+          ? intentRecord.run_id
+          : undefined
     const pushRow = (row: OverlayMessage): OverlayMessage => {
       const positioned = {
         ...row,
         ...(row.id === m.id && facts),
-        ...(row.role === "assistant" && !row.qa && !row.activity && !row.candidates && rowSteps ? { steps: rowSteps } : {}),
+        ...(!row.qa && !row.activity && !row.candidates && rowSteps ? { steps: rowSteps } : {}),
         ...(row.role === "assistant" && !row.qa && !row.activity && !row.candidates && rowFeedback !== undefined ? { feedback: rowFeedback } : {}),
         turnId: m.turn_id ?? undefined,
+        ...(rowRunId && !row.runId ? { runId: rowRunId } : {}),
+        ...(m.display_role && !row.displayRole ? { displayRole: m.display_role } : {}),
         serverMessageId: m.id,
         hydrated: true,
       }
@@ -839,6 +881,13 @@ export function mapHistoryRows(
             pushRow({
               id: `${m.id}-echo`,
               role: "assistant",
+              questionEcho: true,
+              displayRole:
+                m.display_role === "question_framing" || m.display_role === "question_framing_stub"
+                  ? m.display_role
+                  : echo && echo.length >= 40
+                    ? "question_framing"
+                    : "question_framing_stub",
               content: echo ?? "",
               outputRefs: deliveryOutputRefs(m.intent),
               blocks: m.blocks?.length ? m.blocks : undefined,
@@ -898,6 +947,13 @@ export function mapHistoryRows(
           pushRow({
             id: `${m.id}-echo`,
             role: "assistant",
+            questionEcho: true,
+            displayRole:
+              m.display_role === "question_framing" || m.display_role === "question_framing_stub"
+                ? m.display_role
+                : echo && echo.length >= 40
+                  ? "question_framing"
+                  : "question_framing_stub",
             content: echo ?? "",
             outputRefs: deliveryOutputRefs(m.intent),
             blocks: m.blocks?.length ? m.blocks : undefined,
@@ -908,18 +964,24 @@ export function mapHistoryRows(
     } else {
       // 永不渲染行 (ADR-108): the rejection forensics ledger and legacy
       // aggregate logs skip silently — never an empty bubble.
-      if (isNonRenderIntent(m.intent)) continue
+      if (isNonRenderIntent(m.intent, m.blocks)) continue
       const intentType = ((m.intent ?? {}) as Record<string, unknown>).type
       // 失败行回放: a persisted turn-failure row replays as the SAME grey
       // meta row the live turn.failed frame renders — a refresh keeps the
       // failure's stage and its lawful next step instead of dropping them.
       if (intentType === "turn_failed") {
         if (!(m.content ?? "").trim()) continue // never an empty bubble
+        const checkpoint =
+          intentRecord?.checkpoint && typeof intentRecord.checkpoint === "object"
+            ? (intentRecord.checkpoint as OverlayMessage["failureCheckpoint"])
+            : undefined
         pushRow({
           id: m.id,
           role: "assistant",
           content: m.content ?? "",
           meta: "error",
+          displayRole: "failure_checkpoint",
+          ...(checkpoint ? { failureCheckpoint: checkpoint } : {}),
           at: m.created_at,
         })
         continue
@@ -976,14 +1038,20 @@ export function mapHistoryRows(
         }
         continue
       }
+      const interimRole =
+        intentType === "interim_prose"
+          ? m.display_role === "rail_note" || intentRecord?.rail_note === true
+            ? ("rail_note" as const)
+            : ("stage_note" as const)
+          : undefined
       pushRow({
         id: m.id,
         role: "assistant",
         content: m.content ?? "",
+        ...(interimRole ? { interim: true, displayRole: interimRole } : {}),
+        ...(((m.intent ?? {}) as Record<string, unknown>).turn_prose === true ? { turnProse: true } : {}),
         outputRefs: deliveryOutputRefs(m.intent),
         at: m.created_at,
-        // The presenting row's storyboard block references replay with it
-        // (the card resolves its DTO client-side; absent on legacy rows).
         blocks: m.blocks?.length ? m.blocks : undefined,
       })
     }

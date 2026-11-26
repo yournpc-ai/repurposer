@@ -1,5 +1,5 @@
 import { useRef, useState } from "react"
-import { ArrowUp } from "lucide-react"
+import { ArrowUp } from "@/components/ui/icons"
 import { useMotionValueEvent, useScroll } from "motion/react"
 import { useTranslation } from "react-i18next"
 import { LANDING_GALLERY } from "./content"

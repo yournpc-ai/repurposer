@@ -32,21 +32,30 @@ function collectLeafKeys(obj: Record<string, unknown>, prefix = ""): string[] {
 }
 
 describe("TurnMinimap", () => {
-  it("stays hidden when fewer than 3 user turns exist", () => {
+  it("stays hidden when <= 1 user turn exists or when hidden prop is set", () => {
     const viewportRef = createRef<HTMLDivElement>()
-    render(
+    const { rerender } = render(
       <TurnMinimap
         viewportRef={viewportRef}
+        turns={[{ id: "t1", index: 1, preview: "只有一条消息" }]}
+      />,
+    )
+    expect(screen.queryByRole("navigation")).toBeNull()
+
+    rerender(
+      <TurnMinimap
+        viewportRef={viewportRef}
+        hidden
         turns={[
-          { id: "t1", index: 1, preview: "第一轮需求" },
-          { id: "t2", index: 2, preview: "第二轮修改" },
+          { id: "t1", index: 1, preview: "第一条" },
+          { id: "t2", index: 2, preview: "第二条" },
         ]}
       />,
     )
     expect(screen.queryByRole("navigation")).toBeNull()
   })
 
-  it("renders dots for >= 3 turns and scrolls the target turn block into view on click", () => {
+  it("renders dots for > 1 turn and scrolls the target turn block into view on click", () => {
     const scrollIntoView = vi.fn()
     const viewport = document.createElement("div")
     const target1 = document.createElement("div")

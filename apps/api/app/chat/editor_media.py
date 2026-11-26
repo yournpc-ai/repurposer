@@ -149,7 +149,12 @@ async def deliver_video(db, turn, output_id, base):
         .join(ExportJob, ExportJob.receipt_id == Message.id)
         .where(ExportJob.id == output.id, ExportJob.project_id == turn.project.id)
     )).one_or_none()
-    turn._editor_delivery = {"output_id": str(output_id), **base, "delivered_to_chat": True}
+    turn._editor_delivery = {
+        "output_id": str(output_id),
+        "workbench_link": f"#workbench:output/{output_id}",
+        **base,
+        "delivered_to_chat": True,
+    }
     if charge:
         turn._editor_delivery["export_charged_this_opening"] = charge[1] if charge[0] == turn.turn_id else 0
         turn._editor_delivery["original_export_charge"] = charge[1]
@@ -277,10 +282,10 @@ async def submit_editor_media(turn, name, args, composition, version, call_id):
             pending = await latest_pending_question(db, turn.conversation_id)
             if pending and (pending.intent or {}).get("media_permission"):
                 raise ValueError("Resolve the outstanding authorization before generating more media.")
+            from app.chat.video_turn_seats import asks_for_export, draft_only_request
+
             preview = None
             if name == "export_video":
-                from app.chat.video_turn_seats import asks_for_export, draft_only_request
-
                 if draft_only_request(opening.content or ""):
                     raise ValueError("The current request is limited to the editable work and its preview.")
                 preview = getattr(turn, "_editor_last_preview", None) or {}
@@ -339,25 +344,27 @@ async def submit_editor_media(turn, name, args, composition, version, call_id):
             quote = estimate.model_dump(mode="json") if estimate else None
             if not quote:
                 raise ValueError("A bounded media quote is unavailable.")
-            # Account auto-approval covers requested production. A model's
-            # export call alone does not establish a user request to spend.
+            # Account auto-approval covers requested video/promo production
+            # (voiceover, music, visuals, and export). Non-production edits or
+            # questions still require explicit consent before spending credits.
+            recovering = bool((opening.intent or {}).get("resumed_media"))
+            auto_production = asks_for_export(opening.content or "") and not recovering
             export_needs_consent = False
-            if name == "export_video" and not asks_for_export(opening.content or ""):
+            if name == "export_video" and not auto_production:
                 confirmed = (opening.intent or {}).get("video_confirmation") or {}
                 export_needs_consent = not (
                     confirmed.get("action") == "produce" and confirmed.get("base_ref") == turn._video_base_ref
                 )
-            recovering = bool((opening.intent or {}).get("resumed_media"))
             paid = estimate.total[1] > 0
             another_paid_call = False
-            if paid:
+            if paid and not auto_production:
                 another_paid_call = await db.scalar(select(Message.id).where(
                     Message.turn_id == opening.id, Message.id != receipt.id,
                     Message.intent["tool"].astext == name,
                     (Message.intent.has_key("export_job") | Message.intent.has_key("media_job")
                      | Message.intent.has_key("media_permission")),
                 ).limit(1)) is not None
-            needs_media_consent = paid and name in KINDS and (
+            needs_media_consent = paid and name in KINDS and not auto_production and (
                 recovering or not _requests_paid_media(opening.content or "", name)
             )
             fixed_reuse = recovering and not paid and name in {"generate_voice", "generate_image"}
@@ -663,7 +670,11 @@ async def execute_generate_sfx(turn, args, composition, version):
                         version=saved.version,
                         content_digest=saved.content_digest,
                     )
-                    row.intent = {**row.intent, "media_result": media_facts}
+                    row.intent = {
+                        **row.intent,
+                        "media_result": media_facts,
+                        "silent_chat_receipt": True,
+                    }
                     placed_version_info = {
                         "composition_id": str(comp.id),
                         "version_id": str(saved.id),
@@ -685,12 +696,12 @@ async def execute_generate_sfx(turn, args, composition, version):
             await db.commit()
             receipt = row
 
-    if turn.on_row_append:
+    if turn.on_row_append and placed_version_info is None:
         await turn.on_row_append(receipt)
     facts = dict(receipt.intent["media_result"])
     facts["sync_cue"] = recipe_meta["sync_cue"]
     facts["mix_hint"] = recipe_meta["mix_hint"]
-    facts["delivered_to_chat"] = True
+    facts["delivered_to_chat"] = placed_version_info is None
     labels = turn.__dict__.setdefault("_editor_labels", {})
     for key in ("snapshot_id", "digest", "analysis_digest", "spec_sha256"):
         if facts.get(key):

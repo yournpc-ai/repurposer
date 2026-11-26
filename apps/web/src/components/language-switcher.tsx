@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next"
-import { Globe } from "lucide-react"
+import { Globe } from "@/components/ui/icons"
 
 import { setLocale, type Locale } from "@/lib/i18n"
 import { useAccountSettings } from "./settings/account-settings-context"

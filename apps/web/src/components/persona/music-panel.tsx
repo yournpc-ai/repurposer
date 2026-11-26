@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Check, Loader2, Pause, Play, Wand2 } from "lucide-react"
+import { Check, Loader2, Pause, Play, Wand2 } from "@/components/ui/icons"
 
 import { IconButton } from "@/components/ui/icon-button-clean"
 import { TextField } from "@/components/ui/text-field-clean"

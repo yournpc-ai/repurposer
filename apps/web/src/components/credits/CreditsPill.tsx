@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import { ArrowRight, Zap } from "lucide-react"
+import { ArrowRight, Zap } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 
 import { useAuth } from "@/lib/auth-context"

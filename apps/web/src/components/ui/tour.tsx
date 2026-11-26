@@ -3,7 +3,7 @@
 import * as React from "react"
 import { createPortal } from "react-dom"
 import { Popover as PopoverPrimitive } from "@base-ui/react/popover"
-import { ChevronLeft, ChevronRight, X } from "lucide-react"
+import { ChevronLeft, ChevronRight, X } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 
 import { Button } from "@/components/ui/button-clean"

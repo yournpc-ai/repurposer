@@ -133,10 +133,8 @@ async def test_template_slot_preview(studio):
 
 
 async def open_preset_library(page):
-    presets = page.get_by_role("tab", name="Presets", exact=True)
-    if not await presets.is_visible():
-        await page.get_by_role("button", name="Open workbench", exact=True).click()
-    await presets.click()
+    presets_btn = page.get_by_role("button", name="Presets", exact=True)
+    await presets_btn.click()
 
 
 async def test_sound_lab_preview_and_citation(studio):
@@ -219,10 +217,7 @@ async def test_interactive_blocks_in_chinese_gallery(studio):
     await page.evaluate("document.cookie = 'repurposer-lang=zh;path=/'")
     await page.reload()
     await page.emulate_media(reduced_motion="no-preference")
-    presets = page.get_by_role("tab", name="预设库", exact=True)
-    if not await presets.is_visible():
-        await page.get_by_role("button", name="打开右侧看板", exact=True).click()
-    await presets.click()
+    await page.get_by_role("button", name="预设库", exact=True).click()
     await page.get_by_role("radio", name="动效块", exact=True).click()
     gallery = page.get_by_role("region", name="动效块", exact=True)
     for block_id, title, category in (

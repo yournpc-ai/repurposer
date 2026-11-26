@@ -6,7 +6,7 @@ import { apiGet, apiPut } from "@/lib/api"
 import { Button } from "@/components/ui/button-clean"
 import { TextField } from "@/components/ui/text-field-clean"
 import { Avatar } from "@/components/ui/avatar-clean"
-import { Info } from "lucide-react"
+import { Info } from "@/components/ui/icons"
 
 export function ProfileSection() {
   const { t } = useTranslation()

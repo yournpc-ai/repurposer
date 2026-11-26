@@ -163,18 +163,22 @@ def _reminder_block(
     return _system_notice(_reminder_tail(text, question, default_path))
 
 
-_DEFAULT_CONVERSATION_TITLES = frozenset({"", "Project chat", "New chat", "新对话"})
+from app.chat.titles import (
+    DEFAULT_CONVERSATION_TITLES as _DEFAULT_CONVERSATION_TITLES,
+    derive_conversation_title,
+    derive_project_title,
+    should_auto_upgrade_title,
+)
 
 
-def _auto_conversation_title(text: str, *, max_len: int = 28) -> str:
+def _auto_conversation_title(
+    text: str,
+    *,
+    project_title: str | None = None,
+    max_len: int = 24,
+) -> str:
     """Derive a concise readable title from the opening user message."""
-    first_line = next((line.strip() for line in (text or "").splitlines() if line.strip()), "")
-    cleaned = re.sub(r"\s+", " ", first_line).strip()
-    if not cleaned:
-        return "Project chat"
-    if len(cleaned) > max_len:
-        return cleaned[: max_len - 1].rstrip() + "…"
-    return cleaned
+    return derive_conversation_title(text, project_title=project_title, max_len=max_len)
 
 
 async def resolve_project_conversation(
@@ -1262,6 +1266,7 @@ async def _continue_chat_answer(
     data: AnswerRequest,
     option_label: str | None,
     *,
+    answered_message: Message | None = None,
     suggestion_ref: SuggestionRef | None = None,
     on_delta=None,
     on_phase=None,
@@ -1272,7 +1277,9 @@ async def _continue_chat_answer(
     on_activity=None,
     on_candidates=None,
     on_row_append=None,
+    on_decision_committed=None,
     turn_id: UUID | None = None,
+    run_id: str | None = None,
 ) -> Message | None:
     """Persist the user decision before continuing the project editor on the same opening."""
     project = await db.get(Project, conversation.project_id)
@@ -1294,6 +1301,11 @@ async def _continue_chat_answer(
             _backfill_brief_slot(project, question.slot, say)
     # The user's decision survives model or transport failure.
     await db.commit()
+    if on_decision_committed is not None and answered_message is not None:
+        await db.refresh(answered_message)
+        result = on_decision_committed(answered_message, run_id)
+        if result is not None:
+            await result
     if project is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Project not found")
     await db.refresh(project)
@@ -1326,7 +1338,7 @@ async def _continue_chat_answer(
             db, user_id, conversation, project,
             ChatRequest(project_id=project.id, message=reply, mentions=mentions,
                         attachments=attachments, suggestion_ref=suggestion_ref),
-            group_answer_submitted=data.kind == "group", recent=recent, turn_id=turn_id,
+            group_answer_submitted=data.kind == "group", recent=recent, turn_id=turn_id, run_id=run_id,
             on_delta=on_delta, on_phase=on_phase, on_tool_call=on_tool_call,
             on_tool_ready=on_tool_ready, on_interim_prose=on_interim_prose,
             on_loop_event=on_loop_event, on_activity=on_activity,
@@ -1357,7 +1369,9 @@ async def answer_question(
     on_activity=None,
     on_candidates=None,
     on_row_append=None,
+    on_decision_committed=None,
     turn_id: UUID | None = None,
+    run_id: str | None = None,
 ) -> tuple[Message, Message | None]:
     """Record one authorized answer and continue the original Chat opening."""
     media_receipt = await db.get(Message, message_id)
@@ -1459,6 +1473,11 @@ async def answer_question(
             opening = await db.get(Message, turn_id)
             opening.turn_state = "in_flight"
             await db.commit()
+            if on_decision_committed is not None:
+                await db.refresh(message)
+                res = on_decision_committed(message, run_id)
+                if res is not None:
+                    await res
             # Use the SSE activity writer's transaction throughout the continuation.
             # A worker that already claimed this opening will finish it for history.
             owns_continuation = await db.scalar(select(func.pg_try_advisory_xact_lock(editor_lock_key(turn_id))))
@@ -1490,6 +1509,7 @@ async def answer_question(
                     question,
                     data,
                     option_label,
+                    answered_message=message,
                     suggestion_ref=_suggestion_ref_for(message, data),
                     on_delta=on_delta,
                     on_phase=on_phase,
@@ -1500,7 +1520,9 @@ async def answer_question(
                     on_activity=on_activity,
                     on_candidates=on_candidates,
                     on_row_append=on_row_append,
+                    on_decision_committed=on_decision_committed,
                     turn_id=turn_id,
+                    run_id=run_id,
                 )
             )
         await fold_conversation_usage(
@@ -1560,6 +1582,7 @@ async def _plan_turn(
     on_candidates=None,
     on_row_append=None,
     turn_id: UUID | None = None,
+    run_id: str | None = None,
     group_answer_submitted: bool = False,
     authorized_media: Message | None = None,
     review_pinned_export: bool = False,
@@ -1600,6 +1623,7 @@ async def _plan_turn(
         on_candidates=on_candidates,
         on_row_append=on_row_append,
         turn_id=turn_id,
+        run_id=run_id,
     )
 
 
@@ -1661,8 +1685,37 @@ async def prepare_chat_turn(
         db, user_id, request.project_id, request.conversation_id
     )
     conversation_id = UUID(str(conversation.id))
-    if (conversation.title or "").strip() in _DEFAULT_CONVERSATION_TITLES and request.message.strip():
-        conversation.title = _auto_conversation_title(request.message)
+    project_row = await db.get(Project, request.project_id)
+    conv_ctx = dict(conversation.context or {"schema_version": 1, "items": []})
+    if (
+        project_row is not None
+        and request.message.strip()
+        and should_auto_upgrade_title(
+            project_row.title,
+            auto_title=conv_ctx.get("auto_project_title"),
+            user_edited=bool(project_row.title_user_edited),
+            is_project=True,
+        )
+    ):
+        derived_proj = derive_project_title(request.message, fallback=project_row.title or "Untitled")
+        project_row.title = derived_proj
+        conv_ctx["auto_project_title"] = derived_proj
+    if (
+        request.message.strip()
+        and should_auto_upgrade_title(
+            conversation.title,
+            auto_title=conv_ctx.get("auto_title"),
+            user_edited=bool(conversation.title_user_edited or conv_ctx.get("title_user_edited")),
+        )
+    ):
+        next_title = _auto_conversation_title(
+            request.message,
+            project_title=project_row.title if project_row is not None else None,
+        )
+        conversation.title = next_title
+        conv_ctx["auto_title"] = next_title
+        conv_ctx.setdefault("title_stage", "l0")
+    conversation.context = conv_ctx
     conversation.updated_at = datetime.now(UTC)
     if request.first_message:
         # The sequence counter also survives a zero-visible Stop retraction.
@@ -1851,6 +1904,9 @@ async def persist_interim_prose(
     conversation_id: UUID,
     turn_id: UUID,
     text: str,
+    *,
+    run_id: str | None = None,
+    rail_note: bool = False,
 ) -> Message:
     """Persist one middle-of-Turn prose row and replace its trailing partial."""
     await _lock_turn_for_transcript_write(db, turn_id)
@@ -1860,12 +1916,17 @@ async def persist_interim_prose(
             Message.intent["type"].astext == "partial",
         )
     )
+    intent: dict[str, Any] = {"type": "interim_prose"}
+    if run_id:
+        intent["run_id"] = run_id
+    if rail_note:
+        intent["rail_note"] = True
     return await _create_message(
         db,
         conversation_id,
         "assistant",
         text,
-        intent={"type": "interim_prose"},
+        intent=intent,
         turn_id=turn_id,
     )
 
@@ -1903,29 +1964,68 @@ async def persist_partial_prose(
 
 
 def _interim_prose_callback(
-    db, conversation_id, on_interim_prose=None, turn_id: UUID | None = None
+    db, conversation_id, on_interim_prose=None, turn_id: UUID | None = None, run_id: str | None = None
 ):
-    """Persist interim prose before exposing its stable row identity on SSE."""
+    """Persist interim prose before exposing its stable row identity on SSE.
+
+    Option A single-rail invariant: only the FIRST interim prose of a Run
+    lands as a visible opening ``stage_note`` above the work rail; any
+    subsequent mid-run interim prose is born as ``rail_note`` directly inside
+    the Run's single collapsible work rail (never flashes in main chat, never
+    splits ``工作了 Xs`` into multiple fragments).
+    """
+    import inspect
+
+    emitted_count = 0
+    accepts_display_role = False
+    if on_interim_prose is not None:
+        try:
+            sig = inspect.signature(on_interim_prose)
+            accepts_display_role = (
+                "display_role" in sig.parameters
+                or any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values())
+            )
+        except (TypeError, ValueError):
+            accepts_display_role = False
+
     async def _emit(text: str) -> None:
+        nonlocal emitted_count
+        rail_note = emitted_count > 0
+        emitted_count += 1
+        display_role = "rail_note" if rail_note else "stage_note"
         if turn_id is None:
-            await _create_message(db, conversation_id, "assistant", text, intent={"type": "interim_prose"})
+            intent: dict[str, Any] = {"type": "interim_prose"}
+            if run_id:
+                intent["run_id"] = run_id
+            if rail_note:
+                intent["rail_note"] = True
+            await _create_message(db, conversation_id, "assistant", text, intent=intent)
             return
 
         from app.models.database import AsyncSessionLocal
 
         async with AsyncSessionLocal() as interim_db:
             message = await persist_interim_prose(
-                interim_db, conversation_id, turn_id, text
+                interim_db, conversation_id, turn_id, text, run_id=run_id, rail_note=rail_note
             )
             await interim_db.commit()
         if on_interim_prose is None:
             return
-        result = on_interim_prose(
-            text,
-            message.created_at.isoformat(),
-            str(message.id),
-            message.seq,
-        )
+        if accepts_display_role:
+            result = on_interim_prose(
+                text,
+                message.created_at.isoformat(),
+                str(message.id),
+                message.seq,
+                display_role=display_role,
+            )
+        else:
+            result = on_interim_prose(
+                text,
+                message.created_at.isoformat(),
+                str(message.id),
+                message.seq,
+            )
         if result is not None:
             await result
 
@@ -2136,38 +2236,79 @@ async def stamp_turn_failed(user_message_id) -> None:
         )
 
 
+async def mark_turn_steps_failed(user_message_id: UUID) -> list[dict[str, str]] | None:
+    """Mark any in-progress step on the opening turn row as failed so StepsPlanCard
+    survives failures and refreshes with an honest visual failure marker."""
+    from app.models.database import AsyncSessionLocal
+
+    try:
+        async with AsyncSessionLocal() as db:
+            row = await db.get(Message, user_message_id, with_for_update=True)
+            if row is None:
+                return None
+            intent = dict(row.intent or {})
+            steps = intent.get("steps")
+            if not isinstance(steps, list) or not steps:
+                return None
+            updated = []
+            changed = False
+            for item in steps:
+                if isinstance(item, dict) and item.get("status") == "in_progress":
+                    updated.append({**item, "status": "failed"})
+                    changed = True
+                else:
+                    updated.append(item)
+            if not changed:
+                return steps
+            intent["steps"] = updated
+            row.intent = intent
+            await db.commit()
+            return updated
+    except Exception as e:  # noqa: BLE001 — best-effort on failure teardown
+        logger.warning("mark_turn_steps_failed_error", turn_id=str(user_message_id), error=str(e))
+        return None
+
+
 async def persist_turn_failed_line(
     conversation_id,
     detail: str,
     turn_id: UUID | None = None,
-) -> None:
+    *,
+    run_id: str | None = None,
+    checkpoint: dict[str, Any] | None = None,
+) -> Message | None:
     """Persist a failed turn's honest line as ONE assistant row (intent
-    ``{"type": "turn_failed"}``) — the live grey meta row's durable twin, so
+    ``{"type": "turn_failed"}``) — the live failure checkpoint's durable twin, so
     a refresh keeps the failure's stage and its lawful next step instead of
-    dropping them (法2 的穷举诚实行在回合失败座的同形). Best-effort, fresh
-    session (the turn's own session is tearing down); never raises.
-    ``conversation_id`` must be captured pre-rollback (本地变量律)."""
+    dropping them. Best-effort, fresh session; never raises."""
     from app.models.database import AsyncSessionLocal  # deferred: failure path
 
     if not detail.strip():
-        return
+        return None
     try:
         async with AsyncSessionLocal() as db:
-            await _create_message(
+            intent: dict[str, Any] = {"type": "turn_failed"}
+            if run_id:
+                intent["run_id"] = run_id
+            if checkpoint:
+                intent["checkpoint"] = checkpoint
+            row = await _create_message(
                 db,
                 conversation_id,
                 "assistant",
                 detail,
-                intent={"type": "turn_failed"},
+                intent=intent,
                 turn_id=turn_id,
             )
             await db.commit()
+            return row
     except Exception as e:  # noqa: BLE001 — best-effort by contract
         logger.warning(
             "turn_failed_line_persist_error",
             conversation_id=str(conversation_id),
             error=str(e),
         )
+        return None
 
 
 async def execute_chat_turn(
@@ -2184,25 +2325,9 @@ async def execute_chat_turn(
     on_activity=None,
     on_candidates=None,
     on_row_append=None,
+    run_id: str | None = None,
 ) -> ChatResponse:
-    """chat() phase 2: run the agent turn, commit once, assemble the response.
-
-    ``on_delta`` (chat SSE) receives the prose channel's fragments — the
-    reply itself now (ADR-077 判词②: speech left the action JSON; the
-    typewriter law holds natively); ``on_reasoning`` receives reasoning
-    fragments as a liveness signal; ``on_phase`` receives System Status
-    labels at REAL macro-state switches — the film design span's
-    capturing / storyboarding / storyboard_revision at real transitions,
-    and None as the span's exit clear. Every other LLM window wears the
-    base label "Thinking…" (2026-09-10 用户拍板) — a plain black-box
-    window needs no alias, however long it runs.
-    ``on_tool_call`` / ``on_tool_ready`` carry the structure frames: a tool
-    call's name became known (the Activity beat's seat + the explicit phase
-    clear) / a call's arguments validated (the
-    question.preview seat — the retired ask-object watcher). The base label
-    is "Thinking…" (2026-09-10 用户拍板). None (the JSON path, repair
-    iterations, answer_question's continuation) keeps the one-shot calls.
-    """
+    """chat() phase 2: run the agent turn, commit once, assemble the response."""
     with bind_conversation_turn(
         conversation_id=prepared.conversation_id, turn_id=prepared.user_message.id,
         project_id=prepared.project.id,
@@ -2210,7 +2335,7 @@ async def execute_chat_turn(
         assistant_message, answered = await _plan_turn(
             db, prepared.user_id, prepared.conversation, prepared.project, request,
             skill=prepared.skill,
-            recent=prepared.history, turn_id=prepared.user_message.id,
+            recent=prepared.history, turn_id=prepared.user_message.id, run_id=run_id,
             on_delta=on_delta, on_reasoning=on_reasoning, on_phase=on_phase,
             on_tool_call=on_tool_call, on_tool_ready=on_tool_ready, on_interim_prose=on_interim_prose,
             on_loop_event=on_loop_event, on_activity=on_activity, on_candidates=on_candidates,
@@ -2344,6 +2469,23 @@ async def record_asset_activity(
             .limit(1)
         )
         return (await db.execute(existing)).scalar_one_or_none()
+
+    # Never inject a turn_id-less asset-reading row into the middle of an
+    # actively running turn — the turn already owns its capture_web /
+    # prepare_video_materials activity row, and a NULL turn_id row would split
+    # the persisted work fold on refresh.
+    active_turn = (
+        await db.execute(
+            select(Message.id)
+            .where(
+                Message.conversation_id == conversation.id,
+                Message.turn_state == "in_flight",
+            )
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if active_turn is not None:
+        return None
 
     activity_id = f"asset-reading:{ref}"
     dedup = select(Message.id).where(
@@ -2499,10 +2641,14 @@ async def append_activity_row(
     frame: dict[str, Any],
     *,
     turn_id: UUID | None = None,
+    run_id: str | None = None,
 ) -> Message:
     """Append ONE activity row at its array position (open / born-terminal)."""
     if turn_id is not None:
         await _lock_turn_for_transcript_write(db, turn_id)
+    intent: dict[str, Any] = {"type": ACTIVITY_ROW_TYPE, "frame": frame}
+    if run_id:
+        intent["run_id"] = run_id
     message = Message(
         conversation_id=conversation_id,
         role="assistant",
@@ -2510,7 +2656,7 @@ async def append_activity_row(
         attachments=[],
         mentions=[],
         turn_id=turn_id,
-        intent={"type": ACTIVITY_ROW_TYPE, "frame": frame},
+        intent=intent,
         seq=await alloc_message_seq(conversation_id, db),
     )
     db.add(message)
@@ -2533,7 +2679,11 @@ async def settle_activity_row(
     if message.turn_id is not None:
         await _lock_turn_for_transcript_write(db, message.turn_id)
         await db.refresh(message, with_for_update=True)
-    message.intent = {"type": ACTIVITY_ROW_TYPE, "frame": frame}
+    existing_run_id = (message.intent or {}).get("run_id")
+    intent: dict[str, Any] = {"type": ACTIVITY_ROW_TYPE, "frame": frame}
+    if existing_run_id:
+        intent["run_id"] = existing_run_id
+    message.intent = intent
     await db.flush()
 
 

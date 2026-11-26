@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button-clean"
 import { IconButton } from "@/components/ui/icon-button-clean"
 import { Spinner } from "@/components/ui/spinner-clean"
-import { X } from "lucide-react"
+import { X } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 
 import {

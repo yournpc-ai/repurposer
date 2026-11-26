@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, type RefObject } from "react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
-import { Plus, Upload } from "lucide-react"
+import { Plus, Upload } from "@/components/ui/icons"
 
 import { useProjectLaunch } from "@/lib/useProjectLaunch"
 import { useStagingUploads } from "@/lib/stagingUploads"
@@ -250,8 +250,8 @@ export function HomeComposer({
         data-slot="home-composer"
         className={
           dragging
-            ? "relative w-full rounded-[22px] border border-border bg-card shadow-sm outline-2 outline-dashed outline-ring"
-            : "relative w-full rounded-[22px] border border-border bg-card shadow-sm"
+            ? "relative w-full rounded-[22px] bg-card outline-2 outline-dashed outline-ring"
+            : "relative w-full rounded-[22px] bg-card"
         }
         style={{
           ["--ui-crdc-radius" as string]: "22px",

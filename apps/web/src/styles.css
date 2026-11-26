@@ -13,8 +13,16 @@
 
 /* Shared surface for remaining portalled controls. */
 @utility overlay-surface {
-  background: var(--aui-overlay);
-  box-shadow: var(--aui-shadow-popover);
+  background: var(--popover);
+  box-shadow: var(--shadow-popover);
+}
+
+@utility border-subtle {
+  border-color: var(--border-subtle);
+}
+
+@utility border-strong {
+  border-color: var(--border-strong);
 }
 
 @utility landing-header-glass {
@@ -288,9 +296,9 @@
   }
 }
 
-/* BrandLoader fill — the solid delta copy sweeps left→right over its dim
- * base (one stream in, many out), holds a beat, releases, restarts. The
- * -10% vertical bleed keeps the glyph's stroke from being clipped. */
+/* BrandLoader fill — the solid Rookie mark sweeps left→right over its dim
+ * base, holds a beat, releases, restarts. The -10% vertical bleed prevents
+ * sub-pixel edge clipping. */
 @utility brand-loader-fill {
   animation: brand-fill 1.8s ease-in-out infinite;
 
@@ -444,16 +452,17 @@ body {
 @theme inline {
   --font-sans: var(--aui-font);
   --font-heading: var(--aui-font);
-  --tracking-display: -0.03em;
-  --tracking-body: -0.01em;
-  --leading-display: 1.1;
-  --leading-body: 1.4;
+  --font-mono: var(--aui-font-mono);
+  --tracking-display: -0.025em;
+  --tracking-body: 0;
+  --leading-display: 1.2;
+  --leading-body: 1.5;
   --ease-enter: var(--aui-ease);
   --spacing: 0.25rem;
-  --shadow-resting: var(--aui-shadow-card);
-  --shadow-raised: var(--aui-shadow-card);
-  --shadow-floating: var(--aui-shadow-popover);
-  --shadow-control-thumb: var(--aui-shadow-card);
+  --shadow-resting: var(--shadow-card);
+  --shadow-raised: var(--shadow-card);
+  --shadow-floating: var(--shadow-popover);
+  --shadow-control-thumb: var(--shadow-card);
   --color-inverse: var(--inverse);
   --color-inverse-foreground: var(--inverse-foreground);
   --color-ring: var(--ring);
@@ -463,9 +472,9 @@ body {
   --color-border-strong: var(--border-strong);
   --color-control-on: var(--aui-primary);
   --color-control-glyph: var(--aui-on-primary);
-  --color-control-track: var(--aui-subtle);
-  --color-control-track-hover: var(--aui-border-strong);
-  --color-control-thumb: var(--aui-surface);
+  --color-control-track: var(--muted);
+  --color-control-track-hover: var(--border-strong);
+  --color-control-thumb: var(--card);
   --color-control-thumb-on: var(--aui-on-primary);
   --color-control-fill: var(--aui-primary);
   --color-disabled: var(--disabled);
@@ -515,39 +524,40 @@ dialog.login-modal::backdrop {
   background: color-mix(in srgb, var(--background) 60%, transparent);
   backdrop-filter: blur(2px);
 }
-.dark dialog.login-modal::backdrop { background: rgb(0 0 0 / 30%); }
+.dark dialog.login-modal::backdrop,
+[data-theme="dark"] dialog.login-modal::backdrop { background: rgb(0 0 0 / 30%); }
 dialog.login-modal .ui-tfc,
 dialog.login-modal button[type="submit"] { --h: 44px; }
 
 .composer-picker.ui-crdc {
   --ui-crdc-pad: 6px;
   gap: 2px;
-  box-shadow: var(--aui-shadow-popover);
+  box-shadow: var(--shadow-popover);
 }
 
 /* Browsers paint autofill on the inner input. Match the surrounding Clean field. */
 .ui-tfc__input:autofill {
-  box-shadow: inset 0 0 0 100vmax var(--aui-surface);
-  -webkit-text-fill-color: var(--aui-ink);
-  caret-color: var(--aui-ink);
+  box-shadow: inset 0 0 0 100vmax var(--card);
+  -webkit-text-fill-color: var(--foreground);
+  caret-color: var(--foreground);
 }
 
 :root {
   color-scheme: light;
 
-  --aui-font: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
-  --aui-radius: 6px;
-  --aui-radius-lg: 12px;
-  --aui-ease: cubic-bezier(.25, 1, .5, 1);
-  --aui-ink: #202020;
-  --aui-muted: #626262;
+  /* AffectUI structural & monochrome accent tokens.
+     Intentionally omit global --aui-surface / --aui-subtle / --aui-overlay /
+     --aui-ink / --aui-muted / --aui-border / --aui-shadow-* so every AffectUI
+     component keeps its native multi-tier light/dark fallbacks (page → panel →
+     card → elevated pill). */
+  --aui-font: "Inter Variable", "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --aui-font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  --aui-radius-sm: 5px;
+  --aui-radius: 7px;
+  --aui-radius-lg: 10px;
+  --aui-ease: cubic-bezier(0.22, 1, 0.36, 1);
   --aui-primary: #202020;
   --aui-on-primary: #fcfcfc;
-  --aui-surface: #fff;
-  --aui-overlay: #fff;
-  --aui-subtle: #f5f5f5;
-  --aui-border: rgb(0 0 0 / 8%);
-  --aui-border-strong: rgb(0 0 0 / 16%);
   --aui-focus: #202020;
   --aui-blue: #202020;
   --aui-info: #202020;
@@ -557,10 +567,9 @@ dialog.login-modal button[type="submit"] { --h: 44px; }
   --aui-success: #202020;
   --aui-warning: #925900;
   --aui-success-soft: rgb(0 0 0 / 6%);
-  --aui-shadow-card: 0 0 0 .5px var(--aui-border), 0 1px 2px rgb(0 0 0 / 5%);
-  --aui-shadow-popover: 0 0 0 1px var(--aui-border), 0 8px 24px rgb(0 0 0 / 10%);
 
-  --background: var(--aui-surface);
+  /* App semantic tokens mirrored 1:1 from AffectUI AppShell light palette */
+  --background: #ffffff;
   --landing-background: #f9f8f6;
   --landing-header-background: #f2f1ee;
   /* Media overlays stay constant across page themes. */
@@ -570,49 +579,45 @@ dialog.login-modal button[type="submit"] { --h: 44px; }
   --media-control: color-mix(in oklab, #202020 68%, transparent);
   --media-control-hover: color-mix(in oklab, #202020 82%, transparent);
   --media-control-foreground: var(--media-foreground);
-  --foreground: var(--aui-ink);
-  --card: var(--aui-surface);
-  --card-foreground: var(--aui-ink);
-  --popover: var(--aui-overlay);
-  --popover-foreground: var(--aui-ink);
+  --foreground: rgba(0, 0, 0, 0.88);
+  --card: #ffffff;
+  --card-foreground: rgba(0, 0, 0, 0.88);
+  --popover: #ffffff;
+  --popover-foreground: rgba(0, 0, 0, 0.88);
   --primary: var(--aui-primary);
   --primary-foreground: var(--aui-on-primary);
-  --secondary: var(--aui-subtle);
-  --secondary-foreground: var(--aui-ink);
-  --muted: var(--aui-subtle);
-  --inset: var(--aui-subtle);
-  --muted-foreground: var(--aui-muted);
-  --meta-foreground: var(--aui-muted);
-  --accent: var(--aui-subtle);
-  --accent-foreground: var(--aui-ink);
+  --secondary: #f4f4f4;
+  --secondary-foreground: rgba(0, 0, 0, 0.88);
+  --muted: #f4f4f4;
+  --inset: #f8f8f8;
+  --muted-foreground: rgba(0, 0, 0, 0.61);
+  --meta-foreground: rgba(0, 0, 0, 0.45);
+  --accent: rgba(0, 0, 0, 0.055);
+  --accent-foreground: rgba(0, 0, 0, 0.88);
   --success: var(--aui-success);
   --success-subtle: var(--aui-success-soft);
   --warning: var(--aui-warning);
   --destructive: var(--aui-danger);
-  --border: var(--aui-border);
-  --border-subtle: var(--aui-border);
-  --border-strong: var(--aui-border-strong);
-  --input: var(--aui-border);
+  --border: rgba(0, 0, 0, 0.06);
+  --border-subtle: rgba(0, 0, 0, 0.04);
+  --border-strong: rgba(0, 0, 0, 0.1);
+  --input: rgba(0, 0, 0, 0.08);
   --ring: var(--aui-focus);
+  --shadow-card: 0 0 0 0.5px rgba(0, 0, 0, 0.06), 0 1px 1px -1px rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-popover: 0 0 0 0.5px rgba(0, 0, 0, 0.1), 0 12px 32px -8px rgba(0, 0, 0, 0.16);
   --disabled: var(--inset);
   --disabled-foreground: var(--meta-foreground);
-  --icon-chip: var(--aui-surface);
+  --icon-chip: rgba(0, 0, 0, 0.04);
   --radius: var(--aui-radius);
-  --inverse: #202020;
-  --inverse-foreground: var(--aui-surface);
+  --inverse: #171717;
+  --inverse-foreground: #ffffff;
 }
 
-.dark {
+.dark,
+[data-theme="dark"] {
   color-scheme: dark;
-  --aui-ink: #ededed;
-  --aui-muted: #aaa9ad;
-  --aui-primary: #e8e8ea;
-  --aui-on-primary: #161618;
-  --aui-surface: #1c1c1e;
-  --aui-overlay: #242426;
-  --aui-subtle: #29292c;
-  --aui-border: rgb(255 255 255 / 10%);
-  --aui-border-strong: rgb(255 255 255 / 22%);
+  --aui-primary: #f4f4f5;
+  --aui-on-primary: #111113;
   --aui-focus: #ededed;
   --aui-blue: #ededed;
   --aui-info: #e4e4e7;
@@ -622,20 +627,49 @@ dialog.login-modal button[type="submit"] { --h: 44px; }
   --aui-success: #d4d4d8;
   --aui-warning: #ffce80;
   --aui-success-soft: rgb(255 255 255 / 9%);
-  --aui-shadow-card: 0 0 0 .5px var(--aui-border), 0 1px 2px rgb(0 0 0 / 40%);
-  --aui-shadow-popover: 0 0 0 1px var(--aui-border), 0 8px 24px rgb(0 0 0 / 40%);
+
+  /* App semantic tokens mirrored 1:1 from AffectUI AppShell dark palette:
+     page #0e0e10 → inset #111113 → panel/bg #141416 → card #1b1b1e → muted #212124 */
+  --background: #141416;
+  --foreground: rgba(255, 255, 255, 0.9);
+  --card: #1b1b1e;
+  --card-foreground: rgba(255, 255, 255, 0.9);
+  --popover: #1b1b1e;
+  --popover-foreground: rgba(255, 255, 255, 0.9);
+  --secondary: #1d1d20;
+  --secondary-foreground: rgba(255, 255, 255, 0.9);
+  --muted: #212124;
+  --inset: #111113;
+  --muted-foreground: rgba(255, 255, 255, 0.62);
+  --meta-foreground: rgba(255, 255, 255, 0.45);
+  --accent: rgba(255, 255, 255, 0.08);
+  --accent-foreground: rgba(255, 255, 255, 0.9);
+  --border: rgba(255, 255, 255, 0.08);
+  --border-subtle: rgba(255, 255, 255, 0.05);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --input: rgba(255, 255, 255, 0.1);
+  --shadow-card: 0 0 0 0.5px rgba(255, 255, 255, 0.1), 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-popover: 0 0 0 0.5px rgba(255, 255, 255, 0.14), 0 12px 32px -8px rgba(0, 0, 0, 0.6);
   --landing-background: oklch(0.12 0 0);
   --landing-header-background: #171612;
   --landing-grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.45' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/></svg>");
-  --icon-chip: var(--aui-subtle);
-  --inverse: var(--aui-subtle);
-  --inverse-foreground: var(--aui-ink);
+  --icon-chip: rgba(255, 255, 255, 0.06);
+  --inverse: #212124;
+  --inverse-foreground: rgba(255, 255, 255, 0.9);
 }
 
 /* The public page has its own quieter surface while inheriting every other
  * semantic foreground, control, border and overlay token from the theme. */
 .landing-surface {
   --background: var(--landing-background);
+}
+
+.ui-buttonc.landing-cta {
+  @apply h-9 rounded-full px-5 text-sm font-normal;
+}
+
+.ui-buttonc.landing-cta[data-size="lg"] {
+  @apply h-11 px-8 sm:text-base;
 }
 
 @layer base {
@@ -645,13 +679,15 @@ dialog.login-modal button[type="submit"] { --h: 44px; }
   body {
     @apply bg-background text-foreground;
     font-family: var(--aui-font);
-    letter-spacing: -0.01em;
-    line-height: 1.4;
+    letter-spacing: 0;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
   h1, h2, h3, h4, h5, h6 {
     font-family: var(--aui-font);
-    letter-spacing: -0.03em;
-    line-height: 1.1;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
   }
   button:not(:disabled), [role="button"]:not(:disabled) {
     cursor: pointer;

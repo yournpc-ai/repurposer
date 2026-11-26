@@ -113,9 +113,47 @@ describe("Studio monochrome UI contract", () => {
       expect(container.querySelector('[title="conversations.activeJob"]')).toBeTruthy()
     })
 
-    const dot = container.querySelector('[title="conversations.activeJob"]')
-    expect(dot?.className).toContain("bg-foreground/85")
-    expect(dot?.className).not.toMatch(/\bbg-(sky|blue|emerald|green|teal|cyan)-/)
+    const matrix = container.querySelector('[title="conversations.activeJob"]')
+    const dots = matrix?.querySelectorAll("i") ?? []
+    expect(dots).toHaveLength(4)
+    for (const dot of dots) {
+      expect(dot.className).toContain("bg-foreground/85")
+      expect(dot.className).not.toMatch(/\bbg-(sky|blue|emerald|green|teal|cyan)-/)
+    }
+  })
+
+  it("renders ProjectConversationsTree awaiting-input indicator when has_pending_question is true", async () => {
+    listConversationsMock.mockResolvedValueOnce([
+      {
+        id: "conv-pending",
+        project_id: "proj-1",
+        title: "Promo Brief",
+        message_count: 2,
+        has_active_job: false,
+        has_pending_question: true,
+        compacted: false,
+        compacted_at: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+    ])
+
+    const { container } = render(
+      <ProjectConversationsTree projectId="proj-1" activeConversationId="conv-other" />,
+    )
+
+    await waitFor(() => {
+      expect(container.querySelector('[data-slot="awaiting-input-indicator"]')).toBeTruthy()
+    })
+
+    const indicator = container.querySelector('[data-slot="awaiting-input-indicator"]')
+    expect(indicator?.getAttribute("aria-label")).toBe("conversations.awaitingInput")
+    expect(indicator?.querySelector("svg")).toBeTruthy()
+
+    const decisionCardSource = readFileSync(resolve(__dirname, "decision-card-clean.tsx"), "utf8")
+    for (const pattern of FORBIDDEN_BLUE_GREEN_PATTERNS) {
+      expect(decisionCardSource).not.toMatch(pattern)
+    }
   })
 
   it("defines strictly monochrome global AffectUI tokens in styles.css", () => {

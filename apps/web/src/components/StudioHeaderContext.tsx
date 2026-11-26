@@ -12,6 +12,7 @@ import {
 export interface StudioHeaderSlot {
   left?: ReactNode
   actions?: ReactNode
+  hideNotifications?: boolean
 }
 
 interface StudioHeaderStore {
@@ -82,6 +83,7 @@ export function useStudioHeader(slot: StudioHeaderSlot | null) {
   const store = useContext(StudioHeaderContext)
   const left = slot?.left
   const actions = slot?.actions
+  const hideNotifications = slot?.hideNotifications
   const hasSlot = slot !== null
 
   useEffect(() => {
@@ -90,8 +92,8 @@ export function useStudioHeader(slot: StudioHeaderSlot | null) {
       store.clearSlot()
       return
     }
-    store.setSlot({ left, actions })
-  }, [store, hasSlot, left, actions])
+    store.setSlot({ left, actions, hideNotifications })
+  }, [store, hasSlot, left, actions, hideNotifications])
 
   useEffect(() => {
     if (!store) return

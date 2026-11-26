@@ -451,3 +451,168 @@ def test_native_history_includes_intervening_dialogue_and_places_dock_pick_at_su
                            intent={"answered_question_id": str(rows[1].id)},
                            created_at=start + timedelta(seconds=4)))
     assert conversation_messages(rows) == dialogue
+
+
+def test_autonomous_promo_export_and_internal_error_filters():
+    from app.chat.routes import _is_internal_tool_error
+    from app.chat.turn_tools import PLAN_READ_TOOLS
+    from app.chat.video_turn_seats import asks_for_export
+
+    assert asks_for_export("给oxvalue制作一条宣传片") is True
+    assert asks_for_export("新品发布：https://agent.oxvalue.ai/") is True
+    assert asks_for_export("Make a launch video for OxValue") is True
+    assert asks_for_export("How long is this MP4?") is False
+    assert asks_for_export("把 logo 往左移一点") is False
+    assert asks_for_export("给oxvalue制作一条宣传片，只要草稿不用导出") is False
+
+    assert _is_internal_tool_error(
+        "Invalid bento_features props. Check get_blocks for its schema. eyebrow: String should have at most 32 characters"
+    ) is True
+    assert _is_internal_tool_error("Include the complete transition at 23.75–24.05 seconds.") is True
+    assert _is_internal_tool_error("Source unavailable") is False
+
+    by_name = {t.name: t for t in PLAN_READ_TOOLS}
+    for name in ("search_blocks", "get_blocks", "search_sfx_library", "get_music"):
+        pres = by_name[name].presentation
+        assert pres is not None and pres.kind == "read" and pres.active_key and pres.done_key
+
+
+def test_native_creation_ask_user_exposes_items_and_post_edit_prunes_it():
+    from app.agents.tool_loop import ContextSnapshot
+    from app.chat.editor import EDITOR_TOOLS
+    from app.chat.prompts import assemble_video_round
+    from app.chat.turn_tools import PLAN_TOOLS, _video_material_tools
+
+    base_tools = [*PLAN_TOOLS, *_video_material_tools(), *EDITOR_TOOLS]
+    fresh = assemble_video_round({
+        "tools": base_tools,
+        "drafts": (),
+        "snapshot": ContextSnapshot("evidence", frozenset(), resources=()),
+        "mode": "plan",
+        "user_text": "给 https://agent.oxvalue.ai/ 制作一个宣传片",
+    })
+    ask_fresh = next(t for t in fresh.tools if t.name == "ask_user")
+    _, fresh_params = ask_fresh.wire_view(ask_fresh.description, ask_fresh.params_model.model_json_schema())
+    assert "items" in fresh_params["properties"]
+
+    comp_resource = ("composition:1", {
+        "kind": "composition",
+        "composition_id": str(uuid4()),
+        "name": "OxValue",
+        "version_id": str(uuid4()),
+        "version": 1,
+        "base_ref": {"composition_id": str(uuid4()), "composition_version_id": str(uuid4()), "content_digest": "a" * 64},
+    })
+    editing = assemble_video_round({
+        "tools": base_tools,
+        "drafts": (),
+        "snapshot": ContextSnapshot("evidence", frozenset({"composition:1"}), resources=(comp_resource,)),
+        "mode": "plan",
+        "user_text": "把标题字号调大一点",
+    })
+    ask_edit = next(t for t in editing.tools if t.name == "ask_user")
+    _, edit_params = ask_edit.wire_view(ask_edit.description, ask_edit.params_model.model_json_schema())
+    assert "items" not in edit_params["properties"]
+
+
+@pytest.mark.asyncio
+async def test_stamp_video_presentation_skips_partial_preview_after_delivery():
+    from types import SimpleNamespace
+    from app.chat.plan_turn import PlanTurn
+
+    runner = object.__new__(PlanTurn)
+    runner.project = Project(id=uuid4(), user_id=uuid4(), title="OxValue")
+    runner.text = "交付成片"
+    runner._video_presentation_pending = None
+    runner._editor_preview_blocks = [{"kind": "video_storyboard", "scrub": {"kind": "range", "start_seconds": 18.0, "end_seconds": 30.0}}]
+    runner._editor_delivery = {"output_id": str(uuid4()), "delivered_to_chat": True}
+    msg = SimpleNamespace(id=uuid4(), blocks=[], intent={})
+
+    await runner._stamp_video_presentation(msg)
+    assert msg.blocks == []
+    assert getattr(runner, "_editor_preview_blocks", None) is None
+
+
+@pytest.mark.asyncio
+async def test_turn_steps_survive_user_and_assistant_projection_and_stamp_turn_prose():
+    from datetime import UTC, datetime
+    from types import SimpleNamespace
+    from app.chat.plan_turn import PlanTurn
+    from app.models.schemas import ChatMessageResponse, MessageRole
+
+    steps = [
+        {"title": "准备素材与配音", "status": "done"},
+        {"title": "渲染并交付成片", "status": "in_progress"},
+    ]
+    user_dto = ChatMessageResponse(
+        id=uuid4(),
+        conversation_id=uuid4(),
+        role=MessageRole.USER,
+        content="开工",
+        intent={"steps": steps},
+        created_at=datetime.now(UTC),
+    )
+    assert user_dto.steps == steps
+
+    runner = object.__new__(PlanTurn)
+    runner.turn_id = None
+    runner._latest_steps = steps
+    runner._last_eval_meta = {}
+    runner._video_presentation_pending = None
+    runner.skill = None
+    msg = SimpleNamespace(role="assistant", content="已交付成片。", question=None, intent={})
+    await runner._stamp_turn_metadata(msg, completed=True)
+    assert msg.intent["turn_prose"] is True
+    assert msg.intent["steps"] == [
+        {"title": "准备素材与配音", "status": "done"},
+        {"title": "渲染并交付成片", "status": "done"},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_sse_pump_detaches_without_cancelling_turn_and_explicit_stop_cancels():
+    import asyncio
+    from app.chat.routes import (
+        _DetachableQueue,
+        _cancel_active_turn_task,
+        _register_turn_task,
+        _sse_pump,
+    )
+
+    queue = _DetachableQueue()
+    finished = asyncio.Event()
+    started = asyncio.Event()
+
+    async def background_work():
+        started.set()
+        await queue.put("event: first\ndata: {}\n\n")
+        await asyncio.sleep(0.03)
+        # Writing after client disconnect must be a safe no-op
+        await queue.put(("completed", {"ok": True}))
+        finished.set()
+
+    task = asyncio.create_task(background_work())
+    turn_id = uuid4()
+    _register_turn_task(turn_id, task)
+
+    gen = _sse_pump(queue, task, "turn.completed", "turn.failed")
+    first = await anext(gen)
+    assert first.startswith("event: first")
+    # Simulate F5 refresh / tab close disconnecting the SSE generator early
+    await gen.aclose()
+    assert not task.cancelled()
+    await asyncio.wait_for(finished.wait(), timeout=1.0)
+    assert task.done() and not task.cancelled()
+
+    # Explicit /stop must still cancel an actively registered turn task immediately
+    blocker = asyncio.Event()
+    stop_turn_id = uuid4()
+
+    async def long_work():
+        await blocker.wait()
+
+    stop_task = asyncio.create_task(long_work())
+    _register_turn_task(stop_turn_id, stop_task)
+    assert _cancel_active_turn_task(stop_turn_id) is True
+    with pytest.raises(asyncio.CancelledError):
+        await stop_task

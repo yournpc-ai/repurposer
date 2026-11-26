@@ -284,6 +284,8 @@ class CuratedMusicEntry(TypedDict):
     attribution: str
     provenance: str
     use_for: NotRequired[list[str]]
+    compatible_styles: NotRequired[list[str]]
+    tags: NotRequired[list[str]]
 
 
 # These license strings apply to the music recordings, not Shotcraft source
@@ -301,6 +303,8 @@ SHOTCRAFT_MUSIC_CATALOG: list[CuratedMusicEntry] = [
         "license": "Mixkit Stock Music Free License; commercial use requires recheck",
         "attribution": "Tech House — bundled by Shotcraft; artist/source recheck required",
         "provenance": "Shotcraft assets/audio/ATTRIBUTION.md",
+        "compatible_styles": ["institutional_dark", "kinetic_anime"],
+        "tags": ["tech-house", "electronic", "pulse", "modern", "launch"],
     },
     {
         "mood": "mixkit-cat-walk",
@@ -313,6 +317,8 @@ SHOTCRAFT_MUSIC_CATALOG: list[CuratedMusicEntry] = [
         "license": "Mixkit Stock Music Free License",
         "attribution": "Cat Walk — Arulo (Mixkit)",
         "provenance": "Shotcraft assets/audio/ATTRIBUTION.md",
+        "compatible_styles": ["kinetic_anime", "vox_editorial"],
+        "tags": ["house", "upbeat", "stylish", "energetic", "showcase"],
     },
     {
         "mood": "mixkit-g-eazy-nba-type",
@@ -325,6 +331,8 @@ SHOTCRAFT_MUSIC_CATALOG: list[CuratedMusicEntry] = [
         "license": "Mixkit Stock Music Free License",
         "attribution": "G Eazy NBA type — Arulo (Mixkit)",
         "provenance": "Shotcraft assets/audio/ATTRIBUTION.md",
+        "compatible_styles": ["institutional_dark", "kinetic_anime"],
+        "tags": ["hip-hop", "confident", "bold", "groove"],
     },
     {
         "mood": "mixkit-house-vibez",
@@ -337,6 +345,8 @@ SHOTCRAFT_MUSIC_CATALOG: list[CuratedMusicEntry] = [
         "license": "Mixkit Stock Music Free License",
         "attribution": "House Vibez — Lily J (Mixkit)",
         "provenance": "Shotcraft assets/audio/ATTRIBUTION.md",
+        "compatible_styles": ["kinetic_anime", "vox_editorial"],
+        "tags": ["house", "groove", "upbeat", "product"],
     },
     {
         "mood": "mixkit-tonight-hiphop",
@@ -349,6 +359,8 @@ SHOTCRAFT_MUSIC_CATALOG: list[CuratedMusicEntry] = [
         "license": "Mixkit Stock Music Free License",
         "attribution": "Tonight — Michael Ramir C. (Mixkit)",
         "provenance": "Shotcraft assets/audio/ATTRIBUTION.md",
+        "compatible_styles": ["vox_editorial", "institutional_dark"],
+        "tags": ["hip-hop", "urban", "steady", "editorial"],
     },
 ]
 
@@ -376,6 +388,8 @@ DRUMPRINTS_MUSIC_CATALOG: list[CuratedMusicEntry] = [
         "attribution": "Pocket Proof adapts DP2301 Longform 101 with new bass and tine chords. " + _DRUMPRINTS_CREDIT,
         "provenance": "Track 04, first 12 bars, closing hit at 28.515 s. " + _DRUMPRINTS_SESSION,
         "use_for": ["磁吸 CTA、短网址键入", "Twelve-bar launch edit with syncopated bass and a final downbeat"],
+        "compatible_styles": ["vox_editorial", "swiss_paper"],
+        "tags": ["funk", "groove", "product-launch", "crisp", "syncopated"],
     },
     {
         "mood": "relay-glass",
@@ -389,6 +403,8 @@ DRUMPRINTS_MUSIC_CATALOG: list[CuratedMusicEntry] = [
         "attribution": "Relay Glass adapts DP2301 Contact Sheet 128 with electronic bass and stereo bell pulses. " + _DRUMPRINTS_CREDIT,
         "provenance": "Track 01, first 16 bars, closing hit at 30.000 s. " + _DRUMPRINTS_SESSION,
         "use_for": ["黑白灰产品揭示", "Cut on bass pulses and reveal the product with the stereo bells"],
+        "compatible_styles": ["swiss_paper", "institutional_dark"],
+        "tags": ["electro", "minimal", "clean", "product-reveal", "pulse"],
     },
     {
         "mood": "open-window",
@@ -402,6 +418,8 @@ DRUMPRINTS_MUSIC_CATALOG: list[CuratedMusicEntry] = [
         "attribution": "Open Window adapts DP2301 Longform 158 with bass and layered plucked strings. " + _DRUMPRINTS_CREDIT,
         "provenance": "Track 06, 16 bars from 6.076 s, closing chord at 24.304 s. " + _DRUMPRINTS_SESSION,
         "use_for": ["工作台铺陈至产品全景", "Build from sparse strums to the high plucked line in bar nine"],
+        "compatible_styles": ["vox_editorial", "swiss_paper"],
+        "tags": ["upbeat-indie", "bright", "building", "showcase", "plucked"],
     },
     {
         "mood": "contact-sheet-101-a",
@@ -415,6 +433,8 @@ DRUMPRINTS_MUSIC_CATALOG: list[CuratedMusicEntry] = [
         "attribution": "DP2301 Contact Sheet 101 A, level adjusted and encoded as MP3. " + _DRUMPRINTS_CREDIT,
         "provenance": "Track 07, full solo drum performance. " + _DRUMPRINTS_SESSION,
         "use_for": ["界面细节特写与实录翻页", "Drums alone under a sequence of tactile actions"],
+        "compatible_styles": ["swiss_paper", "vox_editorial", "institutional_dark"],
+        "tags": ["minimal-percussion", "tactile", "drums", "ui-demo", "clean"],
     },
 ]
 
@@ -743,11 +763,13 @@ async def _reconcile_curated_music(db: AsyncSession) -> list[Music]:
             "provenance": entry["provenance"],
         })
         lufs_val = measure_audio_lufs(data) if data is not None else (row.lufs if row is not None else None)
-        discovery = {
+        discovery: dict[str, Any] = {
             "genre": entry["style"].lower(),
             "bpm": entry["reference_bpm"],
-            "use_for": entry["use_for"],
-        } if "use_for" in entry else {}
+            "tags": list(entry.get("tags") or [entry["style"].lower(), mood]),
+            "compatible_styles": list(entry.get("compatible_styles") or []),
+            **({"use_for": entry["use_for"]} if "use_for" in entry else {}),
+        }
         if row is None:
             if data is None or duration_seconds is None:
                 raise RuntimeError(f"curated music {mood} was not probed")
@@ -769,8 +791,6 @@ async def _reconcile_curated_music(db: AsyncSession) -> list[Music]:
                 generated_by_user_id=None,
                 scope="platform",
                 status="curated",
-                tags=[entry["style"].lower(), mood],
-                compatible_styles=[],
                 instrumental=True,
                 lufs=lufs_val,
                 meta=meta,

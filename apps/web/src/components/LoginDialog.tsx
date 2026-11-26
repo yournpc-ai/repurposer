@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import { toast } from "sonner"
-import { ArrowLeft, ArrowRight, X } from "lucide-react"
+import { ArrowLeft, ArrowRight, X } from "@/components/ui/icons"
 
 import { LogoMark } from "@/components/LogoMark"
 import { IconButton } from "@/components/ui/icon-button-clean"

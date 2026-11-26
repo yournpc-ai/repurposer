@@ -5,8 +5,10 @@
 
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Crosshair, TriangleAlert } from "lucide-react"
+import { Crosshair, RotateCcw, TriangleAlert } from "@/components/ui/icons"
 
+import { Button } from "@/components/ui/button-clean"
+import type { FailureCheckpoint } from "@/components/chat/timeline/types"
 import { cn } from "@/lib/utils"
 
 export function MetaRow({
@@ -62,5 +64,66 @@ export function TurnErrorRow({ text }: { text: string }) {
     <MetaRow icon={<TriangleAlert />}>
       {text}
     </MetaRow>
+  )
+}
+
+/** Durable in-flow recovery card for a failed Run (Phase 2 Failure Checkpoint):
+ * preserves all upstream progress & committed decisions and offers a one-click
+ * resume button without rolling back the conversation. */
+export function FailureCheckpointCard({
+  text,
+  checkpoint,
+  retrying = false,
+  disabled = false,
+  onRetry,
+}: {
+  text: string
+  checkpoint?: FailureCheckpoint
+  retrying?: boolean
+  disabled?: boolean
+  onRetry?: () => void
+}) {
+  const { t } = useTranslation()
+  const canRetry = Boolean(onRetry && (checkpoint?.retryable ?? true))
+  const showPreservedNote = Boolean(
+    checkpoint?.decision_committed &&
+      !text.includes("安全保留") &&
+      !text.toLowerCase().includes("safely preserved"),
+  )
+  return (
+    <div
+      data-slot="failure-checkpoint-card"
+      className="flex flex-col gap-2.5 rounded-lg border border-subtle bg-card px-3.5 py-3 shadow-resting"
+    >
+      <div className="flex items-start gap-2.5">
+        <TriangleAlert
+          aria-hidden="true"
+          className="mt-0.5 size-4 shrink-0 text-destructive"
+        />
+        <div className="min-w-0 flex-1 space-y-1">
+          <p className="text-sm leading-relaxed text-foreground">{text}</p>
+          {showPreservedNote ? (
+            <p className="text-xs text-muted-foreground">
+              {t("chat.checkpoint.preservedNote")}
+            </p>
+          ) : null}
+        </div>
+      </div>
+      {canRetry ? (
+        <div className="flex items-center justify-end">
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            loading={retrying}
+            disabled={disabled || retrying}
+            icon={<RotateCcw className="size-3.5" />}
+            onClick={onRetry}
+          >
+            {retrying ? t("chat.checkpoint.retrying") : t("chat.checkpoint.retry")}
+          </Button>
+        </div>
+      ) : null}
+    </div>
   )
 }

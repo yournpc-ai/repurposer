@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from datetime import datetime
 from enum import StrEnum
 from typing import Annotated, Any, Generic, Literal, TypeVar
@@ -260,6 +261,18 @@ class ChatAttachment(BaseModel):
     status: Literal["uploading", "uploaded", "failed"] = "uploaded"
 
 
+class ActiveRunSummary(BaseModel):
+    """Snapshot of an in-flight execution run for seamless tab-switch / refresh re-attach."""
+
+    run_id: str
+    turn_id: str | None = None
+    status: Literal["running", "completed", "failed", "cancelled"] = "running"
+    live_focus: str | None = None
+    steps: list[dict[str, str]] | None = None
+    latest_seq: int | None = None
+    started_at: str | None = None
+
+
 class ConversationResponse(BaseModel):
     """Chat session response.
 
@@ -279,6 +292,8 @@ class ConversationResponse(BaseModel):
     pending_question: ChatMessageResponse | None = None
     context: dict[str, Any] | None = None
     compact_summary: dict[str, Any] | None = None
+    active_run: ActiveRunSummary | None = None
+    latest_seq: int | None = None
 
 
 class ProjectConversationSummary(BaseModel):
@@ -291,6 +306,7 @@ class ProjectConversationSummary(BaseModel):
     updated_at: datetime | None = None
     message_count: int = 0
     has_active_job: bool = False
+    has_pending_question: bool = False
     compacted: bool = False
     compacted_at: str | None = None
 
@@ -491,9 +507,20 @@ class Option(BaseModel):
         # 打字机律牙①: the model writes null when an option carries no reason
         # line — pop the key so the "" default applies instead of rejecting
         # the call (a rejection burns a loop iteration that never streams).
-        if isinstance(data, dict) and data.get("description") is None:
-            data = dict(data)
-            data.pop("description", None)
+        # Also coerce numeric option ids (e.g. 30 / 45 / 60 for target_seconds)
+        # to strings so MiniMax never hits no_progress on ask_user.
+        if isinstance(data, dict):
+            changed = False
+            out = data
+            if out.get("description") is None and "description" in out:
+                out = dict(out)
+                out.pop("description", None)
+                changed = True
+            raw_id = out.get("id")
+            if isinstance(raw_id, (int, float)) and not isinstance(raw_id, bool):
+                out = dict(out) if not changed else out
+                out["id"] = str(int(raw_id) if isinstance(raw_id, float) and raw_id.is_integer() else raw_id)
+            return out
         return data
 
     id: str = Field(
@@ -535,6 +562,48 @@ class BriefQuestionOption(Option):
     value: str | int | list[str]
 
 
+def _infer_missing_brief_option_value(slot: Any, option: dict[str, Any]) -> str | int | list[str]:
+    """顺形律 tolerance: models sometimes omit `value` on grouped BriefQuestionOption
+    entries (passing only `id`, `label`, `description`). Infer a safe typed value from
+    `id`/`label` for the declared slot so the whole ask_user batch is not rejected."""
+    raw_id = str(option.get("id") or "").strip()
+    label = str(option.get("label") or "").strip()
+    combined = f"{raw_id} {label}".lower()
+    if slot == "target_seconds":
+        match = re.search(r"\b(\d{1,3})\b|(\d{1,3})\s*(?:s|sec|秒)", combined)
+        if match:
+            digits = match.group(1) or match.group(2)
+            if digits:
+                return int(digits)
+    if slot == "subtitle_languages":
+        langs: list[str] = []
+        if any(tok in combined for tok in ("双语", "bilingual", "zh_en", "zh-en", "zh+en", "中英")):
+            langs = ["zh", "en"]
+        else:
+            if any(tok in combined for tok in ("中文", "汉语", "zh")):
+                langs.append("zh")
+            if any(tok in combined for tok in ("英文", "英语", "english", "en")):
+                langs.append("en")
+        if langs:
+            return langs
+        return [raw_id or label]
+    if slot == "narration_language":
+        if any(tok in combined for tok in ("none", "无需", "无旁白")):
+            return "none"
+        if any(tok in combined for tok in ("英文", "英语", "english")) or raw_id.lower() == "en":
+            return "en"
+        if any(tok in combined for tok in ("中文", "汉语", "chinese")) or raw_id.lower() == "zh":
+            return "zh"
+    if slot == "narrative_mode":
+        if any(tok in combined for tok in ("music_only", "无旁白", "纯画面")):
+            return "music_only"
+        if any(tok in combined for tok in ("voiceover", "mode_vo", "旁白", "口播")):
+            return "voiceover"
+    if slot in {"must_include", "avoid", "success_criteria"}:
+        return [label or raw_id]
+    return label or raw_id
+
+
 class BriefQuestionItem(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -546,15 +615,35 @@ class BriefQuestionItem(BaseModel):
     required: bool = True
     default_path: str = ""
 
-    @field_validator("options", mode="before")
+    @model_validator(mode="before")
     @classmethod
-    def _number_authored_options(cls, options: Any) -> Any:
+    def _normalize_authored_options(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        out = dict(data)
+        if out.get("default_path") is None:
+            out["default_path"] = ""
+        rec = out.get("recommended_id")
+        if isinstance(rec, (int, float)) and not isinstance(rec, bool):
+            out["recommended_id"] = str(int(rec) if isinstance(rec, float) and rec.is_integer() else rec)
+        options = out.get("options")
         if not isinstance(options, list):
-            return options
-        return [
-            {"id": str(index), **option} if isinstance(option, dict) else option
-            for index, option in enumerate(options, start=1)
-        ]
+            return out
+        slot = out.get("slot")
+        normalized = []
+        for index, option in enumerate(options, start=1):
+            if isinstance(option, dict):
+                entry = {"id": str(index), **option}
+                raw_id = entry.get("id")
+                if isinstance(raw_id, (int, float)) and not isinstance(raw_id, bool):
+                    entry["id"] = str(int(raw_id) if isinstance(raw_id, float) and raw_id.is_integer() else raw_id)
+                if entry.get("value") is None:
+                    entry["value"] = _infer_missing_brief_option_value(slot, entry)
+                normalized.append(entry)
+            else:
+                normalized.append(option)
+        out["options"] = normalized
+        return out
 
 
 class BriefAnswerItem(BaseModel):
@@ -709,6 +798,19 @@ class ChatMessageResponse(BaseModel):
     # Opening user-message identity for rows born in that turn; NULL on old
     # rows and independent world facts.
     turn_id: UUID | None = None
+    # Execution segment identity (Turn -> Run): isolates pre-QA / post-QA / retry runs.
+    run_id: str | None = None
+    # Server-adjudicated presentation role shared identically by Live SSE and History Replay.
+    display_role: Literal[
+        "prose",
+        "stage_note",
+        "rail_note",
+        "question_framing",
+        "question_framing_stub",
+        "decision",
+        "activity",
+        "failure_checkpoint",
+    ] | None = None
     turn_state: str | None = None
     intent: dict | None = None
     question: dict | None = None
@@ -737,14 +839,37 @@ class ChatMessageResponse(BaseModel):
     @model_validator(mode="after")
     def _editor_media_projection(self):
         intent = self.intent or {}
-        if self.role == MessageRole.ASSISTANT and self.steps is None:
+        if self.run_id is None and isinstance(intent.get("run_id"), str) and intent["run_id"]:
+            self.run_id = intent["run_id"]
+        if self.display_role is None and self.role == MessageRole.ASSISTANT:
+            itype = intent.get("type")
+            if itype == "activity":
+                self.display_role = "activity"
+            elif itype == "interim_prose":
+                self.display_role = "rail_note" if intent.get("rail_note") is True else "stage_note"
+            elif itype in ("turn_failed", "failure_checkpoint"):
+                self.display_role = "failure_checkpoint"
+            elif self.question and (
+                (self.question.get("options") or []) or (self.question.get("items") or [])
+            ):
+                content_text = (self.content or "").strip()
+                bare_q = str(self.question.get("question") or "").strip()
+                framing = content_text if content_text and content_text != bare_q else ""
+                self.display_role = (
+                    "question_framing" if len(framing) >= 40 else "question_framing_stub"
+                )
+            else:
+                self.display_role = "prose"
+        if self.role in (MessageRole.ASSISTANT, MessageRole.USER) and self.steps is None:
             raw_steps = intent.get("steps")
             if isinstance(raw_steps, list) and raw_steps:
                 self.steps = raw_steps
         if "editor_media" in intent or "media_permission" in intent:
             self.intent = {key: intent[key] for key in (
-                "native_call_id", "media_job", "export_job", "media_result",
+                "native_call_id", "media_job", "export_job", "media_result", "run_id",
             ) if key in intent}
+            if intent.get("silent_chat_receipt") is True:
+                self.intent["silent_chat_receipt"] = True
             if intent.get("media_job") or intent.get("export_job"):
                 self.intent["operation"] = intent["tool"]
                 if "media_result" not in intent:
@@ -885,9 +1010,14 @@ class PlanAskArgs(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _read_tolerance(cls, data: Any) -> Any:
-        return _drop_bad_brief(
+        cleaned = _drop_bad_brief(
             tolerate_null_keys(data, "options", "items", "default_path", "slot", "material_text", "material_urls", "recommended_id", "pending_disposition")
         )
+        if isinstance(cleaned, dict):
+            rec = cleaned.get("recommended_id")
+            if isinstance(rec, (int, float)) and not isinstance(rec, bool):
+                cleaned = {**cleaned, "recommended_id": str(int(rec) if isinstance(rec, float) and rec.is_integer() else rec)}
+        return cleaned
 
     question: str = Field(
         description="仅用界面语言写问题或问题组标题，不附引言或默认路径说明。"
@@ -1012,7 +1142,33 @@ class AnalyzeBrandArgs(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _read_tolerance(cls, data: Any) -> Any:
-        return _drop_bad_brief(tolerate_null_keys(data, "brief"))
+        if not isinstance(data, dict):
+            return data
+        cleaned = dict(tolerate_null_keys(data, "brief"))
+        brief_field_names = set(Brief.model_fields.keys())
+        raw_brief = cleaned.get("brief")
+        merged_brief: dict[str, Any] = dict(raw_brief) if isinstance(raw_brief, dict) else {}
+        for key in list(cleaned.keys()):
+            if key == "brief":
+                continue
+            val = cleaned.pop(key)
+            if key in brief_field_names and key not in merged_brief and val is not None:
+                merged_brief[key] = val
+        if merged_brief:
+            normalized_brief: dict[str, Any] = {}
+            for k, v in merged_brief.items():
+                if k not in brief_field_names or v is None:
+                    continue
+                if k in ("constraints", "material_state", "asked"):
+                    normalized_brief[k] = v
+                elif isinstance(v, dict) and ("value" in v or "source" in v):
+                    normalized_brief[k] = v
+                else:
+                    # Wrap bare scalar/list brief values (e.g. target_seconds=45) cleanly
+                    # as BriefSlot dicts so the model never burns retries on wrapper nesting.
+                    normalized_brief[k] = {"value": v, "source": BriefSlotSource.USER_STATED.value}
+            cleaned["brief"] = normalized_brief or None
+        return _drop_bad_brief(cleaned)
 
     @field_validator("brief")
     @classmethod

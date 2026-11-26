@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { AtSign, FileWarning, Scan } from "lucide-react"
+import { AtSign, FileWarning, Scan } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 
 import { Spinner } from "@/components/ui/spinner-clean"

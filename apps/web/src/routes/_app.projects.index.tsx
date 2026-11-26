@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { ArrowUpDown, Folder, LayoutGrid, List, Plus, Search, Trash2, X } from "lucide-react"
+import { ArrowUpDown, Folder, LayoutGrid, List, Plus, Search, Trash2, X } from "@/components/ui/icons"
 
 import { apiFetch } from "@/lib/api"
 import { Button } from "@/components/ui/button-clean"

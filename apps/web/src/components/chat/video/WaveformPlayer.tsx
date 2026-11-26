@@ -8,7 +8,7 @@ import {
   useReducedMotion,
   useTransform,
 } from "motion/react"
-import { Pause, Play } from "lucide-react"
+import { Pause, Play } from "@/components/ui/icons"
 
 import { IconButton } from "@/components/ui/icon-button-clean"
 import { cn } from "@/lib/utils"

@@ -21,7 +21,7 @@
 
 ## 2. 图标
 
-- 全部图标从 `lucide-react` 导入。禁手写 SVG，两个例外：无 lucide 替代的第三方 logo；**品牌 LogoMark**（`src/components/LogoMark.tsx`，实心 delta：一股流散成多股——几何真值源是该组件，`public/favicon.svg` 是它的静态烘焙色副本，两者必须同步）。Logo 锁up = `<LogoMark />` + "Repurposer" 字标，永不手工重拼 tile。
+- 全部图标对齐 affectUI Iconography，统一使用 **Hugeicons**（从 `@/components/ui/icons` 导入，或直接向 affectUI Clean 组件传 `@hugeicons/core-free-icons` 图标对象；圆角 1.9px 描边）。禁手写 SVG，两个例外：无 Hugeicons 替代的第三方 logo；**品牌 LogoMark**（`src/components/LogoMark.tsx`，折带切口 R：两段胶片折带经斜切构成 R 字骨架——几何真值源是该组件，`public/favicon.svg` 是它的静态烘焙色副本，两者必须同步）。Logo 锁up = `<LogoMark />` + "Rookie" 字标，永不手工重拼 tile。
 - 尺寸约定：顶栏 / 卡动作图标 `h-5 w-5`；内联 / pill 图标 `h-4 w-4`，更小辅助 `h-3.5 w-3.5`；sidebar 导航 `h-4.5 w-4.5`；**Button 内一律 `size-*`**（见 §1）。
 
 ## 3. 浮层组件选型（DropdownMenu / Popover / Select）

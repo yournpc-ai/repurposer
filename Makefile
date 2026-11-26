@@ -4,6 +4,7 @@ PYTEST_RUN = cd apps/api && uv run --extra dev python scripts/run_pytest.py
 
 # Layer 0: Pure API unit/parity contracts + shared TS packages + Web typecheck
 test-fast:
+	@cd apps/api && uv run --extra dev ruff check --select F823,F811 app/
 	@$(PYTEST_RUN) test/unit -m unit -q
 	@pnpm --dir packages/video-spec test
 	@pnpm --dir packages/sound-engine test

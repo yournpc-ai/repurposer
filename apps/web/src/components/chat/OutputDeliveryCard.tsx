@@ -1,8 +1,6 @@
-import { Maximize2, PanelRightOpen, Video } from "lucide-react"
+import { Maximize2, Video } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 
-import { Button } from "@/components/ui/button-clean"
-import { useOptionalWorkbench } from "@/components/workbench/WorkbenchContext"
 import { anchorCardOf, anchorLabel, isChatVideoOutput } from "@/lib/anchorCards"
 import { useOutputPoster } from "@/lib/outputPoster"
 import { outputAspect } from "@/lib/outputAspect"
@@ -36,7 +34,6 @@ export function OutputDeliveryCard({
   onOpen: (outputId: string) => void
 }) {
   const { t } = useTranslation()
-  const workbench = useOptionalWorkbench()
   if (!isChatVideoOutput(output)) return null
   const card = anchorCardOf(output)
   const typeWord = t(`chat.anchorCards.types.${output.type}`, { defaultValue: output.type })
@@ -73,18 +70,6 @@ export function OutputDeliveryCard({
           ) : null}
         </span>
       </button>
-      {workbench ? (
-        <div className="mt-1.5 flex items-center">
-          <Button
-            size="sm"
-            variant="ghost"
-            icon={<PanelRightOpen className="size-3.5" />}
-            onClick={() => workbench.openWorkbench({ tab: "player", outputId: output.id })}
-          >
-            {t("workbench.openInWorkbench")}
-          </Button>
-        </div>
-      ) : null}
     </div>
   )
 }

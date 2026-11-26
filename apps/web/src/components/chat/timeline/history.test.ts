@@ -458,6 +458,11 @@ describe("no lifecycle derivation (恢复不推导 lifecycle)", () => {
       "beat",
       "milestones",
       "blocks",
+      "questionEcho",
+      "turnProse",
+      "runId",
+      "displayRole",
+      "failureCheckpoint",
     ])
     const illegalKeys = [
       ...new Set(

@@ -1,14 +1,14 @@
 "use client"
 
 import { useId, type ReactNode } from "react"
-import type { LucideIcon } from "lucide-react"
+import type { AppIcon } from "@/components/ui/icons"
 
 import { Popover } from "@/components/ui/popover-clean"
 import { Tooltip } from "@/components/ui/tooltip-clean"
 import { ComposerIconButton } from "@/components/composer/ComposerIconButton"
 
 interface ComposerPanelButtonProps {
-  icon: LucideIcon
+  icon: AppIcon
   label: string
   open: boolean
   onOpenChange: (open: boolean) => void

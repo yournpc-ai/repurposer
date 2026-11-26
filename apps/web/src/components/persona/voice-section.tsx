@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Check, Mic, Upload } from "lucide-react"
+import { Check, Mic, Upload } from "@/components/ui/icons"
 
 import { Button } from "@/components/ui/button-clean"
 import { Card, CardHeader, CardContent } from "@/components/ui/card-clean"

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { createPortal } from "react-dom"
 import { Toaster as Sonner, type ToasterProps } from "sonner"
-import { CircleCheckIcon, InfoIcon, TriangleAlertIcon, OctagonXIcon, Loader2Icon } from "lucide-react"
+import { CircleCheckIcon, InfoIcon, TriangleAlertIcon, OctagonXIcon, Loader2Icon } from "@/components/ui/icons"
 
 import { useTheme } from "@/lib/theme/ThemeProvider"
 

@@ -1,4 +1,4 @@
-import { Ellipsis, Pencil, Trash2 } from "lucide-react"
+import { Ellipsis, Pencil, Trash2 } from "@/components/ui/icons"
 import { IconButton } from "@/components/ui/icon-button-clean"
 import { useRef, useState } from "react"
 import { useTranslation } from "react-i18next"

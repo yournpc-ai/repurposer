@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from "react"
-import { PanelRightOpen } from "lucide-react"
+import { ArrowUpRight, FileText, Film } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 
-import { Button } from "@/components/ui/button-clean"
 import { useOptionalWorkbench } from "@/components/workbench/WorkbenchContext"
 import { apiFetch } from "@/lib/api"
+import { formatDuration } from "@/lib/utils"
 import type { VideoStoryboardBlock, VideoScrubTarget } from "../timeline/types"
 import { presentationAckReady } from "../timeline/reveal"
 import { CompositionPreview, type VideoPreviewRead } from "./preview/CompositionPreview"
@@ -16,10 +16,12 @@ const SHOW_TEXT_SIZE_SCRUB = false
 interface VideoVersionRead extends ScrubVersionRead {
   composition_id: string
   composition_version_id: string
+  version?: number
   content_digest: string
   presentation_digest: string
   video_preview?: VideoPreviewRead
   scrub?: VideoScrubTarget
+  scenes?: { scene_id?: string }[]
 }
 
 export function StoryboardCard({
@@ -88,7 +90,13 @@ export function StoryboardCard({
         }
         if (!cancelled) {
           setRead(data)
-          setPreviewReady(data.video_preview === undefined)
+          // When hosted inside the Studio Workbench, the chat stream displays a
+          // clean artifact entrance card (never a duplicate inline player), so
+          // a ready preview DTO satisfies the presentation ACK immediately.
+          setPreviewReady(
+            data.video_preview === undefined ||
+              (workbench != null && data.video_preview.status === "ready"),
+          )
         }
       })
       .catch(() => {
@@ -103,6 +111,7 @@ export function StoryboardCard({
     block.composition_version_id,
     block.content_digest,
     block.scrub,
+    workbench,
   ])
 
   useEffect(() => {
@@ -160,6 +169,106 @@ export function StoryboardCard({
     )
   }
   if (!read) return null
+
+  // Inside the Studio Workbench shell, render an Antigravity-style artifact
+  // entrance card instead of duplicating an inline video player in chat.
+  if (workbench && read.video_preview) {
+    if (read.video_preview.status === "pending_media") {
+      return (
+        <p className="mt-2 text-xs text-muted-foreground">
+          {t("chat.videoStoryboard.pendingMedia")}
+        </p>
+      )
+    }
+    if (read.video_preview.status === "unavailable") {
+      return (
+        <p className="mt-2 text-xs text-muted-foreground">
+          {t("chat.videoStoryboard.previewError")}
+        </p>
+      )
+    }
+
+    const comp = workbench.workbench?.compositions.find(
+      (c) => c.composition_id === read.composition_id,
+    )
+    const verMeta = comp?.versions.find(
+      (v) => v.version_id === read.composition_version_id,
+    )
+    const compName = comp?.name || t("workbench.tabs.player")
+    const versionNumber = verMeta?.version ?? read.version ?? block.version
+    const sceneCount = (read.storyboard?.scenes ?? read.scenes ?? []).length
+    const scrubRange =
+      block.scrub?.kind === "range"
+        ? { start: block.scrub.start_seconds, end: block.scrub.end_seconds }
+        : null
+    const metaParts = [
+      versionNumber != null ? `v${versionNumber}` : null,
+      scrubRange
+        ? `${formatDuration(scrubRange.start)}–${formatDuration(scrubRange.end)}`
+        : verMeta?.duration_seconds
+          ? `${Math.round(verMeta.duration_seconds * 10) / 10}s`
+          : null,
+      sceneCount > 0 ? `${sceneCount} ${t("workbench.player.scenesHeading")}` : null,
+    ].filter(Boolean)
+
+    return (
+      <div className="mt-2 flex max-w-md items-center gap-2 rounded-lg border border-subtle bg-card px-3 py-2.5 shadow-resting transition-colors hover:bg-accent">
+        <button
+          type="button"
+          onClick={() =>
+            workbench.openArtifact({
+              key: `version:${read.composition_version_id}`,
+              kind: "version",
+              versionId: read.composition_version_id,
+              title: compName,
+              ...(scrubRange
+                ? {
+                    startSeconds: scrubRange.start,
+                    endSeconds: scrubRange.end,
+                  }
+                : {}),
+            })
+          }
+          className="flex min-w-0 flex-1 items-center gap-2.5 text-left focus-visible:outline-2 focus-visible:outline-ring"
+        >
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-foreground">
+            <Film className="size-4" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-medium text-foreground">
+              {compName}
+            </span>
+            <span className="block truncate text-xs text-muted-foreground">
+              {metaParts.length > 0
+                ? metaParts.join(" · ")
+                : t("workbench.storyboard.cardSubtitle")}
+            </span>
+          </span>
+          <span className="inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
+            <span>{t("workbench.storyboard.openRightAction")}</span>
+            <ArrowUpRight className="size-3.5" />
+          </span>
+        </button>
+        <button
+          type="button"
+          title={t("workbench.storyboard.openAction")}
+          aria-label={t("workbench.storyboard.openAction")}
+          onClick={() =>
+            workbench.openArtifact({
+              key: `storyboard:${read.composition_version_id}`,
+              kind: "storyboard",
+              versionId: read.composition_version_id,
+              title: t("workbench.storyboard.tabTitle", { name: compName }),
+            })
+          }
+          className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+        >
+          <FileText className="size-4" />
+        </button>
+      </div>
+    )
+  }
+
   return (
     <>
       {read.video_preview && (
@@ -174,34 +283,6 @@ export function StoryboardCard({
           onReady={() => setPreviewReady(read.video_preview?.status === "ready")}
           onError={() => setPreviewReady(false)}
         />
-      )}
-      {read.is_current === false &&
-        read.current_version_id &&
-        read.current_version_id !== read.composition_version_id && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="mt-2"
-            onClick={() => handleApplied(read.current_version_id!)}
-          >
-            {t("chat.videoStoryboard.scrub.openCurrent")}
-          </Button>
-        )}
-      {workbench && (
-        <Button
-          variant="ghost"
-          size="sm"
-          className="mt-1.5 w-fit"
-          icon={<PanelRightOpen className="size-3.5" />}
-          onClick={() =>
-            workbench.openWorkbench({
-              tab: "player",
-              versionId: read.composition_version_id,
-            })
-          }
-        >
-          {t("workbench.openInWorkbench")}
-        </Button>
       )}
       {SHOW_TEXT_SIZE_SCRUB && (
         <TextSizeScrubInput

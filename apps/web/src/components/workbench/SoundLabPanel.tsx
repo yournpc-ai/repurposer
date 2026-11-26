@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { AudioLines, MessageSquarePlus, Play, RotateCcw, Search } from "lucide-react"
+import { AudioLines, Copy, MessageSquarePlus, Play, RotateCcw, Search } from "@/components/ui/icons"
+import { toast } from "sonner"
 import { SOUND_RECIPES, TUNE_SCHEMA, type SoundDomain, type SoundTune } from "@repurposer/sound-engine"
 import { Button } from "@/components/ui/button-clean"
 import { Select } from "@/components/ui/select-clean"
@@ -8,7 +9,7 @@ import { SegmentedControl } from "@/components/ui/segmented-control-clean"
 import { TextField } from "@/components/ui/text-field-clean"
 import { startSoundPreview } from "@/lib/sound-preview"
 import { apiFetch } from "@/lib/api"
-import { useWorkbench } from "./WorkbenchContext"
+import { useOptionalWorkbench } from "./WorkbenchContext"
 
 interface SoundRow {
   id: string
@@ -29,9 +30,15 @@ const axes = Object.keys(TUNE_SCHEMA) as (keyof SoundTune)[]
 const categories = (domain: SoundDomain) =>
   [...new Set(SOUND_RECIPES.filter(r => r.domain === domain).map(r => r.category))]
 
-export default function SoundLabPanel() {
+export default function SoundLabPanel({
+  standalone = false,
+  onUsePreset,
+}: {
+  standalone?: boolean
+  onUsePreset?: (instruction: string) => void
+} = {}) {
   const { t, i18n } = useTranslation()
-  const { citeText } = useWorkbench()
+  const workbench = useOptionalWorkbench()
   const [domain, setDomain] = useState<SoundDomain>("interface")
   const [category, setCategory] = useState("")
   const [query, setQuery] = useState("")
@@ -105,10 +112,22 @@ export default function SoundLabPanel() {
       .map(key => [key, tune[key]]))
     const settings = { sfx_id: row.id, ...(row.recipe_id ? { recipe_id: row.recipe_id } : { sfx_slug: row.id }),
       ...(Object.keys(changes).length ? { tune: changes } : {}) }
-    setStatus(citeText(t("soundLab.instruction", { name: label(row), settings: JSON.stringify(settings) })) ? "cited" : "citeFailed")
+    const instruction = t("soundLab.instruction", { name: label(row), settings: JSON.stringify(settings) })
+    if (workbench) {
+      setStatus(workbench.citeText(instruction) ? "cited" : "citeFailed")
+      return
+    }
+    if (onUsePreset) {
+      onUsePreset(instruction)
+      return
+    }
+    void navigator.clipboard?.writeText(instruction).then(() => {
+      toast.success(t("common.copied"))
+    })
   }
 
-  return <section className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-card text-foreground" aria-label={t("workbench.tabs.sounds")}>
+  return <section className={standalone ? "grid min-h-[28rem] grid-cols-1 overflow-hidden rounded-xl border border-subtle bg-card text-foreground lg:grid-cols-[minmax(0,1fr)_320px]" : "flex min-h-0 flex-1 flex-col overflow-y-auto bg-card text-foreground"} aria-label={t("workbench.tabs.sounds")}>
+    <div className={standalone ? "flex min-h-0 flex-col lg:border-r lg:border-subtle" : "contents"}>
     <div className="grid gap-2 border-b border-subtle p-3">
       <div className="flex items-center justify-between gap-2">
         <SegmentedControl<SoundDomain> size="sm" aria-label={t("soundLab.domain")} value={domain}
@@ -141,7 +160,9 @@ export default function SoundLabPanel() {
         {failed && <Button size="sm" variant="ghost" onClick={() => setRetry(v => v + 1)}>{t("soundLab.retry")}</Button>}
       </p>}
     </div>
-    {active && <div className="shrink-0 border-t border-subtle p-3">
+    </div>
+    {active && <div className={standalone ? "flex flex-col justify-between p-4" : "shrink-0 border-t border-subtle p-3"}>
+      <div>
       <div className="mb-2 flex items-center gap-2 text-xs"><AudioLines size={15} />
         <strong>{active.engine_kind === "sample" ? label(active) : t("soundLab.tune")}</strong>
         {active.engine_kind === "dsp_recipe" && <><span className="truncate text-muted-foreground">{label(active)}</span>
@@ -162,9 +183,12 @@ export default function SoundLabPanel() {
           </output>
         </label>
       })}
+      </div>
       <div className="mt-3 flex items-center justify-end gap-2">
         <Button size="sm" variant="secondary" icon={<Play size={13} />} onClick={() => void preview(active, tune)}>{t("soundLab.preview")}</Button>
-        <Button size="sm" icon={<MessageSquarePlus size={13} />} onClick={() => cite(active)}>{t("soundLab.cite")}</Button>
+        <Button size="sm" icon={workbench ? <MessageSquarePlus size={13} /> : <Copy size={13} />} onClick={() => cite(active)}>
+          {workbench ? t("soundLab.cite") : onUsePreset ? t("presetsPage.usePreset") : t("common.copy")}
+        </Button>
       </div>
     </div>}
     {status && <div role="status" className="px-3 pb-2 text-xs text-muted-foreground">{t("soundLab." + status)}</div>}

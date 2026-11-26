@@ -1,6 +1,7 @@
 {
   "short_name": "Rookie",
-  "name": "Rookie",
+  "name": "Rookie — Your next-generation AI video editor",
+  "description": "Share footage and ideas with Rookie, your AI video editor. Preview the first cut and refine the same video in chat.",
   "icons": [
     {
       "src": "icon-192.png",

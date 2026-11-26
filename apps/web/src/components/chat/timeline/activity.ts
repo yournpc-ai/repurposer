@@ -49,12 +49,52 @@ export function isRunSpanRow(a: ActivityRowFrame): boolean {
   return a.kind === "run" && (a.key ?? "").startsWith("chat.activity.")
 }
 
+const PRIMARY_LIVE_TOOLS = new Set([
+  "create_video",
+  "export_video",
+  "review_video",
+  "deliver_video",
+  "preview_range",
+  "generate_sfx",
+  "generate_voice",
+  "generate_music",
+  "generate_image",
+  "analyze_brand",
+  "prepare_video_materials",
+  "capture_web",
+  "set_composition_style",
+  "insert_motion_block",
+  "update_motion_block",
+  "insert_text",
+  "edit_text",
+])
+
+function pickLiveActivity(active: ActivityRowFrame[]): ActivityRowFrame | undefined {
+  const running = active.filter((a) => a.call_state === "running")
+  const primaryRunning = running.find((a) => a.tool_name && PRIMARY_LIVE_TOOLS.has(a.tool_name))
+  if (primaryRunning) return primaryRunning
+  if (running.length > 0) return running.at(-1)
+  const primaryActive = active.find((a) => a.tool_name && PRIMARY_LIVE_TOOLS.has(a.tool_name))
+  return primaryActive ?? active.at(-1)
+}
+
 type ActivityUnit = Extract<ConversationUnit, { kind: "activity" }>
 type MessageUnit = Extract<ConversationUnit, { kind: "message" }>
 
 export function isConversationBoundary(m: OverlayMessage): boolean {
-  return m.role === "user" || !!(m.independentKind || m.qa || m.meta || m.candidates ||
-    m.outputRefs?.length || m.blocks?.length || m.suggestions?.length)
+  return m.role === "user" || !!(
+    m.turnProse ||
+    m.questionEcho ||
+    m.displayRole === "question_framing" ||
+    m.displayRole === "question_framing_stub" ||
+    m.independentKind ||
+    m.qa ||
+    m.meta ||
+    m.candidates ||
+    m.outputRefs?.length ||
+    m.blocks?.length ||
+    m.suggestions?.length
+  )
 }
 
 /** Declaration order is local to a batch. A later group may restart at zero. */
@@ -87,23 +127,45 @@ export function foldActivityUnits(
   let run: ActivityUnit[] = []
   let trail: WorkTrailEntry[] = []
   let pending: MessageUnit[] = []
+  let leadingInterim: MessageUnit[] = []
   let lastNote: MessageUnit | undefined
   let clockHost: ActivityUnit | undefined
 
-  const flush = (failure: ActivityRowFrame | null = null, following?: OverlayMessage) => {
+  const flushLeadingInterim = () => {
+    if (!leadingInterim.length) return
+    out.push(...leadingInterim)
+    leadingInterim = []
+  }
+
+  const flush = (
+    failure: ActivityRowFrame | null = null,
+    following?: OverlayMessage,
+    settledBoundary = false,
+  ) => {
+    flushLeadingInterim()
     const first = run[0]
     if (first && clockHost) {
       const rows = run.map(u => u.activity).filter(a => a.status !== "active" || a.call_id || a.group_id)
       const active = run.map(u => u.activity).filter(a => a.jobReceipt
         ? ["accepted", "queued", "running", "active"].includes(a.jobReceipt.status)
         : a.status === "active")
-      const liveActivity = active.find(a => a.call_state === "running") ?? active.at(-1)
+      const liveActivity = pickLiveActivity(active)
       const startedAtMs = workStart(out, first, defaultWorkStartedAtMs)
       const nextSpeech = pending.find(u => u.message.content.trim())?.message ?? following
       const displayEdge = nextSpeech?.independentKind || nextSpeech?.qa ? undefined : nextSpeech?.clientVisibleAtMs
       const endedAtMs = activityEndMs(failure) ?? clockHost.workEndedAtMs ?? displayEdge ?? null
-      const keepLast = lastNote && first.turnId !== liveTurnId && !following?.content.trim() &&
-        !pending.some(u => u.message.content.trim())
+      const hasFollowingResult = Boolean(
+        following && (following.content.trim() || following.outputRefs?.length || following.blocks?.length),
+      )
+      const isFrozenEarlierRun = Boolean(
+        settledBoundary || following?.qa || following?.independentKind || endedAtMs != null,
+      )
+      const keepLast = Boolean(
+        lastNote &&
+          (first.turnId !== liveTurnId || isFrozenEarlierRun) &&
+          !hasFollowingResult &&
+          !pending.some(u => u.message.content.trim()),
+      )
       if (keepLast && lastNote) {
         const key = lastNote.message.birthKey ?? lastNote.message.id
         trail = trail.filter(entry => entry.rowKey !== key)
@@ -114,7 +176,7 @@ export function foldActivityUnits(
         elapsedMs: foldElapsedMs(rows, startedAtMs, endedAtMs, failure),
         openTail: !failure && endedAtMs == null,
         rowKey: first.rowKey, clockRowKey: clockHost.rowKey,
-        turnId: first.turnId, independentKind: first.independentKind,
+        turnId: first.turnId, runId: first.runId, independentKind: first.independentKind,
       })
       if (keepLast && lastNote) out.push(lastNote)
     }
@@ -129,7 +191,23 @@ export function foldActivityUnits(
   for (const unit of units) {
     const first = run[0]
     if (unit.kind === "activity") {
-      if (first && (first.turnId !== unit.turnId || first.independentKind || unit.independentKind)) flush()
+      // Background web/asset reading receipts persisted without a turn_id
+      // (asset-reading:*) must never shatter an active turn's work fold.
+      const isOrphanAssetReading =
+        Boolean(first?.turnId) &&
+        !first?.independentKind &&
+        !unit.turnId &&
+        !unit.independentKind &&
+        Boolean(unit.activity.activity_id?.startsWith("asset-reading:"))
+      if (isOrphanAssetReading) {
+        run.push(unit)
+        trail.push({ kind: "activity", rowKey: unit.rowKey, activity: unit.activity })
+        continue
+      }
+      const differentRun = Boolean(first?.runId && unit.runId && first.runId !== unit.runId)
+      if (first && (first.turnId !== unit.turnId || differentRun || first.independentKind || unit.independentKind)) {
+        flush(null, undefined, true)
+      }
       if (unit.activity.status === "failed" && !unit.activity.call_id && !unit.activity.group_id &&
         (!run.length || !unit.turnId)) {
         if (run.length && !pending.length) flush(unit.activity)
@@ -139,6 +217,7 @@ export function foldActivityUnits(
         }
         continue
       }
+      flushLeadingInterim()
       if (!run.length || pending.length) clockHost = unit
       for (const prose of pending) {
         if (!prose.message.content.trim()) continue
@@ -148,13 +227,53 @@ export function foldActivityUnits(
       pending = []
       run.push(unit)
       trail.push({ kind: "activity", rowKey: unit.rowKey, activity: unit.activity })
+    } else if (
+      unit.kind === "message" &&
+      (unit.message.interim ||
+        unit.message.displayRole === "stage_note" ||
+        unit.message.displayRole === "rail_note")
+    ) {
+      // Option A — Single-Rail Interleaved Narrative (Antigravity parity):
+      // 1. An opening stage_note BEFORE the Run's first tool (`!first`) stays
+      //    as quiet visible prose above the work rail — NEVER swallowed.
+      // 2. Any subsequent mid-run note (`rail_note` or a later interim note
+      //    arriving while an activity fold for the SAME (turnId, runId) is
+      //    already open) goes directly inside that ONE work rail's `trail`,
+      //    so a continuous Run never shatters into `工作了 6s / 11s / 1m 6s`.
+      const sameOpenRun = Boolean(
+        first &&
+          !first.independentKind &&
+          unit.message.turnId === first.turnId &&
+          !(first.runId && unit.message.runId && first.runId !== unit.message.runId),
+      )
+      if (sameOpenRun) {
+        if (unit.message.content.trim()) {
+          lastNote = unit
+          trail.push({
+            kind: "note",
+            rowKey: unit.message.birthKey ?? unit.message.id,
+            text: unit.message.content,
+          })
+        }
+      } else {
+        flush(null, unit.message)
+        if (unit.message.displayRole !== "rail_note" || unit.message.content.trim()) {
+          out.push(unit)
+        }
+      }
     } else if (unit.kind === "message" && first?.turnId && !first.independentKind &&
-      unit.message.turnId === first.turnId && !isConversationBoundary(unit.message)) {
+      unit.message.turnId === first.turnId &&
+      !(first.runId && unit.message.runId && first.runId !== unit.message.runId) &&
+      !isConversationBoundary(unit.message)) {
       pending.push(unit)
     } else {
       const following = unit.kind === "message" && unit.message.turnId === first?.turnId &&
+        !(first?.runId && unit.message.runId && first.runId !== unit.message.runId) &&
         unit.message.role === "assistant" && !unit.message.meta ? unit.message : undefined
-      flush(null, following)
+      const isBoundaryClose = Boolean(
+        unit.kind === "message" && (unit.message.qa || unit.message.independentKind || unit.message.role === "user"),
+      )
+      flush(null, following, isBoundaryClose)
       out.push(unit)
     }
   }

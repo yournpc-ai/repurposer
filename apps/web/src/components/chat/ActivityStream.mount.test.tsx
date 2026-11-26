@@ -26,20 +26,21 @@ const trail: WorkTrailEntry[] = [
   { kind: "note", rowKey: "note", text: "Checking the edit." },
 ]
 
-it("opens live trail by default, honors manual collapse, and auto-collapses on settlement", () => {
+it("collapses live and settled trails by default, honors manual toggle, and resets on settlement", () => {
   const view = render(<WorkSegmentRow liveLabel="Checking" trail={trail} />)
   const header = screen.getByRole("button")
   expect(header.tagName).toBe("BUTTON")
   header.focus()
   expect(header.tabIndex).toBe(0)
-  // Phase 1: live working defaults open so interleaved steps & notes are visible immediately
-  expect(header.getAttribute("aria-expanded")).toBe("true")
-  expect(screen.getAllByRole("listitem")).toHaveLength(2)
-  // Manual collapse override is respected while live
-  fireEvent.click(header)
+  // Both live and settled status rows default collapsed; clicking expands on demand
   expect(header.getAttribute("aria-expanded")).toBe("false")
   expect(screen.queryByRole("listitem")).toBeNull()
-  // Phase 3: settlement resets override and auto-collapses into Worked for ...
+  expect(screen.queryByTestId("live-brief-stream")).toBeNull()
+  // Manual expand override is respected while live
+  fireEvent.click(header)
+  expect(header.getAttribute("aria-expanded")).toBe("true")
+  expect(screen.getAllByRole("listitem")).toHaveLength(2)
+  // Settlement resets override and stays collapsed as Worked for ...
   view.rerender(<WorkSegmentRow elapsedMs={16000} trail={trail} />)
   expect(header).toBe(document.activeElement)
   expect(header.getAttribute("aria-expanded")).toBe("false")
@@ -50,7 +51,7 @@ it("opens live trail by default, honors manual collapse, and auto-collapses on s
   expect(anchor).toHaveBeenCalledTimes(2)
 })
 
-it("renders a live-timed Thinking row at the bottom of the trail during post-tool thinking", () => {
+it("renders a live-timed Thinking row at the bottom of the trail when expanded during post-tool thinking", () => {
   vi.useFakeTimers()
   try {
     vi.setSystemTime(20_000)
@@ -62,6 +63,7 @@ it("renders a live-timed Thinking row at the bottom of the trail during post-too
         trail={trail}
       />,
     )
+    fireEvent.click(screen.getByRole("button"))
     const items = screen.getAllByRole("listitem")
     expect(items).toHaveLength(3)
     expect(items[2].getAttribute("data-kind")).toBe("thinking")
@@ -326,8 +328,9 @@ it("renders dynamic N/M steps progress ring and collapsible checklist for live a
     />,
   )
   const header = screen.getByRole("button")
-  expect(header.getAttribute("aria-expanded")).toBe("true")
+  expect(header.getAttribute("aria-expanded")).toBe("false")
   expect(header.textContent).toContain("chat.activityFold.stepsProgress")
+  fireEvent.click(header)
   expect(screen.getByText("采集网页与品牌资产")).toBeTruthy()
   expect(screen.getByText("叠加多轨音效与转场")).toBeTruthy()
 
@@ -339,4 +342,39 @@ it("renders dynamic N/M steps progress ring and collapsible checklist for live a
   expect(header.textContent).toContain("chat.activityFold.stepsProgress")
   fireEvent.click(header)
   expect(screen.getByText("局部预览与视觉自检")).toBeTruthy()
+})
+
+it("keeps a mid-turn recovered failure calm as Worked while preserving trail inspection", () => {
+  const failed: WorkTrailEntry = {
+    kind: "activity",
+    rowKey: "export-guard",
+    activity: {
+      activity_id: "export-guard",
+      tool_name: "export_video",
+      kind: "run",
+      key: null,
+      status: "failed",
+      error: "Preview required before export",
+    },
+  }
+  render(<WorkSegmentRow trail={[failed]} elapsedMs={2000} recovered />)
+  const header = screen.getByRole("button")
+  expect(header.textContent).toBe("chat.activityFold.worked 2s")
+  fireEvent.click(header)
+  expect(screen.getByRole("listitem").textContent).toContain("Preview required before export")
+})
+
+it("drops synthetic repair/exhaustion markers from tool trail and displays normal Worked elapsed header", () => {
+  const repairFailure = {
+    activity_id: "rep-1",
+    kind: "repair" as const,
+    status: "failed" as const,
+    key: "chat.activity.repair",
+    duration_ms: 0,
+  }
+  render(<WorkSegmentRow trail={trail} failure={repairFailure} elapsedMs={125_000} />)
+  const header = screen.getByRole("button")
+  expect(header.textContent).toBe("chat.activityFold.worked 2m 5s")
+  fireEvent.click(header)
+  expect(screen.getAllByRole("listitem")).toHaveLength(2)
 })

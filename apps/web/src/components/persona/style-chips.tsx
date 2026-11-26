@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Ban, Plus, Quote, X } from "lucide-react"
+import { Ban, Plus, Quote, X } from "@/components/ui/icons"
 
 import { Button } from "@/components/ui/button-clean"
 import { TextField } from "@/components/ui/text-field-clean"

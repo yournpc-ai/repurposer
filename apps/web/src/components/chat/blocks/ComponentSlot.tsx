@@ -1,7 +1,5 @@
 import { useCallback, useState } from "react"
 
-import { useTranslation } from "react-i18next"
-import { Badge } from "@/components/ui/badge-clean"
 import { AnchorCards } from "../AnchorCards"
 import { ImagePreview } from "../video/ImagePreview"
 import { AudioPlaybackSurface } from "../video/AudioPlaybackSurface"
@@ -32,7 +30,6 @@ export function ComponentSlot({
   structureTurnId?: string
   onStructureVisible?: RegisterStructureVisibility
 }) {
-  const { t } = useTranslation()
   if (slot.kind === "output") {
     return (
       <RevealSlot
@@ -43,7 +40,6 @@ export function ComponentSlot({
         structureTurnId={structureTurnId}
         onStructureVisible={onStructureVisible}
       >
-        {slot.reviewedVersionId && <Badge data-reviewed-version={slot.reviewedVersionId}>{t("agentReceipt.delivered")}</Badge>}
         <AnchorCards outputs={slot.outputs} onOpen={onOpen ?? (() => {})} />
       </RevealSlot>
     )

@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router"
+import { createFileRoute, useLocation } from "@tanstack/react-router"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -16,6 +16,7 @@ export const Route = createFileRoute("/_app/home")({
 
 function Home() {
   const { t } = useTranslation()
+  const location = useLocation()
   const scrollRef = useRef<HTMLDivElement>(null)
   // The draft (prompt + mentions) is the editor's reported mirror — the DOM
   // owns the text; Home keeps it as the send payload and acts on the editor
@@ -38,12 +39,11 @@ function Home() {
       if (!editor) return
       const text = t(prefillKey)
       const draft = prompt.trim()
-      const replaceable = mentions.length === 0 && (draft === "" || draft === lastPrefillRef.current)
+      const replaceable = brief || (mentions.length === 0 && (draft === "" || draft === lastPrefillRef.current))
       if (replaceable) editor.clear({ preserveSkill: true })
       const insertion = replaceable ? text : `\n\n${text}`
       if (brief) {
-        const result = editor.insertBrief(insertion)
-        lastPrefillRef.current = replaceable ? result.trim() : null
+        lastPrefillRef.current = editor.insertBrief(text).trim()
       } else {
         editor.insertText(insertion)
         lastPrefillRef.current = replaceable ? text.trim() : null
@@ -65,6 +65,57 @@ function Home() {
       handoff.skill ? skillOptionForReference(handoff.skill, skillOptions) : null,
     )
   }, [handlePrefill, skillOptions])
+
+  // Prefill prompt, mention, or saved skill when arriving from /presets or /assets.
+  const navState = location.state as
+    | {
+        prefillPrompt?: string
+        prefillMention?: ChatMention
+        prefillSkillVersionId?: string
+      }
+    | undefined
+  const presetPrefill = navState?.prefillPrompt
+  const mentionPrefill = navState?.prefillMention
+  const skillVersionPrefill = navState?.prefillSkillVersionId
+  const consumedPresetRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!presetPrefill || consumedPresetRef.current === presetPrefill) return
+    const editor = editorRef.current
+    if (!editor) return
+    consumedPresetRef.current = presetPrefill
+    editor.clear({ preserveSkill: true })
+    editor.insertText(presetPrefill + " ")
+    editor.focus()
+  }, [presetPrefill])
+
+  const consumedMentionRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!mentionPrefill) return
+    const key = `${mentionPrefill.type}:${mentionPrefill.id}`
+    if (consumedMentionRef.current === key) return
+    const editor = editorRef.current
+    if (!editor) return
+    consumedMentionRef.current = key
+    editor.clear({ preserveSkill: true })
+    editor.insertMention(mentionPrefill)
+    editor.insertText(" ")
+    editor.focus()
+  }, [mentionPrefill])
+
+  const consumedSkillRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!skillVersionPrefill || skillOptions.length === 0) return
+    if (consumedSkillRef.current === skillVersionPrefill) return
+    const match = skillOptions.find(
+      (option) =>
+        option.reference.kind === "external" &&
+        option.reference.skill_version_id === skillVersionPrefill,
+    )
+    if (!match) return
+    consumedSkillRef.current = skillVersionPrefill
+    setSelectedSkill(match)
+    editorRef.current?.focus()
+  }, [skillVersionPrefill, skillOptions])
 
   return (
     <div ref={scrollRef} className="h-full overflow-y-auto">

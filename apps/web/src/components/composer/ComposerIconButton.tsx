@@ -1,6 +1,6 @@
 "use client"
 
-import type { LucideIcon } from "lucide-react"
+import type { AppIcon } from "@/components/ui/icons"
 import { IconButton, type IconButtonProps } from "@/components/ui/icon-button-clean"
 import { cn } from "@/lib/utils"
 
@@ -10,7 +10,7 @@ export function ComposerIconButton({
   className,
   style,
   ...props
-}: Omit<IconButtonProps, "icon"> & { icon: LucideIcon }) {
+}: Omit<IconButtonProps, "icon"> & { icon: AppIcon }) {
   return (
     <IconButton
       variant={variant}

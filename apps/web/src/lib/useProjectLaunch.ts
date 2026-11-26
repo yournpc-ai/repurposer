@@ -34,6 +34,64 @@ interface CreatedProject {
   id: string
 }
 
+const URL_REGEX = /https?:\/\/[^\s<>"'）)\]]+/i
+const GENERIC_SUBDOMAINS = new Set([
+  "www",
+  "app",
+  "agent",
+  "web",
+  "m",
+  "mobile",
+  "beta",
+  "docs",
+  "staging",
+  "dev",
+  "api",
+  "studio",
+  "get",
+  "try",
+])
+
+function deriveInitialProjectTitle(prompt: string, fallback: string): string {
+  const urlMatch = URL_REGEX.exec(prompt)
+  if (urlMatch) {
+    try {
+      const host = new URL(urlMatch[0]).hostname.toLowerCase()
+      const parts = host.split(".").filter(Boolean)
+      const core =
+        parts.length >= 3 &&
+        ["co", "com", "org", "net", "edu", "gov"].includes(parts[parts.length - 2]) &&
+        parts[parts.length - 1].length === 2
+          ? parts.slice(0, -2)
+          : parts.length >= 2
+            ? parts.slice(0, -1)
+            : parts
+      let start = 0
+      while (core.length - start > 1 && GENERIC_SUBDOMAINS.has(core[start])) start += 1
+      const stem = core[core.length - 1] ?? parts[0] ?? ""
+      const brand = stem
+        .split(/[-_]+/)
+        .filter(Boolean)
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(" ")
+      if (brand) return brand.length > 24 ? `${brand.slice(0, 23)}…` : brand
+    } catch {
+      // Fall back to cleaned text
+    }
+  }
+  const firstLine = prompt.split(/\r?\n/).map((l) => l.trim()).find(Boolean) ?? ""
+  const cleaned = firstLine
+    .replace(URL_REGEX, " ")
+    .replace(/^(?:请你?|麻烦你?|请?帮我(?:把|给)?|给我|帮我|我想(?:要)?(?:做|剪|生成|制作)?|我要(?:做|剪|制作)?|给|把)\s*/u, "")
+    .replace(/^(?:please\s+|can you\s+|could you\s+|help me\s+)?(?:create|make|generate|build|cut|edit)\s+(?:a|an|me\s+a|me\s+an|the)?\s*/i, "")
+    .replace(/^(?:做(?:一[支条个份部])?|制作(?:一[支条个份部])?|生成(?:一[支条个份部])?|剪(?:一[支条个份部])?)\s*/u, "")
+    .replace(/\s+/g, " ")
+    .replace(/[\s,，。！？!?：:；;、]+$/, "")
+    .trim()
+  if (!cleaned) return fallback
+  return cleaned.length > 24 ? `${cleaned.slice(0, 23)}…` : cleaned
+}
+
 export function useProjectLaunch() {
   const navigate = useNavigate()
   const { t } = useTranslation()
@@ -61,13 +119,7 @@ export function useProjectLaunch() {
         setLaunching(true)
         input.onStart?.()
         try {
-          // Project title = a 15-char split of the user's prompt + "…" — the
-          // chat-app convention (a conversation is named from the user's own
-          // words), NEVER the material's filename.
-          const promptLine = text.replace(/\s+/g, " ")
-          const title =
-            (promptLine.length > 15 ? `${promptLine.slice(0, 15)}…` : promptLine) ||
-            t("common.untitled")
+          const title = deriveInitialProjectTitle(text, t("common.untitled"))
           const projectRes = await apiFetch("/api/v1/projects", {
             method: "POST",
             body: {

@@ -1,10 +1,13 @@
 import "@/studio.css"
-import { Outlet, createFileRoute } from "@tanstack/react-router"
+import { useRef } from "react"
+import { Outlet, createFileRoute, useMatch } from "@tanstack/react-router"
 import { createServerFn } from "@tanstack/react-start"
 
 import { AppSidebar, SIDEBAR_COOKIE_NAME } from "@/components/app-sidebar"
 import { StudioHeader } from "@/components/StudioHeader"
 import { StudioHeaderProvider } from "@/components/StudioHeaderContext"
+import { WorkbenchProvider } from "@/components/workbench/WorkbenchContext"
+import { WorkbenchPane } from "@/components/workbench/WorkbenchPane"
 
 
 // Server-module imports are denied in the client bundle (same pattern as the
@@ -31,17 +34,30 @@ export const Route = createFileRoute("/_app")({
 
 function AppLayout() {
   const { sidebarOpen } = Route.useLoaderData()
+  const projectMatch = useMatch({ from: "/_app/projects/$id", shouldThrow: false })
+  const activeProjectId = projectMatch?.params.id ?? null
+  const appRef = useRef<HTMLDivElement>(null)
+  const shell = (
+    <div ref={appRef} className="ui-as-app">
+      <AppSidebar defaultOpen={sidebarOpen} />
+      <main className="ui-as-main">
+        <StudioHeader />
+        <div className="min-h-0 flex-1 overflow-auto">
+          <Outlet />
+        </div>
+      </main>
+      {activeProjectId ? <WorkbenchPane containerRef={appRef} /> : null}
+    </div>
+  )
   return (
     <StudioHeaderProvider>
-      <div className="ui-as-app">
-        <AppSidebar defaultOpen={sidebarOpen} />
-        <main className="ui-as-main">
-          <StudioHeader />
-          <div className="min-h-0 flex-1 overflow-auto">
-            <Outlet />
-          </div>
-        </main>
-      </div>
+      {activeProjectId ? (
+        <WorkbenchProvider key={activeProjectId} projectId={activeProjectId}>
+          {shell}
+        </WorkbenchProvider>
+      ) : (
+        shell
+      )}
     </StudioHeaderProvider>
   )
 }

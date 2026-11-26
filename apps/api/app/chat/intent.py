@@ -196,6 +196,6 @@ intent_router = ToolLoopAgent(
     assemble=_assemble_plan_turn,
     # The current Composition authoring and production tools share one loop.
     tools=[*PLAN_TOOLS, *PLAN_READ_TOOLS],
-    max_iterations=20,
+    max_iterations=42,
     service_per_call=True,
 )

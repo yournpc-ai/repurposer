@@ -13,7 +13,7 @@ import {
   Trash2,
   Upload,
   Wand2,
-} from "lucide-react"
+} from "@/components/ui/icons"
 import { toast } from "sonner"
 
 import { IconButton } from "@/components/ui/icon-button-clean"
@@ -24,6 +24,7 @@ import { TextField } from "@/components/ui/text-field-clean"
 import { TextArea } from "@/components/ui/text-area-clean"
 import { Select } from "@/components/ui/select-clean"
 import { SegmentedControl } from "@/components/ui/segmented-control-clean"
+import { Loading, Skeleton } from "@/components/ui/skeleton-clean"
 import { apiFetch } from "@/lib/api"
 import { formatRelativeTime } from "@/lib/utils"
 import { SkinEditor } from "@/components/persona/skin-editor"
@@ -305,9 +306,30 @@ function PersonaDetailPage() {
 
   if (loading && !persona) {
     return (
-      <div className="flex flex-1 items-center justify-center">
-        <p className="text-muted-foreground">{t("common.loading")}</p>
-      </div>
+      <Loading label={t("common.loading")} className="flex flex-1 flex-col p-6 md:p-8">
+        <div className="mx-auto flex w-full max-w-4xl flex-col gap-6">
+          <Skeleton width={20} height={20} radius={6} />
+          <Card>
+            <CardContent className="flex flex-wrap items-center gap-6">
+              <div className="flex min-w-0 flex-1 flex-col gap-2">
+                <Skeleton width={180} height={22} radius={6} />
+                <Skeleton width={240} height={12} />
+              </div>
+              <Skeleton width={104} height={36} radius={8} />
+              <Skeleton width={104} height={36} radius={8} />
+            </CardContent>
+          </Card>
+          <Skeleton width={280} height={36} radius={8} />
+          <Card>
+            <CardContent className="flex flex-col gap-3">
+              <Skeleton width={140} height={14} />
+              <Skeleton line width="92%" height={10} />
+              <Skeleton line width="80%" height={10} />
+              <Skeleton line width="64%" height={10} />
+            </CardContent>
+          </Card>
+        </div>
+      </Loading>
     )
   }
 

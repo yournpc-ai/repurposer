@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { ArrowDownIcon } from "lucide-react"
+import { ArrowDownIcon } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 import { IconButton } from "@/components/ui/icon-button-clean"
 import { cn } from "@/lib/utils"

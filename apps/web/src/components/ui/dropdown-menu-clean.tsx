@@ -409,6 +409,7 @@ function MenuLevel({ id, items, empty, labelledBy, label, onPick, onClose, onBac
         onBlur={onBlur}
         onPointerLeave={() => {
           stopTimer();
+          setGlow(null);
           // The pointer left: the highlight goes, the keys start again from the menu
           if (list.current?.contains(document.activeElement) && document.activeElement !== list.current) list.current?.focus({ preventScroll: true });
         }}
@@ -439,9 +440,16 @@ function MenuLevel({ id, items, empty, labelledBy, label, onPick, onClose, onBac
                 onPointerMove={(e) => {
                   const row = e.currentTarget;
                   if (item.disabled) {
+                    setGlow(null);
                     if (document.activeElement !== list.current) list.current?.focus({ preventScroll: true });
                     return;
                   }
+                  const danger = Boolean(item.danger);
+                  setGlow((prev) =>
+                    prev && prev.top === row.offsetTop && prev.height === row.offsetHeight && prev.danger === danger
+                      ? prev
+                      : { top: row.offsetTop, height: row.offsetHeight, danger },
+                  );
                   if (document.activeElement !== row) row.focus({ preventScroll: true });
                   // Rest on an item with a submenu to open it; on another item the open one closes after a beat
                   if (item.submenu) {
@@ -696,6 +704,7 @@ const css = /* css */ `
   position: fixed;
   inset: auto;
   z-index: 1000;
+  pointer-events: auto;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
@@ -775,19 +784,22 @@ const css = /* css */ `
   transition: color 120ms ease;
 }
 .ui-dmc__item[data-rich] { min-height: 44px; padding: 6px 10px; }
-.ui-dmc__item:focus { outline: none; color: var(--ui-dmc-ink); }
+.ui-dmc__item:focus,
+.ui-dmc__item:not([aria-disabled="true"]):hover { outline: none; color: var(--ui-dmc-ink); }
 .ui-dmc__item:focus-visible { outline: 2px solid var(--ui-dmc-focus); outline-offset: -2px; }
 /* The item whose submenu is open keeps a highlight while the focus is in the submenu */
 .ui-dmc__item[data-open] { color: var(--ui-dmc-ink); }
 .ui-dmc__item[data-open]:not(:focus) { background: var(--ui-dmc-glow); }
 .ui-dmc__item[aria-checked="true"] { color: var(--ui-dmc-ink); font-weight: 500; }
-.ui-dmc__item[data-danger], .ui-dmc__item[data-danger]:focus { color: var(--ui-dmc-danger); }
+.ui-dmc__item[data-danger], .ui-dmc__item[data-danger]:focus, .ui-dmc__item[data-danger]:hover { color: var(--ui-dmc-danger); }
 .ui-dmc__item[aria-disabled="true"] { color: var(--ui-dmc-faint); cursor: default; }
 
 .ui-dmc__icon { display: grid; flex: none; place-items: center; width: 16px; height: 16px; color: var(--ui-dmc-icon); transition: color 120ms ease; }
 .ui-dmc__icon > svg { display: block; width: 15px; height: 15px; }
 .ui-dmc__icon[data-logo] > svg, .ui-dmc__icon[data-logo] > img { width: 14px; height: 14px; }
-.ui-dmc__item:focus .ui-dmc__icon:not([data-logo]), .ui-dmc__item[data-open] .ui-dmc__icon:not([data-logo]) { color: var(--ui-dmc-ink); }
+.ui-dmc__item:focus .ui-dmc__icon:not([data-logo]),
+.ui-dmc__item:not([aria-disabled="true"]):hover .ui-dmc__icon:not([data-logo]),
+.ui-dmc__item[data-open] .ui-dmc__icon:not([data-logo]) { color: var(--ui-dmc-ink); }
 .ui-dmc__item[data-danger] .ui-dmc__icon { color: var(--ui-dmc-danger); }
 .ui-dmc__item[aria-disabled="true"] .ui-dmc__icon { opacity: 0.5; color: var(--ui-dmc-icon); }
 
@@ -830,7 +842,7 @@ const css = /* css */ `
   --ui-dmc-icon: var(--aui-muted, rgba(255, 255, 255, 0.45));
   --ui-dmc-faint: var(--aui-placeholder, rgba(255, 255, 255, 0.28));
   --ui-dmc-line: var(--aui-border, rgba(255, 255, 255, 0.08));
-  --ui-dmc-glow: rgba(255, 255, 255, 0.06);
+  --ui-dmc-glow: rgba(255, 255, 255, 0.08);
   --ui-dmc-danger: var(--aui-red, #ff6b5f);
   --ui-dmc-danger-glow: color-mix(in srgb, var(--aui-red, #ff6b5f) 14%, transparent);
   --ui-dmc-shadow: var(--aui-shadow-popover, 0 0 0 0.5px var(--aui-border-strong, rgba(255, 255, 255, 0.14)), 0 12px 32px -8px rgba(0, 0, 0, 0.6));

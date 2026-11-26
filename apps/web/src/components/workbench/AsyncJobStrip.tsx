@@ -1,6 +1,6 @@
 "use client"
 
-import { ChevronRight } from "lucide-react"
+import { ChevronRight } from "@/components/ui/icons"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import { useTranslation } from "react-i18next"
 

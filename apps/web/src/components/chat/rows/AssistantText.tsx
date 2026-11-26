@@ -2,8 +2,8 @@
  * incomplete markdown safely mid-stream, so the live preview and the settled
  * message share one renderer. */
 
-import { useMemo, type ComponentPropsWithoutRef } from "react"
-import { Film, Image as ImageIcon, Play, Sparkles } from "lucide-react"
+import { isValidElement, useMemo, type ComponentPropsWithoutRef, type ReactNode } from "react"
+import { FileText, Film, Image as ImageIcon, Play, SlidersHorizontal, Sparkles } from "@/components/ui/icons"
 import { defaultUrlTransform, Streamdown, type Components, type UrlTransform } from "streamdown"
 import { useTranslation } from "react-i18next"
 
@@ -24,19 +24,34 @@ const workbenchSafeUrlTransform: UrlTransform = (url, key, node) => {
 
 function chipIcon(target: WorkbenchOpenTarget) {
   if (target.tab === "slots") return <Sparkles className="size-3 shrink-0" />
+  if (target.tab === "storyboard") return <FileText className="size-3 shrink-0" />
   if (target.tab === "inspector") return <ImageIcon className="size-3 shrink-0" />
+  if (target.tab === "presets" || target.tab === "sounds") {
+    return <SlidersHorizontal className="size-3 shrink-0" />
+  }
   if (target.outputId) return <Play className="size-3 shrink-0" />
   return <Film className="size-3 shrink-0" />
+}
+
+function extractNodeText(node: ReactNode): string {
+  if (typeof node === "string" || typeof node === "number") return String(node)
+  if (Array.isArray(node)) return node.map(extractNodeText).join("")
+  if (isValidElement<{ children?: ReactNode }>(node)) {
+    return extractNodeText(node.props.children)
+  }
+  return ""
 }
 
 export function AssistantText({
   text,
   streaming,
   hydrated,
+  stageNote,
 }: {
   text: string
   streaming?: boolean
   hydrated?: boolean
+  stageNote?: boolean
 }) {
   const { t } = useTranslation()
   const workbench = useOptionalWorkbench()
@@ -46,14 +61,19 @@ export function AssistantText({
       a: ({ href, children, className, ...rest }: ComponentPropsWithoutRef<"a">) => {
         const target = parseWorkbenchHref(href)
         if (target) {
+          const linkTitle = extractNodeText(children).trim()
           return (
             <button
               type="button"
               data-workbench-href={href}
-              onClick={() => workbench?.openWorkbench(target)}
+              onClick={() =>
+                workbench?.openWorkbench(
+                  linkTitle ? { ...target, title: linkTitle } : target,
+                )
+              }
               title={t("workbench.openInWorkbench")}
               className={cn(
-                "mx-0.5 inline-flex items-center gap-1 rounded-md border border-border/80 bg-muted/60 px-1.5 py-0.5 align-baseline text-xs font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring",
+                "mx-0.5 inline-flex items-center gap-1 rounded-md border border-subtle bg-muted px-1.5 py-0.5 align-baseline text-xs font-medium text-foreground transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring",
                 !workbench && "cursor-default opacity-80",
               )}
             >
@@ -130,7 +150,7 @@ export function AssistantText({
   }, [workbench, t])
 
   return (
-    <div className="ui-th-message">
+    <div className="ui-th-message" data-stage-note={stageNote ? "true" : undefined}>
       <Streamdown
         mode={streaming ? "streaming" : "static"}
         isAnimating={streaming}

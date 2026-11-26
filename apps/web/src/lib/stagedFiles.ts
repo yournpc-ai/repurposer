@@ -6,8 +6,8 @@ import {
   Mic2,
   Video,
   Image as ImageIcon,
-  type LucideIcon,
-} from "lucide-react"
+  type AppIcon,
+} from "@/components/ui/icons"
 
 // Videos / audio / images / transcripts & docs — the three input tiers
 // ("bring whatever you have"): recording, audio-only, or transcript + photos.
@@ -25,7 +25,7 @@ export function acceptsStagedFile(file: File): boolean {
 }
 
 /** Type glyph for a staged file (chips / panel rows). */
-export function fileIconFor(file: File): LucideIcon {
+export function fileIconFor(file: File): AppIcon {
   if (file.type.startsWith("video/")) return Video
   if (file.type.startsWith("audio/")) return Mic2
   if (file.type.startsWith("image/")) return ImageIcon
