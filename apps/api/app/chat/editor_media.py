@@ -776,6 +776,28 @@ async def generate_media(turn, name, args, composition, version):
         facts.update(alignment_status=aligned["status"], source_timebase=aligned["source_timebase"],
                      cues=[{k: sentence.get(k) for k in ("text", "start_tick", "end_tick", "status")}
                            for sentence in payload.get("sentences", [])], alignment_error=aligned.get("error"))
+        # The playback receipt is shared with the web client. Enrich only this observation copy.
+        from app.editing.caption_timing import measured_caption_phrases, measured_narration_cues
+        from app.models.tables import SourceSnapshot
+        from app.tools.video.narration import snapshot_narration_cues
+
+        async with AsyncSessionLocal() as db:
+            snap = await db.get(SourceSnapshot, UUID(facts["snapshot_id"]))
+            _, cues = await snapshot_narration_cues(db, snap)
+        phrases = []
+        if cues and all(c.get("words") for c in cues):
+            for cue in measured_narration_cues(cues, facts["duration_seconds"]):
+                phrases.extend(measured_caption_phrases(cue))
+        # Cover even a long script from first to last word within the model's context budget.
+        stride = max(1, (len(phrases) + 47) // 48)
+        facts["word_cues"] = []
+        for i in range(0, len(phrases), stride):
+            group = phrases[i:i + stride]
+            facts["word_cues"].append({
+                "text": " ".join(p.text for p in group),
+                "start_s": round(group[0].time_begin_ms / 1000, 3),
+                "end_s": round(group[-1].time_end_ms / 1000, 3),
+            })
     images = []
     if facts.get("role") == "image":
         from app.models.tables import SourceSnapshot

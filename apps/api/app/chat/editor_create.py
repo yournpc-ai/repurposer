@@ -15,6 +15,8 @@ from app.editing.caption_timing import (
     build_motion_block_caption_phrases,
     detect_text_language,
     format_caption_punctuation,
+    local_narration_window,
+    measured_narration_cues,
     resolve_cue_phrase_window_s,
     spoken_numbers,
     strip_pause_tags,
@@ -50,6 +52,7 @@ from app.editing.text_presets import (
 )
 from app.editing.timing import (
     DEFAULT_TIMEBASE,
+    SOURCE_TIMEBASE,
     output_ticks_to_source_ticks,
     seconds_to_ticks,
     source_ticks_to_output_ticks,
@@ -181,6 +184,7 @@ def resolve_motion_block_cue_phrases(
     speech_lead_s: float = 0.15,
     language: str | None = None,
     spoken_seconds: float | None = None,
+    acoustic_edges: bool = False,
     warnings: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Resolve authoring-time ``cue_phrase`` anchors against measured speech timing and strip them.
@@ -220,6 +224,7 @@ def resolve_motion_block_cue_phrases(
             speech_lead_s=speech_lead_s,
             language=language,
             min_start_s=min_start_s,
+            acoustic_edges=acoustic_edges and not script_only,
         )
 
     def explicit(phrase: str | None, *, min_start_s: float = 0.0):
@@ -254,7 +259,7 @@ def resolve_motion_block_cue_phrases(
                 hit = (explicit if phrases is word_cues else _window)(phrase, min_start_s=after)
                 if hit is not None:
                     anchors[i] = hit[0]
-                    after = hit[0] + 0.051  # advance past the matcher's 50 ms tolerance for repeated words
+                    after = hit[0] + (0.001 if acoustic_edges else 0.051)
             start = max(0, speech_lead_s)
             end = start + 0.75 * max(0, _spoken_end_s() - start)
             if block_id == "statement_hook" and len(anchors) * 2 < len(tokens):
@@ -482,6 +487,8 @@ def resolve_motion_block_cue_phrases(
                         if t_val is None:
                             continue
                         clamped = round(min(duration_s - 0.25, max(prev_t + 0.12 if prev_t >= 0 else 0.0, t_val)), 3)
+                        if acoustic_edges:
+                            clamped = round(min(duration_s, max(0, prev_t, t_val)), 3)
                         updated[idx_in_list]["reveal_at_s"] = clamped
                         prev_t = clamped
                 elif explicit_count == 0 and spoken_span >= 2.5:
@@ -630,6 +637,10 @@ class SelectedMotionBlock(BaseModel):
 
 
 class FirstMotionBlock(SelectedMotionBlock):
+    start_cue_phrase: str | None = Field(default=None, min_length=1, exclude_if=lambda v: v is None,
+        description="Cut into this block at the spoken phrase onset in the continuous voiceover.")
+    end_cue_phrase: str | None = Field(default=None, min_length=1, exclude_if=lambda v: v is None,
+        description="Cut out of this block at the spoken phrase end in the continuous voiceover.")
     duration_seconds: float = Field(
         gt=0,
         le=60,
@@ -706,6 +717,8 @@ class CreateVideoArgs(BaseModel):
         max_length=64,
         description="Ordered media/title shots. Optional when declaring native motion_blocks directly.",
     )
+    voiceover_snapshot_id: UUID | None = Field(default=None, exclude_if=lambda v: v is None,
+        description="Fixed project narration from generate_voice. Its word timeline drives all motion blocks.")
     motion_blocks: list[FirstMotionBlock] = Field(
         default_factory=list,
         max_length=48,
@@ -776,7 +789,55 @@ class CreateVideoArgs(BaseModel):
     def _require_shots_or_motion_blocks(self):
         if not self.shots and not self.motion_blocks:
             raise ValueError("Provide at least one entry in shots or motion_blocks.")
+        if self.voiceover_snapshot_id:
+            if not self.motion_blocks:
+                raise ValueError("Continuous voiceover requires motion_blocks.")
+            if any(m.narration for m in self.motion_blocks) or any(
+                s.narration or s.narration_snapshot_id for s in self.shots
+            ):
+                raise ValueError("Choose either a continuous voiceover or per-act narration.")
+        elif any(m.start_cue_phrase or m.end_cue_phrase for m in self.motion_blocks):
+            raise ValueError("Cut phrases require voiceover_snapshot_id.")
         return self
+
+
+def _voiceover_block_ranges(
+    blocks: list[FirstMotionBlock], text: str, cues: list[dict], duration_s: float, cursor: int, rate: int,
+) -> list[tuple[int, int]]:
+    """Resolve each shared cut once. Unanchored acts keep their planned duration."""
+    def edge(phrase, index, after, side):
+        window = resolve_cue_phrase_window_s(
+            text, phrase, cues=cues, duration_s=duration_s + 0.15, speech_lead_s=0.15,
+            min_start_s=after / rate, acoustic_edges=True,
+        )
+        if window is None:
+            raise ValueError(f"Act {index + 1} cut phrase {phrase!r} was not found in order.")
+        return seconds_to_ticks(window[side], rate)
+
+    ranges = []
+    for i, block in enumerate(blocks):
+        if i == 0 and block.start_cue_phrase:
+            cursor = edge(block.start_cue_phrase, i, cursor, 0)
+        end = None
+        if block.end_cue_phrase:
+            end = edge(block.end_cue_phrase, i, cursor, 1)
+        if i + 1 < len(blocks) and (phrase := blocks[i + 1].start_cue_phrase):
+            cut = edge(phrase, i + 1, end if end is not None else cursor + 1, 0)
+            if end is not None and cut > end:
+                # Hold the outgoing picture through a natural breath up to the next onset.
+                between, _, _, _ = local_narration_window(cues, 0.15 - end / rate, (cut - end) / rate)
+                if between and any(ch.isalnum() for ch in between):
+                    raise ValueError(f"Acts {i + 1} and {i + 2} leave spoken words between their cut phrases.")
+            end = cut
+        if end is None:
+            end = cursor + seconds_to_ticks(block.duration_seconds, rate)
+            if i == len(blocks) - 1:
+                end = max(end, seconds_to_ticks(0.15 + duration_s, rate))
+        if end <= cursor:
+            raise ValueError(f"Act {i + 1} cut would leave an empty or reversed visual range.")
+        ranges.append((cursor, end))
+        cursor = end
+    return ranges
 
 
 def _resolve_create_caption_style(
@@ -965,7 +1026,7 @@ async def create_video(db, turn, args: CreateVideoArgs):
         )
         if has_any_narration and voice_generation_forbidden(getattr(turn, "text", "")):
             raise ValueError("The user explicitly disallowed narration generation. Use existing sources or native text instead.")
-        if required.get("target_seconds") is not None:
+        if required.get("target_seconds") is not None and args.voiceover_snapshot_id is None:
             ticks = seconds_to_ticks(required["target_seconds"])
             planned_seconds = (
                 sum(shot.duration_seconds or 0 for shot in args.shots)
@@ -1084,7 +1145,27 @@ async def create_video(db, turn, args: CreateVideoArgs):
                 )
 
             narration_language = (args.narration_language or "").strip().lower()
-            deferred_captions: list[tuple[str, int, int, str, Any, CaptionDerivation | SourceCaptionDerivation]] = []
+            deferred_captions: list[tuple[str | None, int, int, str, Any, CaptionDerivation | SourceCaptionDerivation]] = []
+            voiceover = None
+            if args.voiceover_snapshot_id:
+                from app.tools.video.narration import snapshot_narration_cues
+
+                voiceover = await db.scalar(select(SourceSnapshot).where(
+                    SourceSnapshot.id == args.voiceover_snapshot_id, SourceSnapshot.owner_id == owner,
+                    SourceSnapshot.origin_project_id == project, SourceSnapshot.kind == "audio",
+                ))
+                if voiceover is None or not voiceover.storage_key or not voiceover.duration_ticks:
+                    raise ValueError("The fixed voiceover audio snapshot is unavailable in this project.")
+                script, raw_cues = await snapshot_narration_cues(db, voiceover)
+                if not script or not raw_cues:
+                    raise ValueError("Voiceover requires the recorded transcript and word timings.")
+                recording_seconds = voiceover.duration_ticks / SOURCE_TIMEBASE
+                global_cues = measured_narration_cues(raw_cues, recording_seconds)
+                timed_script = "".join(cue["text"] for cue in global_cues)
+                if "".join(strip_pause_tags(script).split()) != "".join(timed_script.split()):
+                    raise ValueError("Voiceover word timings must cover the complete recorded transcript.")
+                ranges = _voiceover_block_ranges(args.motion_blocks, script, global_cues, recording_seconds,
+                                                 cursor_ticks, rate)
             for idx, mb in enumerate(args.motion_blocks):
                 resolved_props, resolved_resources = await resolve_motion_block_resources(
                     db,
@@ -1132,16 +1213,29 @@ async def create_video(db, turn, args: CreateVideoArgs):
                                 min(mb.duration_seconds, measured_s + 1.5),
                             )
 
+                prepared = narr_prep is not None and narr_prep["mode"] == "prepared"
+                local_text = mb.narration
+                local_cues = narr_prep["cues"] if prepared else None
+                spoken_seconds = narr_prep["duration_s"] if prepared else None
+                speech_lead = 0.15 if mb.narration else 0.0
+                if voiceover:
+                    cursor_ticks, cut_end = ranges[idx]
+                    eff_duration_s = (cut_end - cursor_ticks) / rate
+                    local_text, local_cues, speech_lead, spoken_seconds = local_narration_window(
+                        global_cues, 0.15 - cursor_ticks / rate, eff_duration_s,
+                    )
+
                 act_warnings = []
                 resolved_props = resolve_motion_block_cue_phrases(
                     mb.block_id,
                     resolved_props,
-                    narration=mb.narration,
-                    cues=(narr_prep.get("cues") if narr_prep and narr_prep["mode"] == "prepared" else None),
+                    narration=local_text,
+                    cues=local_cues,
                     duration_s=eff_duration_s,
-                    speech_lead_s=0.15 if mb.narration is not None else 0.0,
+                    speech_lead_s=speech_lead,
                     language=eff_lang,
-                    spoken_seconds=narr_prep["duration_s"] if narr_prep and narr_prep["mode"] == "prepared" else None,
+                    spoken_seconds=spoken_seconds,
+                    acoustic_edges=voiceover is not None,
                     warnings=act_warnings,
                 )
                 validate_motion_block_props(mb.block_id, coerce_motion_block_props(mb.block_id, resolved_props))
@@ -1177,7 +1271,19 @@ async def create_video(db, turn, args: CreateVideoArgs):
 
                 scene_speech_ids: list[str] = []
                 extra_audio_ops: list[Any] = []
-                if mb.narration is not None and narr_prep is not None:
+                # A continuous recording and its captions belong to the timeline, across scene cuts.
+                audio_scene, audio_text = scene_id, mb.narration
+                audio_start, audio_end = start, end
+                translations, caption_text = mb.caption_translations, mb.caption_text
+                if voiceover is not None and idx == 0:
+                    narr_prep = {"mode": "prepared", "snapshot": voiceover, "cues": global_cues,
+                                 "duration_s": recording_seconds}
+                    audio_scene, audio_text = None, script
+                    audio_start = 0
+                    audio_end = seconds_to_ticks(0.15, rate) + source_ticks_to_output_ticks(voiceover.duration_ticks, rate)
+                    translations = [line for block in args.motion_blocks for line in block.caption_translations or []]
+                    caption_text = None
+                if narr_prep is not None:
                     dialogue_track = next(
                         (t for t in comp_content.timeline.tracks if t.kind == "audio" and t.role == "dialogue"),
                         None,
@@ -1193,23 +1299,21 @@ async def create_video(db, turn, args: CreateVideoArgs):
                         extra_audio_ops.append(AddTrack(op="add_track", track=dialogue_track))
 
                     if narr_prep["mode"] == "prepared":
-                        snap: SourceSnapshot = narr_prep["snapshot"]
+                        snap = narr_prep["snapshot"]
+                        audio_id = audio_scene or "continuous"
                         bound_digests[snap.id] = snap.digest
                         if snap.id not in {b.snapshot_id for b in comp_content.sources}:
                             extra_audio_ops.append(BindSource(op="bind_source", snapshot_id=snap.id))
                         lead = seconds_to_ticks(0.15, rate)
                         audio_out_ticks = source_ticks_to_output_ticks(snap.duration_ticks, rate)
-                        if start + lead + audio_out_ticks <= end:
-                            speech_start = start + lead
-                        else:
-                            speech_start = start
-                        avail_out = max(1, end - speech_start)
+                        speech_start = audio_start + lead if audio_start + lead + audio_out_ticks <= audio_end else audio_start
+                        avail_out = max(1, audio_end - speech_start)
                         used_src_ticks = min(
                             snap.duration_ticks,
                             output_ticks_to_source_ticks(min(audio_out_ticks, avail_out), rate),
                         )
                         speech_end = speech_start + source_ticks_to_output_ticks(used_src_ticks, rate)
-                        if speech_end > end:
+                        if speech_end > audio_end:
                             used_src_ticks = max(1, used_src_ticks - 1)
                             speech_end = speech_start + source_ticks_to_output_ticks(used_src_ticks, rate)
                         extra_audio_ops.append(
@@ -1217,9 +1321,9 @@ async def create_video(db, turn, args: CreateVideoArgs):
                                 op="add_clip",
                                 track_id=dialogue_track.track_id,
                                 clip=Clip(
-                                    clip_id=f"clp_vo_{scene_id}",
+                                    clip_id=f"clp_vo_{audio_id}",
                                     range=TimeRange(start=speech_start, end=speech_end),
-                                    scene_id=scene_id,
+                                    scene_id=audio_scene,
                                     source=ClipSource(
                                         snapshot_id=snap.id,
                                         snapshot_digest=snap.digest,
@@ -1227,21 +1331,21 @@ async def create_video(db, turn, args: CreateVideoArgs):
                                     ),
                                     object=AudioObject(
                                         kind="audio",
-                                        object_id=f"obj_vo_{scene_id}",
+                                        object_id=f"obj_vo_{audio_id}",
                                         gain_db=0.0,
                                     ),
                                     animations=[],
                                 ),
                             )
                         )
-                        cues = narr_prep.get("cues") or []
                         timed_phrases, is_bilingual = build_motion_block_caption_phrases(
-                            mb.narration,
-                            cues=cues,
-                            duration_ms=float(narr_prep["duration_s"]) * 1000.0,
-                            language=eff_lang or "en",
-                            caption_translations=mb.caption_translations,
-                            caption_text=mb.caption_text,
+                            audio_text,
+                            cues=narr_prep["cues"],
+                            duration_ms=narr_prep["duration_s"] * 1000,
+                            language=eff_lang or narration_language or "en",
+                            caption_translations=translations,
+                            caption_text=caption_text,
+                            measured_words=voiceover is not None,
                         )
                         caption_style = _resolve_create_caption_style(
                             comp_content.settings,
@@ -1266,15 +1370,15 @@ async def create_video(db, turn, args: CreateVideoArgs):
                                 continue
                             display_caption = format_caption_punctuation(phrase.text) or phrase.text
                             deferred_captions.append(
-                                (scene_id, cs, ce, display_caption, caption_style, SourceCaptionDerivation(
+                                (audio_scene, cs, ce, display_caption, caption_style, SourceCaptionDerivation(
                                     snapshot_id=snap.id, snapshot_digest=snap.digest,
-                                    sentence_id=f"{scene_id}_p{phrase_index}",
+                                    sentence_id=f"{audio_id}_p{phrase_index}",
                                     source_range=TimeRange(start=src_s, end=src_e),
                                     source_text_digest=speech_text_digest(display_caption.split("\n", 1)[0]),
                                     alignment="minimax-t2a-v2-sentence-v1",
                                 ))
                             )
-                            narration_phrase_map.setdefault(f"clp_vo_{scene_id}", []).append({
+                            narration_phrase_map.setdefault(f"clp_vo_{audio_id}", []).append({
                                 "text": phrase.text.split("\n", 1)[0],
                                 "start_seconds": round(cs / rate, 3),
                                 "end_seconds": round(ce / rate, 3),

@@ -48,7 +48,10 @@ async def media_quote(db, kind, params, *, project):
             owner_id=project.user_id,
             increment_use=False,
         )
-        voice_params = {**params, "voice_id": resolved_voice}
+        voice_params = {
+            "text": params["text"], "language": params["language"], "voice_id": resolved_voice,
+            "speed": params.get("speed", 1.0), "emotion": params.get("emotion"),
+        }
         aligning = await db.scalar(
             select(VideoNarration.id).where(
                 VideoNarration.user_id == project.user_id,
@@ -354,8 +357,10 @@ async def _voice(job, project, token):
         )
         if matched_row is not None:
             await voice_db.commit()
-    req["voice_id"] = resolved_voice
-    speech = SpeechObject(kind="speech", object_id="obj_prepare_narration", **req)
+    speech = SpeechObject(
+        kind="speech", object_id="obj_prepare_narration", text=req["text"], language=req["language"],
+        voice_id=resolved_voice, speed=req.get("speed", 1.0), emotion=req.get("emotion"),
+    )
     limit = narration_billable_upper_bound(" ".join(speech.text.split()))
     original, _ = await prepare_original_narration(
         speech,

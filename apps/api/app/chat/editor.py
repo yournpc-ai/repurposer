@@ -30,6 +30,7 @@ from app.editing.schemas import (
     Transition,
     TransitionKind,
     VideoObject,
+    VoiceEmotion,
     speech_text_digest,
 )
 from app.editing.styles import BackdropStyle, StylePresetId, resolve_style_tokens
@@ -93,6 +94,8 @@ class GenerateImageArgs(BaseModel):
 class GenerateVoiceArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     text: str = Field(min_length=1, max_length=9000)
+    speed: float = Field(default=1.0, ge=0.5, le=2.0, exclude_if=lambda v: v == 1.0)
+    emotion: VoiceEmotion | None = Field(default=None, exclude_if=lambda v: v is None)
     language: Literal["en", "zh", "fr", "de", "es", "it"]
     voice_id: str = Field(
         default="presenter_male",
@@ -665,7 +668,7 @@ EDITOR_TOOLS = (
     ),
     _editor_tool(
         "generate_voice",
-        "Record the exact script at original speed using a permanent library voice_id (from search_voices/design_voice) or stock voice. Return playable audio, measured duration and alignment status.",
+        "Record the exact script at the requested speed and emotion using a permanent library voice_id (from search_voices/design_voice) or stock voice. Return playable audio, measured duration, alignment status and compact word cues.",
         GenerateVoiceArgs,
         "recordVoice",
     ),
@@ -1522,7 +1525,9 @@ async def edit_clip(
     elif isinstance(args, UpdateMotionBlockArgs):
         from app.chat.editor_create import resolve_motion_block_cue_phrases
         from app.editing.revisions import coerce_motion_block_props
-        from app.models.tables import SourceSnapshot, VideoNarration
+        from app.editing.caption_timing import local_narration_window, measured_narration_cues
+        from app.models.tables import SourceSnapshot
+        from app.tools.video.narration import snapshot_narration_cues
 
         target = clips.get(args.clip_id)
         if target is None or not isinstance(target.object, MotionBlockObject):
@@ -1534,25 +1539,27 @@ async def edit_clip(
         narration_text: str | None = None
         narration_cues: list[dict[str, Any]] | None = None
         narration_lead_s = 0.0
+        spoken_seconds = None
+        duration_s = (target.range.end - target.range.start) / rate
         for trk in content.timeline.tracks:
             if trk.kind != "audio" or trk.role != "dialogue":
                 continue
             for ac in trk.clips:
                 if ac.range.start < target.range.end and target.range.start < ac.range.end and ac.source:
                     snap = await db.get(SourceSnapshot, ac.source.snapshot_id)
-                    meta = (snap.meta or {}) if snap else {}
-                    narration_text = meta.get("text") or meta.get("transcript")
-                    narration_cues = meta.get("cues")
-                    original_hash = (meta.get("origin") or {}).get("video_narration_hash")
-                    if original_hash and not narration_text:
-                        original = await db.scalar(select(VideoNarration).where(
-                            VideoNarration.user_id == project.user_id, VideoNarration.content_hash == original_hash,
-                            VideoNarration.audio_digest == ac.source.snapshot_digest,
-                        ))
-                        if original:
-                            narration_text, narration_cues = original.text, original.subtitles
+                    if snap is None or snap.owner_id != project.user_id or snap.digest != ac.source.snapshot_digest:
+                        raise ValueError("The dialogue source no longer matches the fixed recording.")
+                    narration_text, narration_cues = await snapshot_narration_cues(db, snap)
                     source_start = ac.source.source_range.start / SOURCE_TIMEBASE if ac.source.source_range else 0
                     narration_lead_s = (ac.range.start - target.range.start) / rate - source_start
+                    if ac.scene_id is None and narration_cues and all(c.get("words") for c in narration_cues):
+                        measured = measured_narration_cues(narration_cues, snap.duration_ticks / SOURCE_TIMEBASE)
+                        overlap_start = max(0, (ac.range.start - target.range.start) / rate)
+                        overlap_end = (min(ac.range.end, target.range.end) - target.range.start) / rate
+                        narration_text, narration_cues, narration_lead_s, spoken_seconds = local_narration_window(
+                            measured, narration_lead_s - overlap_start, overlap_end - overlap_start,
+                        )
+                        narration_lead_s += overlap_start
                     break
             if narration_text:
                 break
@@ -1561,8 +1568,10 @@ async def edit_clip(
             merged_raw,
             narration=narration_text,
             cues=narration_cues,
-            duration_s=max(0.1, (target.range.end - target.range.start) / rate),
+            duration_s=duration_s,
             speech_lead_s=narration_lead_s,
+            spoken_seconds=spoken_seconds,
+            acoustic_edges=spoken_seconds is not None,
         )
         merged_props = coerce_motion_block_props(
             target.object.block_id,

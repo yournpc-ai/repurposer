@@ -284,6 +284,86 @@ def chunk_timed_words(
     return phrases
 
 
+def measured_narration_cues(cues: list[dict], duration_s: float) -> list[dict]:
+    """Restore source spacing/punctuation to provider tokens, retaining their acoustic edges."""
+    result = []
+    last_ms = 0.0
+    for cue in cues:
+        source = strip_pause_tags(cue.get("text") or "")
+        words = []
+        pos = 0
+        for raw in cue.get("words") or []:
+            token = strip_pause_tags(raw.get("word") or "").strip()
+            if not token:
+                continue
+            at = source.find(token, pos)
+            gap = source[pos:at]
+            if at < 0 or any(ch.isalnum() for ch in gap):
+                raise ValueError("Voiceover word timings do not cover the recorded transcript.")
+            begin, end = raw.get("time_begin"), raw.get("time_end")
+            if not (isinstance(begin, (int, float)) and isinstance(end, (int, float))
+                    and 0 <= begin <= end < float("inf")):
+                raise ValueError("Voiceover words require finite millisecond timings.")
+            # Cuts and reveals use milliseconds. Put every consumer on this same grid.
+            begin, end = round(begin), min(round(end), duration_s * 1000)
+            if not last_ms <= begin <= end:
+                raise ValueError("Voiceover word timings must be ordered within the recording.")
+            if words:
+                words[-1]["word"] += gap
+            words.append({"word": token if words else gap + token, "time_begin": begin, "time_end": end})
+            last_ms, pos = end, at + len(token)
+        if not words or any(ch.isalnum() for ch in source[pos:]):
+            raise ValueError("Voiceover requires word timings for the entire recorded transcript.")
+        words[-1]["word"] += source[pos:]
+        result.append({"text": source, "words": words, "time_begin": words[0]["time_begin"], "time_end": last_ms})
+    if not result or not any(c["time_end"] > c["time_begin"] for c in result):
+        raise ValueError("Voiceover requires a usable word timeline.")
+    return result
+
+
+def local_narration_window(
+    cues: list[dict], lead_s: float, duration_s: float,
+) -> tuple[str | None, list[dict], float, float]:
+    """Crop half-open acoustic spans to an act, then rebase them to its first spoken word."""
+    local = []
+    origin = None
+    for cue in cues:
+        words = []
+        for word in cue["words"]:
+            begin = max(0, word["time_begin"] + lead_s * 1000)
+            end = min(duration_s * 1000, word["time_end"] + lead_s * 1000)
+            if end - begin < 0.000001:
+                continue
+            if origin is None:
+                origin = begin
+            words.append({**word, "time_begin": begin - origin, "time_end": end - origin})
+        if words:
+            local.append({"text": "".join(w["word"] for w in words).strip(), "words": words,
+                          "time_begin": words[0]["time_begin"], "time_end": words[-1]["time_end"]})
+    if origin is None:
+        return None, [], 0.0, 0.0
+    return " ".join(c["text"] for c in local), local, origin / 1000, local[-1]["time_end"] / 1000
+
+
+def measured_caption_phrases(cue: dict) -> list[TimedPhrase]:
+    phrases = []
+    words: list[TimedWord] = []
+    for span in cue["words"]:
+        token, start, end = span["word"], span["time_begin"] / 1000, span["time_end"] / 1000
+        # A held breath can span a whole visual beat inside one provider sentence.
+        if words and start - words[-1]["end_s"] >= 1.0:
+            phrases.extend(chunk_timed_words(words, verbatim=True))
+            words = []
+        # English subword pieces and trailing punctuation belong on the same caption line.
+        if words and (not any(ch.isalnum() for ch in token) or
+                      (re.search(r"[A-Za-z0-9]$", words[-1]["text"]) and re.match(r"[A-Za-z0-9]", token))):
+            words[-1]["text"] += token
+            words[-1]["end_s"] = end
+        else:
+            words.append(TimedWord(text=token, start_s=start, end_s=end))
+    return phrases + chunk_timed_words(words, verbatim=True)
+
+
 def split_cue_into_timed_phrases(
     text: str,
     time_begin_ms: float,
@@ -488,6 +568,7 @@ def resolve_cue_phrase_window_s(
     speech_lead_s: float = 0.15,
     language: str | None = None,
     min_start_s: float = 0.0,
+    acoustic_edges: bool = False,
 ) -> tuple[float, float] | None:
     """Resolve a spoken ``phrase`` inside ``narration`` into act-local ``(start_s, end_s)``.
 
@@ -582,10 +663,15 @@ def resolve_cue_phrase_window_s(
 
     min_ms = max(0.0, (min_start_s - speech_lead_s) * 1000.0)
 
+    earliest_ms = min_ms if acoustic_edges or speech_lead_s < 0 else min_ms - 50.0
+
     def _at_number_boundary(start: int, end: int) -> bool:
         # "94" in "194", or "十八" in "二十八", is a different metric.
         first, last = haystack[start], haystack[end - 1]
         before, after = haystack[start - 1:start] if start else "", haystack[end:end + 1]
+        if acoustic_edges and ((first.isascii() and first.isalpha() and before.isascii() and before.isalpha())
+                               or (last.isascii() and last.isalpha() and after.isascii() and after.isalpha())):
+            return False
         if first.isdigit() and (before.isdigit() or (before == "." and start >= 2 and haystack[start - 2].isdigit())):
             return False
         if last.isdigit() and (after.isdigit() or (after == "." and haystack[end + 1:end + 2].isdigit())):
@@ -599,7 +685,7 @@ def resolve_cue_phrase_window_s(
             pos = haystack.find(needle, search_from)
             if pos < 0:
                 break
-            if _at_number_boundary(pos, pos + len(needle)) and _offset_to_ms(pos) >= min_ms - 50.0:
+            if _at_number_boundary(pos, pos + len(needle)) and _offset_to_ms(pos) >= earliest_ms - 1e-6:
                 return pos, pos + len(needle)
             search_from = pos + 1
         compact_needle = re.sub(r"[^\w\u4e00-\u9fff]+", "", needle)
@@ -612,7 +698,7 @@ def resolve_cue_phrase_window_s(
                 return None
             pos = char_map[c_pos]
             end_pos = char_map[min(len(char_map) - 1, c_pos + len(compact_needle) - 1)] + 1
-            if _at_number_boundary(pos, end_pos) and _offset_to_ms(pos) >= min_ms - 50.0:
+            if _at_number_boundary(pos, end_pos) and _offset_to_ms(pos) >= earliest_ms - 1e-6:
                 return pos, end_pos
             c_from = c_pos + 1
 
@@ -626,7 +712,12 @@ def resolve_cue_phrase_window_s(
 
     pos, end_pos = match_span
     start_ms = _offset_to_ms(pos)
-    end_ms = max(start_ms + 150.0, _offset_to_ms(end_pos, right_edge=True))
+    end_ms = _offset_to_ms(end_pos, right_edge=True)
+    if acoustic_edges or speech_lead_s < 0:
+        start = max(0.0, speech_lead_s + start_ms / 1000)
+        end = min(duration_s, speech_lead_s + end_ms / 1000)
+        return (round(start, 3), round(end, 3)) if end > start else None
+    end_ms = max(start_ms + 150.0, end_ms)
     start_s = round(max(0.0, min(duration_s - 0.1, speech_lead_s + start_ms / 1000.0)), 3)
     end_s = round(max(start_s + 0.15, min(duration_s, speech_lead_s + end_ms / 1000.0)), 3)
     return start_s, end_s
@@ -668,6 +759,7 @@ def build_motion_block_caption_phrases(
     language: str,
     caption_translations: list[str] | None = None,
     caption_text: str | None = None,
+    measured_words: bool = False,
 ) -> tuple[list[TimedPhrase], bool]:
     """Build verbatim millisecond-locked caption phrases for one narrated motion block act.
 
@@ -693,7 +785,8 @@ def build_motion_block_caption_phrases(
             te = float(cue["time_end"])
             if te <= tb:
                 continue
-            chunked = split_cue_into_timed_phrases(cue_text, tb, te, language=narr_lang)
+            chunked = (measured_caption_phrases(cue) if measured_words else
+                       split_cue_into_timed_phrases(cue_text, tb, te, language=narr_lang))
             if chunked:
                 primary_phrases.extend(chunked)
                 prev_end = chunked[-1].time_end_ms

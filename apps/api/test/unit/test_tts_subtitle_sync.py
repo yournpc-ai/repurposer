@@ -353,3 +353,68 @@ def test_format_caption_punctuation_zh_and_en_broadcast_rules():
         format_caption_punctuation("confidence and reviews.\n信心、背书与复核。")
         == "confidence and reviews\n信心 背书与复核"
     )
+
+
+def test_continuous_captions_and_local_cues_keep_measured_subword_edges():
+    from app.editing.caption_timing import local_narration_window, measured_narration_cues, resolve_cue_phrase_window_s
+
+    text = "转到下一幕，Light up."
+    spans = [("转", 45, 180), ("到", 180, 250), ("下", 250, 390), ("一", 390, 470),
+             ("幕", 470, 570), ("L", 1030, 1045), ("ight", 1045, 1200), ("up", 1370, 1450)]
+    cues = measured_narration_cues([{"text": text, "words": [
+        {"word": t, "time_begin": a, "time_end": b} for t, a, b in spans
+    ]}], 1.5)
+    # The recording started 1.03 seconds before this act. Words outside it cannot match a patch.
+    local, visible, lead, spoken = local_narration_window(cues, -1.03, 0.42)
+    assert (local, lead, spoken) == ("Light up.", 0, 0.42)
+    assert resolve_cue_phrase_window_s(local, "up", cues=visible, duration_s=0.42,
+                                      speech_lead_s=lead, acoustic_edges=True) == (0.34, 0.42)
+    assert resolve_cue_phrase_window_s(local, "下一幕", cues=visible, duration_s=0.42) is None
+    phrases, bilingual = build_motion_block_caption_phrases(text, cues=cues, duration_ms=1500, language="zh",
+        measured_words=True, caption_translations=["Switch scenes and light up."])
+    assert bilingual
+    assert phrases == [TimedPhrase(text + "\nSwitch scenes and light up.", 45, 1450)]
+
+
+def test_voice_settings_preserve_default_request_identity_and_split_originals():
+    from app.chat.editor import GenerateVoiceArgs
+    from app.tools.video.narration import narration_original_request_key
+
+    old = {"text": "Launch", "language": "en", "voice_id": "presenter_male"}
+    assert GenerateVoiceArgs(**old).model_dump() == old
+    assert narration_original_request_key(**old) == narration_original_request_key(**old, speed=1, emotion=None)
+    assert len({narration_original_request_key(**old, speed=speed, emotion=emotion)
+                for speed, emotion in [(1, None), (1.15, None), (1.15, "calm")]}) == 3
+
+
+def test_neighboring_cut_phrases_hold_the_outgoing_picture_through_a_breath():
+    from app.chat.editor_create import FirstMotionBlock, _voiceover_block_ranges
+    from app.editing.caption_timing import measured_narration_cues, resolve_cue_phrase_window_s
+
+    text = "Go again, then go."
+    cues = measured_narration_cues([{"text": text, "words": [
+        {"word": t, "time_begin": a, "time_end": b}
+        for t, a, b in [("Go", 40, 130), ("again", 160, 300), ("then", 810, 910), ("go", 980, 1050)]
+    ]}], 1.2)
+    block = FirstMotionBlock(block_id="statement_hook", props={"headline": "Go"}, duration_seconds=1)
+    first = block.model_copy(update={"end_cue_phrase": "again"})
+    second = block.model_copy(update={"start_cue_phrase": "then"})
+    assert _voiceover_block_ranges([first, second], text, cues, 1.2, 0, 1000) == [(0, 960), (960, 1960)]
+    with pytest.raises(ValueError, match="leave spoken words"):
+        _voiceover_block_ranges([first, second.model_copy(update={"start_cue_phrase": "go"})], text, cues, 1.2, 0, 1000)
+    with pytest.raises(ValueError, match="not found in order"):
+        _voiceover_block_ranges([first, second.model_copy(update={"start_cue_phrase": "absent"})], text, cues, 1.2, 0, 1000)
+    assert resolve_cue_phrase_window_s(text, "go", cues=cues, duration_s=0.1, speech_lead_s=-0.96) == (0.02, 0.09)
+    assert resolve_cue_phrase_window_s(text, "go", cues=cues, duration_s=0.1, speech_lead_s=-0.4) is None
+
+
+def test_global_caption_leaves_mid_sentence_music_break_clear():
+    from app.editing.caption_timing import measured_caption_phrases, measured_narration_cues
+
+    cue, = measured_narration_cues([{"text": "Light up", "words": [
+        {"word": "L", "time_begin": 100, "time_end": 160},
+        {"word": "ight", "time_begin": 160, "time_end": 350},
+        {"word": "up", "time_begin": 2600, "time_end": 2850},
+    ]}], 3)
+    assert [(p.text, p.time_begin_ms, p.time_end_ms) for p in measured_caption_phrases(cue)] == [
+        ("Light", 100, 350), ("up", 2600, 2850)]

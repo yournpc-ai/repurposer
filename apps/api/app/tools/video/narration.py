@@ -75,21 +75,24 @@ def narration_content_hash(
     return hashlib.sha256(payload.encode("utf-8")).hexdigest(), config_hash
 
 
-def narration_original_request_key(*, text: str, voice_id: str, language: str) -> str:
+def narration_original_request_key(
+    *, text: str, voice_id: str, language: str, speed: float = 1.0, emotion: str | None = None
+) -> str:
     """The shared quote/execution identity for one original-only request."""
     content_hash, _ = narration_content_hash(
         text=text,
         voice_id=voice_id,
         language=language,
-        config=narration_synth_config(),
+        config=narration_synth_config(speed=speed, emotion=emotion),
     )
     return content_hash
 
 
 async def narration_original_quote_characters(
-    *, text: str, voice_id: str, language: str, user_id: UUID
+    *, text: str, voice_id: str, language: str, user_id: UUID,
+    speed: float = 1.0, emotion: str | None = None,
 ) -> int:
-    """One missing speed-1.0 synthesis; a fixed original needs no new charge."""
+    """One missing synthesis at the requested settings; a fixed original needs no new charge."""
     from app.tools.video.narration_store import peek_original
 
     speech = SpeechObject(
@@ -98,10 +101,33 @@ async def narration_original_quote_characters(
         text=text,
         voice_id=voice_id,
         language=language,
+        speed=speed,
+        emotion=emotion,
     )
     if await peek_original(user_id, speech) is not None:
         return 0
     return narration_billable_upper_bound(" ".join(text.split()))
+
+
+async def snapshot_narration_cues(db, snapshot):
+    """Read the transcript and provider cues belonging to these fixed audio bytes."""
+    from sqlalchemy import select
+    from app.models.tables import VideoNarration
+
+    meta = snapshot.meta or {}
+    text, cues = meta.get("text") or meta.get("transcript"), meta.get("cues")
+    origin = meta.get("origin")
+    if isinstance(origin, dict) and origin.get("video_narration_hash") and not (
+        text and cues and all(c.get("words") for c in cues)
+    ):
+        original = await db.scalar(select(VideoNarration).where(
+            VideoNarration.user_id == snapshot.owner_id,
+            VideoNarration.content_hash == origin["video_narration_hash"],
+            VideoNarration.audio_digest == snapshot.digest,
+        ))
+        if original:
+            return original.text, original.subtitles
+    return text, cues
 
 
 def narration_alignment_digest(text: str, cues: list[dict]) -> str:

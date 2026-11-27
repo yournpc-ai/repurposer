@@ -749,3 +749,202 @@ async def test_uploaded_audio_freezes_asr_words_for_caption_insertion(database, 
             assert cue["caption"].alignment == "faster-whisper-source-v1"
             assert cue["caption"].snapshot_id == measured.id
             assert cue["word_timings"][-1]["end_s"] == (cue["output_end"] - cue["output_start"]) / 90000
+
+
+@pytest.mark.asyncio
+async def test_continuous_voice_job_cuts_captions_and_local_edits(database, tmp_path, monkeypatch):
+    from app.chat import editor_media
+    from app.chat.editor import GenerateVoiceArgs, UpdateMotionBlockArgs, edit_clip
+    from app.models.tables import MediaJob, Message
+    from app.pipeline import media_jobs
+    from app.platform.billing import get_or_create_wallet
+    from app.tools.video import alignment_store
+    from test.support.db_helpers import bind_test_database
+
+    bind_test_database(monkeypatch, database)
+    monkeypatch.setattr(settings, "s3_endpoint_url", f"local://{tmp_path}")
+    script = "Go then repeat, 18 wins. Go again."
+    voice = GenerateVoiceArgs(text=script, language="en", speed=1.15, emotion="calm")
+    calls = []
+
+    def synth(text, voice_id, language, speed, *, emotion):
+        calls.append((text, language, speed, emotion))
+        return T2AResult(audio=_wav_bytes(duration_s=6), subtitle_file="https://example.test/cues",
+                         usage_characters=len(text), trace_id="continuous")
+
+    def sentence(text, tokens):
+        return {"text": text, "time_begin": tokens[0][1], "time_end": tokens[-1][2],
+                "words": [{"word": w, "time_begin": s, "time_end": e} for w, s, e in tokens]}
+
+    cues = [sentence("Go then repeat, 18 wins.", [
+        ("Go", 400, 595), ("then", 700, 920), ("repeat", 1100, 1410),
+        ("18", 1600, 1780), ("wins", 2050, 2120),
+    ]), sentence("Go again.", [("Go", 5000, 5300), ("again", 5480, 5800)])]
+    monkeypatch.setattr(voice_provider, "synthesize_detailed", synth)
+    monkeypatch.setattr(voice_provider, "fetch_subtitle_cues", lambda *a, **kw: cues)
+    wait_alignment = alignment_store.wait_for_alignment
+
+    async def read_alignment(**kwargs):
+        return await wait_alignment(**{**kwargs, "budget_seconds": 0})
+
+    monkeypatch.setattr(alignment_store, "wait_for_alignment", read_alignment)
+
+    async def consume(receipt, **kwargs):
+        async with database() as db:
+            job_id, token = await media_jobs.claim_media(db, "generate_voice")
+            assert str(job_id) == receipt.intent["media_job"]
+            assert (await db.get(MediaJob, job_id)).request == voice.model_dump()
+        await media_jobs.execute_media(job_id, token)
+        async with database() as db:
+            receipt = await db.get(Message, receipt.id)
+            facts = receipt.intent["media_result"]
+            assert facts["status"] == "available", facts
+            assert set(facts) == {"status", "project_id", "role", "snapshot_id", "digest", "duration_seconds",
+                                  "analysis_digest", "peak", "cache_hit", "added_to_composition", "alignment_id",
+                                  "text", "language", "voice_id", "charged_credits", "reserved_credits"}
+            block, = receipt.blocks
+            assert block["kind"] == "audio_playback"
+            assert set(block["items"][0]) == {"snapshot_id", "digest", "duration_seconds", "role", "scene_id",
+                                              "title", "peaks", "analysis_digest"}
+            return receipt
+
+    monkeypatch.setattr(editor_media, "wait_for_media_result", consume)
+    owner = await _user(database, settings={"confirm_execution": "auto", "confirm_credits": "never"})
+    project_id = await _project(database, owner)
+    async with database() as db:
+        project = await db.get(Project, project_id)
+        wallet = await get_or_create_wallet(db, owner)
+        wallet.balance = 100
+        conv = Conversation(user_id=owner, project_id=project_id)
+        db.add(conv)
+        await db.commit()
+        opening = await _create_message(db, conv.id, "user", "Record the narration")
+        opening.turn_state = "in_flight"
+        await db.commit()
+        turn = SimpleNamespace(db=db, project=project, user_id=owner, conversation_id=conv.id,
+                               turn_id=opening.id, text=opening.content, on_row_append=None)
+        with bind_progress("record-continuous", None):
+            observation = await editor_media.generate_media(turn, "generate_voice", voice, None, None)
+        facts = json.loads(observation.text)
+        assert facts["word_cues"] == [{"text": "Go then repeat, 18 wins.", "start_s": 0.4, "end_s": 2.12},
+                                      {"text": "Go again.", "start_s": 5, "end_s": 5.8}]
+        assert calls == [(script, "en", 1.15, "calm")]
+        for params, cached in [(voice.model_dump(), True), ({**voice.model_dump(), "speed": 1}, False),
+                               ({**voice.model_dump(), "emotion": "happy"}, False)]:
+            quote = await media_jobs.media_quote(db, "generate_voice", params, project=project)
+            assert (quote.total[1] == 0) is cached
+
+        args = CreateVideoArgs(name="Continuous", voiceover_snapshot_id=facts["snapshot_id"], motion_blocks=[
+            {"block_id": "statement_hook", "props": {"headline": "Intro"}, "duration_seconds": 1},
+            {"block_id": "statement_hook", "props": {"headline": "Go repeat"}, "start_cue_phrase": "Go",
+             "duration_seconds": 2, "caption_translations": ["出发再重复，十八次获胜。"]},
+            {"block_id": "metric_grid", "props": {"items": [{"value": "18.7", "label": "wins", "cue_phrase": "18"},
+                {"value": "3", "label": "repeat"}, {"value": "4", "label": "later"}]},
+             "start_cue_phrase": "18", "end_cue_phrase": "wins", "duration_seconds": 2},
+            {"block_id": "statement_hook", "props": {"headline": "Interlude"}, "duration_seconds": 2},
+            {"block_id": "kinetic_beat", "props": {"mode": "slot_flip", "words": ["Go", "again"]},
+             "start_cue_phrase": "Go", "duration_seconds": 1, "caption_translations": ["再次出发。"]},
+        ])
+        with bind_progress("create-continuous", None):
+            result = await create_video(db, turn, args)
+            assert await create_video(db, turn, args) == result
+        blocks = result["motion_blocks"]
+        assert [b["start_seconds"] for b in blocks] == [0, 0.55, 1.75, 2.27, 5.15]
+        assert [b["end_seconds"] for b in blocks[:-1]] == [b["start_seconds"] for b in blocks[1:]]
+        audio, = result["narration_clips"]
+        assert (audio["kind"], audio["start_seconds"], audio["end_seconds"]) == ("audio", 0.15, 6.15)
+        assert [(e["act_index"], e["label"], e["at_seconds"]) for e in result["resolved_visual_cues"]
+                if e["act_index"] in (1, 2, 4, 5)] == [
+            (2, "Go", 0.55), (2, "repeat", 1.25), (5, "Go", 5.15), (5, "again", 5.63),
+        ]
+        warnings = result["sync_warnings"]
+        assert {w["kind"] for w in warnings if w["act_index"] == 3} >= {"orphan_item", "numeric_parity", "density"}
+        assert next(w for w in warnings if w["kind"] == "density")["spoken_seconds"] == 0.52
+        assert any(w["kind"] == "dead_hold" and w["act_index"] == 4 for w in warnings)
+        version = await db.get(CompositionVersion, UUID(result["version_id"]))
+        content = content_of(version)
+        caps = next(t.clips for t in content.timeline.tracks if t.track_id == "trk_caption")
+        assert [(c.range.start / 90000, c.range.end / 90000, c.object.text) for c in caps] == [
+            (0.55, 2.27, "Go then repeat, 18 wins\n出发再重复 十八次获胜"), (5.15, 5.95, "Go again\n再次出发")]
+        assert all(c.scene_id is None and str(c.object.caption.snapshot_id) == facts["snapshot_id"] for c in caps)
+        for i, patch, field, expected in [
+            (2, {"headline": "then repeat"}, "word_reveals_s", [0.3, 0.7]),
+            (3, {"items": [{"value": "18", "label": "wins", "cue_phrase": "wins"},
+                           {"value": "3", "label": "Go", "cue_phrase": "Go"}]}, "items", None),
+            (5, {"word_cues": ["Go", "again"], "words": ["Launch", "Repeat"]}, "word_reveals_s", [0, 0.48]),
+        ]:
+            revision = await edit_clip(db, name="update_motion_block", project=project, opening_id=opening.id,
+                conversation_id=conv.id, call_id=f"revise-{i}", args=UpdateMotionBlockArgs(
+                    clip_id=blocks[i - 1]["clip_id"], props_patch=patch),
+                base={"composition_id": result["composition_id"], "composition_version_id": str(version.id),
+                      "content_digest": version.content_digest})
+            version = await db.get(CompositionVersion, UUID(revision["version_id"]))
+            revised = next(c.object.props[field] for t in content_of(version).timeline.tracks for c in t.clips
+                           if c.clip_id == blocks[i - 1]["clip_id"])
+            if field == "items":
+                assert revised[0]["reveal_at_s"] == 0.37 and "reveal_at_s" not in revised[1]
+            else:
+                assert revised == expected
+
+
+
+@pytest.mark.asyncio
+async def test_continuous_voice_requires_owned_project_audio_with_complete_word_timings(database, monkeypatch):
+    from app.models.tables import SourceSnapshot
+
+    monkeypatch.setattr(database_module, "AsyncSessionLocal", database)
+    owner = await _user(database)
+    project_id = await _project(database, owner)
+    other_project = await _project(database, owner)
+    other_owner = await _user(database)
+    async with database() as db:
+        project = await db.get(Project, project_id)
+        conv = Conversation(user_id=owner, project_id=project_id)
+        db.add(conv)
+        await db.commit()
+        opening = await _create_message(db, conv.id, "user", "Make a promo")
+        opening.turn_state = "in_flight"
+        turn = SimpleNamespace(project=project, conversation_id=conv.id, turn_id=opening.id, text=opening.content)
+        block = {"block_id": "statement_hook", "props": {"headline": "Go"}, "duration_seconds": 1}
+        cases = [(uuid4(), "unavailable")]
+        for uid, pid, error in [(owner, other_project, "unavailable"), (other_owner, project_id, "unavailable"),
+                                (owner, project_id, "word timings")]:
+            snap = SourceSnapshot(id=uuid4(), owner_id=uid, origin_project_id=pid, kind="audio",
+                                  storage_key="voice.mp3", digest="c" * 64, duration_ticks=90000,
+                                  meta={"text": "Go", "cues": [{"text": "Go"}]})
+            db.add(snap)
+            cases.append((snap.id, error))
+        await db.commit()
+        for sid, error in cases:
+            args = CreateVideoArgs(name="Promo", voiceover_snapshot_id=sid, motion_blocks=[block])
+            with bind_progress("invalid-voice", None), pytest.raises(ValueError, match=error):
+                await create_video(db, turn, args)
+
+
+@pytest.mark.asyncio
+async def test_music_only_keeps_planned_beats_and_unvoiced_mix(database, tmp_path, monkeypatch):
+    monkeypatch.setattr(database_module, "AsyncSessionLocal", database)
+    monkeypatch.setattr(settings, "s3_endpoint_url", f"local://{tmp_path}")
+    owner = await _user(database)
+    project_id = await _project(database, owner)
+    async with database() as db:
+        project = await db.get(Project, project_id)
+        conv = Conversation(user_id=owner, project_id=project_id)
+        db.add(conv)
+        await db.commit()
+        opening = await _create_message(db, conv.id, "user", "Create a promo without narration")
+        opening.turn_state = "in_flight"
+        turn = SimpleNamespace(project=project, conversation_id=conv.id, turn_id=opening.id, text=opening.content)
+        wav = _wav_bytes()
+        music = await create_music_from_generation(db, prompt="Instrumental", generated=GeneratedMusic(
+            audio_bytes=wav, ext="wav", duration_seconds=2, size_bytes=len(wav),
+            model="music-2.6-free", generation_id="music-only"), mood="bright", title="Instrumental",
+            user_id=owner, is_public=False)
+        args = CreateVideoArgs(name="Music only", music_id=music.id, motion_blocks=[
+            {"block_id": "kinetic_beat", "duration_seconds": 1.25, "props": {"mode": "slot_flip", "words": ["On", "Air"]}}
+        ])
+        with bind_progress("music-only", None):
+            result = await create_video(db, turn, args)
+        assert result["narration_clips"] == [] and result["shots"] == []
+        assert result["duration_seconds"] == 1.25
+        assert [clip["gain_db"] for clip in result["bgm_clips"]] == [-14.0]
