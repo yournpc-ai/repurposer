@@ -2133,9 +2133,9 @@ const zh: Resources = {
     versionRestored: "已恢复为计划 v{{n}}——它是当前计划了。",
     // 修改态的 @ 候选包括素材与产物；首次创作态只有素材。两种形态都提供
     // 同一个 / Skill picker，不宣传不存在的 # 入口。
-    chatPlaceholder: "输入 @ 引用素材或产物，输入 / 使用 Skill。",
+    chatPlaceholder: "输入 @ 引用素材或产物，输入 / 选用创作模板。",
     // full 形态（首次 run 前）专用：@ 候选只有素材。
-    chatPlaceholderAssets: "描述你想做什么，输入 @ 引用素材，输入 / 使用 Skill。",
+    chatPlaceholderAssets: "描述你想做什么，输入 @ 引用素材，输入 / 选用创作模板。",
     attachFiles: "上传文件",
     retryUpload: "重试上传",
     removeAttachment: "移除附件",

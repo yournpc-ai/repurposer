@@ -12,7 +12,9 @@ text, so this processor stamps ``meta.content_sha256`` from its own yield.
 """
 
 import io
+import ipaddress
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 import structlog
 from PIL import Image
@@ -34,6 +36,32 @@ from app.tools.research.capture import (
 )
 
 logger = structlog.get_logger()
+
+
+def _www_fallback_url(url: str) -> str | None:
+    """Return the ``www.`` host variant for a bare public apex domain (e.g. ``https://oxvalue.ai``)."""
+    try:
+        parsed = urlsplit(url.strip())
+    except ValueError:
+        return None
+    if parsed.scheme.lower() not in {"http", "https"}:
+        return None
+    host = (parsed.hostname or "").lower().rstrip(".")
+    if not host or host.startswith("www.") or host.count(".") != 1:
+        return None
+    if host.endswith((".local", ".localhost", ".internal", ".lan", ".arpa")):
+        return None
+    try:
+        ipaddress.ip_address(host)
+        return None
+    except ValueError:
+        pass
+    if "@" in parsed.netloc:
+        userinfo, hostport = parsed.netloc.rsplit("@", 1)
+        netloc = f"{userinfo}@www.{hostport}"
+    else:
+        netloc = f"www.{parsed.netloc}"
+    return urlunsplit((parsed.scheme, netloc, parsed.path, parsed.query, parsed.fragment))
 
 
 def _png_size(data: bytes) -> tuple[int, int]:
@@ -62,7 +90,27 @@ async def web_capture_processor(asset: Asset, _prior: Any) -> "Any":
     plan = CapturePlan.model_validate(raw_plan) if raw_plan is not None else None
     if plan is not None and plan.capture_url != url:
         raise ValueError("web_page capture_url does not match its CapturePlan route")
-    outcome = await capture_shots(plan) if plan is not None else await capture_page(url)
+    if plan is not None:
+        outcome = await capture_shots(plan)
+    else:
+        try:
+            outcome = await capture_page(url)
+        except CaptureError as first_err:
+            www_url = _www_fallback_url(url)
+            if not www_url:
+                raise
+            logger.info(
+                "web_capture_apex_fallback_to_www",
+                asset_id=str(asset.id),
+                original_url=url,
+                fallback_url=www_url,
+                reason=str(first_err),
+            )
+            try:
+                outcome = await capture_page(www_url)
+                url = www_url
+            except CaptureError:
+                raise first_err
 
     meta: dict = {
         "capture_url": url,

@@ -822,3 +822,42 @@ async def test_capture_element_lineage_survives_asset_meta_validation(monkeypatc
     assert stored["member_id"] == "cards-m000"
     assert stored["member_digest"] == "d" * 64
 
+
+@pytest.mark.asyncio
+async def test_web_capture_processor_falls_back_from_apex_to_www_under_full_policy(monkeypatch):
+    from app.models.tables import Asset, AssetType
+    from app.pipeline import web_capture as processor
+    from app.tools.research import capture as capture_module
+
+    assert processor._www_fallback_url("https://oxvalue.ai") == "https://www.oxvalue.ai"
+    assert processor._www_fallback_url("https://www.oxvalue.ai") is None
+    assert processor._www_fallback_url("https://agent.oxvalue.ai") is None
+    assert processor._www_fallback_url("http://localhost:8000") is None
+    assert processor._www_fallback_url("http://198.18.1.196") is None
+
+    seen: list[str] = []
+
+    async def fake_capture_page(url: str):
+        seen.append(url)
+        if url == "https://oxvalue.ai":
+            raise CaptureBlocked("dns resolved to internal address: oxvalue.ai → 198.18.1.196")
+        return capture_module.CaptureOutcome(
+            research=extract_research("<title>OxValue</title>", url),
+            text="OxValue",
+            screenshot=None,
+            final_url=url,
+            shots=[],
+        )
+
+    monkeypatch.setattr(processor, "capture_page", fake_capture_page)
+    asset = Asset(
+        id=uuid4(),
+        user_id=uuid4(),
+        project_id=uuid4(),
+        type=AssetType.WEB_PAGE,
+        meta={"capture_url": "https://oxvalue.ai"},
+    )
+    result = await processor.web_capture_processor(asset, None)
+    assert seen == ["https://oxvalue.ai", "https://www.oxvalue.ai"]
+    assert result.meta["capture_url"] == "https://www.oxvalue.ai"
+
