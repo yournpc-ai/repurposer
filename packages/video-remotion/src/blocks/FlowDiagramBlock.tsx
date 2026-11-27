@@ -1,6 +1,7 @@
 import React from "react";
 import { cueProgress, easeInOutCubic } from "../engine/math";
 import {
+  activeFocusStyle,
   appear,
   cardFace,
   Heading,
@@ -32,12 +33,13 @@ export function FlowDiagramBlock({ props, frame }: { props: FlowProps; frame: Fr
   const width = (1660 - (nodes.length - 1) * gap) / nodes.length;
   const cardTop = props.title || props.eyebrow ? 378 : 296;
   const height = 396;
+  const times = props.nodes.map((item, i) => itemTime(item.reveal_at_s, i, props.nodes.length, frame.durSec));
   return (
     <Stage style={props} frame={frame}>
       <Heading title={props.title} eyebrow={props.eyebrow} colors={c} />
       <div style={{ position: "absolute", top: cardTop, left: 130 }}>
         {nodes.map((node, i) => {
-          const start = itemTime(node.reveal_at_s, i, nodes.length, frame.durSec);
+          const start = times[i];
           const travel = easeInOutCubic(cueProgress(frame.tSec, start, 0.42));
           const left = i * (width + gap);
           const inner = width - 48;
@@ -70,7 +72,7 @@ export function FlowDiagramBlock({ props, frame }: { props: FlowProps; frame: Fr
               <article
                 style={{
                   ...cardFace(c),
-                  ...appear(frame.tSec, start),
+                  ...appear(frame.tSec, start, activeFocusStyle(frame.tSec, times, i, frame.durSec)),
                   position: "absolute",
                   left,
                   width,

@@ -16,6 +16,7 @@ from app.editing.caption_timing import (
     detect_text_language,
     format_caption_punctuation,
     resolve_cue_phrase_window_s,
+    spoken_numbers,
     strip_pause_tags,
 )
 from app.editing.schemas import (
@@ -35,6 +36,7 @@ from app.editing.schemas import (
     TransitionKind,
     VersionSettings,
     VoiceEmotion,
+    headline_tokens,
     speech_text_digest,
     validate_motion_block_props,
 )
@@ -178,6 +180,8 @@ def resolve_motion_block_cue_phrases(
     duration_s: float,
     speech_lead_s: float = 0.15,
     language: str | None = None,
+    spoken_seconds: float | None = None,
+    warnings: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Resolve authoring-time ``cue_phrase`` anchors against measured speech timing and strip them.
 
@@ -190,29 +194,84 @@ def resolve_motion_block_cue_phrases(
     result = dict(props)
     visual_lead_s = 0.08  # start spring motion 80ms ahead of acoustic onset so peak lands on the word
 
-    def _window(phrase: Any, *, min_start_s: float = 0.0) -> tuple[float, float] | None:
+    numbers = spoken_numbers(narration or "")
+    diagnostics = warnings if warnings is not None else []
+    list_block = block_id in {"metric_grid", "step_timeline", "bento_features", "flow_diagram", "split_compare", "data_chart"}
+
+    def _window(phrase: Any, *, min_start_s: float = 0.0, script_only: bool = False) -> tuple[float, float] | None:
         if not narration or not isinstance(phrase, str) or not phrase.strip():
             return None
+        # Match a displayed magnitude to its spoken spelling, also inside a longer cue.
+        for raw, value in spoken_numbers(phrase):
+            spelling = next((text for text, number in numbers if number == value), None)
+            bare = phrase.lower().strip().strip("£$€%×个 ").strip() == raw
+            if spelling is None:
+                if bare:
+                    return None
+            elif bare:
+                phrase = spelling
+            else:
+                phrase = phrase.lower().replace(raw, spelling, 1)
         return resolve_cue_phrase_window_s(
             narration,
             phrase,
-            cues=cues,
+            cues=None if script_only else cues,
             duration_s=duration_s,
             speech_lead_s=speech_lead_s,
             language=language,
             min_start_s=min_start_s,
         )
 
+    def explicit(phrase: str | None, *, min_start_s: float = 0.0):
+        if not phrase:
+            return None
+        script_hit = _window(phrase, script_only=True)
+        if script_hit is None:
+            diagnostics.append({"kind": "unmatched_cue", "phrase": phrase,
+                                "message": "Choose a cue phrase spoken in this act."})
+            return None
+        hit = _window(phrase, min_start_s=min_start_s)
+        return hit or (script_hit if script_hit[0] >= min_start_s else None)
+
     def _spoken_end_s() -> float:
+        if spoken_seconds is not None:
+            return min(duration_s, speech_lead_s + spoken_seconds)
         if cues:
             end_ms = max((float(c.get("time_end") or 0.0) for c in cues), default=0.0)
             if end_ms > 0:
                 return min(duration_s, speech_lead_s + end_ms / 1000.0)
         return max(0.0, duration_s - 0.45)
 
+    if block_id in {"statement_hook", "kinetic_beat"}:
+        word_cues = result.pop("word_cues", None) if block_id == "kinetic_beat" else None
+        tokens = headline_tokens(result.get("headline", "")) if block_id == "statement_hook" else result.get("words", [])
+        timed_mode = block_id == "statement_hook" or result.get("mode") in {"typewriter_swap", "slot_flip"}
+        if narration and tokens and timed_mode and result.get("word_reveals_s") is None:
+            phrases = word_cues if word_cues is not None and len(word_cues) == len(tokens) else tokens
+            anchors = {}
+            after = 0.0
+            for i, phrase in enumerate(phrases):
+                hit = (explicit if phrases is word_cues else _window)(phrase, min_start_s=after)
+                if hit is not None:
+                    anchors[i] = hit[0]
+                    after = hit[0] + 0.051  # advance past the matcher's 50 ms tolerance for repeated words
+            start = max(0, speech_lead_s)
+            end = start + 0.75 * max(0, _spoken_end_s() - start)
+            if block_id == "statement_hook" and len(anchors) * 2 < len(tokens):
+                anchors.clear()
+            if anchors or block_id == "statement_hook":
+                anchors.setdefault(0, min(start, min(anchors.values(), default=start)))
+                anchors.setdefault(len(tokens) - 1, max(end, max(anchors.values())))
+                ordered = sorted(anchors)
+                times = [anchors[0]]
+                for left, right in zip(ordered, ordered[1:]):
+                    interval = (anchors[right] - anchors[left]) / (right - left)
+                    times.extend(round(anchors[left] + interval * (i - left), 3) for i in range(left + 1, right + 1))
+                result["word_reveals_s"] = times
+
     if block_id == "statement_hook":
         raw_phrase = result.pop("cue_phrase", None)
-        hit = _window(raw_phrase)
+        hit = explicit(raw_phrase)
         if hit is not None:
             result["highlight_at_s"] = round(max(0.0, hit[0] - visual_lead_s), 3)
         elif result.get("highlight_at_s") is None:
@@ -220,9 +279,26 @@ def resolve_motion_block_cue_phrases(
             if fallback_hit is not None:
                 result["highlight_at_s"] = round(max(0.0, fallback_hit[0] - visual_lead_s), 3)
 
+    elif block_id in {"cursor_magnetic_click", "zoom_follows_click"}:
+        hit = explicit(result.pop("cue_phrase", None))
+        if hit is not None:
+            lead = visual_lead_s if block_id == "cursor_magnetic_click" else 0.0
+            result["click_at_s"] = round(max(0, hit[0] - lead), 3)
+
+    elif block_id == "browser_url_load":
+        single = result.pop("cue_phrase", None)
+        for key, phrase in (("type_at_s", result.pop("type_cue_phrase", None)),
+                            ("load_at_s", result.pop("load_cue_phrase", None) or single)):
+            hit = explicit(phrase)
+            if hit is not None:
+                result[key] = hit[0]
+
+    elif block_id == "kinetic_beat":
+        explicit(result.pop("cue_phrase", None))
+
     elif block_id == "device_mockup":
         raw_phrase = result.pop("cue_phrase", None)
-        hit = _window(raw_phrase)
+        hit = explicit(raw_phrase)
         if hit is not None:
             result["reveal_at_s"] = round(max(0.0, hit[0] - visual_lead_s), 3)
 
@@ -230,7 +306,7 @@ def resolve_motion_block_cue_phrases(
         if isinstance(result.get("cursor"), dict):
             cur = dict(result["cursor"])
             raw_phrase = cur.pop("cue_phrase", None)
-            hit = _window(raw_phrase)
+            hit = explicit(raw_phrase)
             if hit is not None:
                 cur["click_at_s"] = hit[0]
             elif "click_at_s" not in cur:
@@ -247,7 +323,7 @@ def resolve_motion_block_cue_phrases(
                     continue
                 step = dict(raw_step)
                 raw_phrase = step.pop("cue_phrase", None)
-                hit = _window(raw_phrase, min_start_s=prev_anchor_s)
+                hit = explicit(raw_phrase, min_start_s=prev_anchor_s)
                 if hit is None and narration and step.get("label"):
                     for cand in _candidate_spoken_phrases({"label": step.get("label")}):
                         hit = _window(cand, min_start_s=prev_anchor_s)
@@ -260,31 +336,33 @@ def resolve_motion_block_cue_phrases(
             # Fill missing/anchored start_s and non-overlapping end_s in order.
             prev_end = 0.0
             n = len(steps_out)
+            slot = duration_s / n
+            # Leave room for a missing anchor even if the previous cue falls on the last word.
+            fill_windows = any(hit is None and isinstance(s, dict) and not {"start_s", "end_s"} <= s.keys()
+                               for s, hit in zip(steps_out, resolved_starts))
+            reserve = min(0.25, slot / 2) if fill_windows else 0
             for idx, (step, hit) in enumerate(zip(steps_out, resolved_starts, strict=True)):
                 if not isinstance(step, dict):
                     continue
                 if hit is not None:
-                    start_s = max(prev_end, max(0.0, hit[0] - visual_lead_s))
+                    start_s = max(prev_end, hit[0] - visual_lead_s)
                     next_hit = next((h for h in resolved_starts[idx + 1 :] if h is not None), None)
                     natural_end = max(hit[1] + 0.55, start_s + 1.1)
-                    max_end = (next_hit[0] - 0.05) if next_hit is not None else duration_s
+                    max_end = next_hit[0] - 0.05 if next_hit is not None else duration_s
                     end_s = min(duration_s, max(start_s + 0.35, min(natural_end, max_end)))
-                    step["start_s"] = round(start_s, 3)
-                    step["end_s"] = round(end_s, 3)
-                    prev_end = step["end_s"]
                 elif "start_s" in step and "end_s" in step:
-                    s_val = max(prev_end, float(step["start_s"]))
-                    e_val = max(s_val + 0.25, min(duration_s, float(step["end_s"])))
-                    step["start_s"] = round(s_val, 3)
-                    step["end_s"] = round(e_val, 3)
-                    prev_end = step["end_s"]
+                    start_s = max(prev_end, float(step["start_s"]))
+                    end_s = max(start_s + 0.25, min(duration_s, float(step["end_s"])))
                 else:
-                    slot = duration_s / max(1, n)
-                    s_val = round(max(prev_end, idx * slot + 0.15), 3)
-                    e_val = round(min(duration_s, max(s_val + 0.35, (idx + 1) * slot - 0.1)), 3)
-                    step["start_s"] = s_val
-                    step["end_s"] = e_val
-                    prev_end = e_val
+                    start_s = max(prev_end, idx * slot + 0.15)
+                    end_s = min(duration_s, max(start_s + 0.35, (idx + 1) * slot - 0.1))
+                if reserve:
+                    limit = duration_s - (n - idx - 1) * reserve
+                    start_s = min(start_s, limit - reserve)
+                    end_s = min(limit, max(end_s, start_s + reserve))
+                step["start_s"] = round(start_s, 3)
+                step["end_s"] = round(end_s, 3)
+                prev_end = step["end_s"]
             result["callout_steps"] = steps_out
 
     elif block_id == "chat_demo":
@@ -298,7 +376,7 @@ def resolve_motion_block_cue_phrases(
                         continue
                     item = dict(raw_item)
                     raw_phrase = item.pop("cue_phrase", None)
-                    hit = _window(raw_phrase, min_start_s=prev_anchor_s)
+                    hit = explicit(raw_phrase, min_start_s=prev_anchor_s)
                     if hit is not None:
                         item["at_s"] = round(max(0.0, hit[0] - visual_lead_s), 3)
                         prev_anchor_s = hit[0]
@@ -306,7 +384,7 @@ def resolve_motion_block_cue_phrases(
                 result[list_key] = updated
 
     else:
-        result.pop("cue_phrase", None)
+        explicit(result.pop("cue_phrase", None))
         spoken_end = _spoken_end_s()
         spoken_span = max(0.0, spoken_end - speech_lead_s)
         for list_key in ("items", "nodes", "left_items", "right_items", "steps", "cards", "points"):
@@ -325,7 +403,7 @@ def resolve_motion_block_cue_phrases(
                     continue
                 item = dict(raw_item)
                 raw_phrase = item.pop("cue_phrase", None)
-                hit = _window(raw_phrase, min_start_s=prev_explicit_s)
+                hit = explicit(raw_phrase, min_start_s=prev_explicit_s)
                 if hit is not None:
                     t_val = round(max(0.0, hit[0] - visual_lead_s), 3)
                     item["reveal_at_s"] = t_val
@@ -348,6 +426,27 @@ def resolve_motion_block_cue_phrases(
 
             dict_indices = [i for i, it in enumerate(updated) if isinstance(it, dict)]
             n_items = len(dict_indices)
+            if narration and list_block and n_items >= 2:
+                for i in dict_indices:
+                    item = updated[i]
+                    label = " ".join(str(item[k]) for k in ("value", "label", "title", "text") if k in item)
+                    detail = {"list": list_key, "item_index": i, "label": label}
+                    if auto_hits[i] is None:
+                        diagnostics.append({"kind": "orphan_item", **detail,
+                                            "message": "Remove this item or mention it in narration."})
+                    for raw, value in spoken_numbers(str(item.get("value", ""))):
+                        if any(number == value for _, number in numbers):
+                            continue
+                        # Compare scaled abbreviations with both full amounts and spoken mantissas.
+                        near = next((text for text, number in numbers
+                                     if abs(number - value) <= max(1, abs(value) / 20)), None)
+                        if near is None and "." in raw:
+                            whole = raw.split(".")[0].replace(",", "").lstrip("0")
+                            near = next((s for s, number in numbers if whole and number == int(number)
+                                         and str(int(number)).rstrip("0") == whole.rstrip("0")), None)
+                        if near is not None:
+                            diagnostics.append({"kind": "numeric_parity", **detail, "visual": raw, "spoken": near,
+                                                "message": "Use the exact displayed value in narration."})
             if narration and n_items >= 2:
                 matched_count = sum(1 for i in dict_indices if auto_hits[i] is not None)
                 explicit_count = sum(1 for i in dict_indices if explicit_hits[i] is not None)
@@ -411,7 +510,73 @@ def resolve_motion_block_cue_phrases(
 
             result[list_key] = updated
 
+    if narration and list_block:
+        count = sum(len(result.get(key, [])) for key in ("items", "nodes", "left_items", "right_items", "steps", "cards", "points"))
+        spoken = max(0, _spoken_end_s() - speech_lead_s)
+        if count > max(2, int(spoken / 0.9)):
+            diagnostics.append({"kind": "density", "items": count, "spoken_seconds": round(spoken, 3),
+                                "message": "Reduce the number of items or give them more spoken time."})
     return result
+
+
+def _visual_cues(block_id: str, props: dict[str, Any]) -> list[tuple[float, str, str]]:
+    events = []
+
+    def add(at, kind, label):
+        if at is not None:
+            events.append((at, kind, label or block_id))
+
+    for field, kind, label in (
+        ("highlight_at_s", "reveal", "highlight_phrase"), ("reveal_at_s", "reveal", "headline"),
+        ("click_at_s", "cursor_click", "cta_label"), ("type_at_s", "reveal", "url_text"),
+        ("load_at_s", "reveal", "url_text"),
+    ):
+        add(props.get(field), kind, props.get(label) or props.get("callout_label"))
+    cursor = props.get("cursor")
+    if cursor:
+        add(cursor["click_at_s"], "cursor_click", props.get("url_bar"))
+    for key in ("items", "steps", "cards", "nodes", "points", "left_items", "right_items", "messages", "work_steps", "callout_steps"):
+        for item in props.get(key, []):
+            label = item.get("label") or item.get("title") or item.get("text")
+            if key == "callout_steps":
+                add(item["start_s"], "callout", label)
+            else:
+                add(item.get("reveal_at_s", item.get("at_s")), "reveal", label)
+    if props.get("word_reveals_s"):
+        hook = block_id == "statement_hook"
+        tokens = headline_tokens(props["headline"]) if hook else props["words"]
+        for at, token in zip(props["word_reveals_s"], tokens, strict=True):
+            add(at, "reveal" if hook else "word_flip", token)
+    return events
+
+
+def _dead_hold_seconds(block_id: str, props: dict, duration: float, events: list) -> float:
+    # Measure the tail after the last semantic action, including entrance/count-up settling.
+    if props.get("callout_steps") or props.get("camera_preset") == "scroll_reveal":
+        return 0.0
+    last = max((at for at, _, _ in events), default=0.0)
+    if block_id == "statement_hook":
+        return duration - max(last + 0.35, (props.get("highlight_at_s") or 0) + 0.55, props["entrance_duration_s"])
+    if block_id == "kinetic_title":
+        return duration - props["entrance_duration_s"] - props["exit_duration_s"]
+    if block_id == "quote_proof":
+        return duration - max(last + 0.55, duration * 0.62 + 0.36)
+    if block_id == "closing_cta":
+        return duration - (props["entrance_duration_s"] * 0.85 + 1.1)
+    if block_id == "kinetic_beat" and props["mode"] == "impact_cut":
+        return duration - props["entrance_duration_s"]
+    if block_id not in {"metric_grid", "step_timeline", "flow_diagram", "bento_features", "split_compare", "data_chart"}:
+        return 0.0
+    for key in ("items", "steps", "nodes", "cards", "left_items", "right_items", "points"):
+        items = props.get(key, [])
+        for i, item in enumerate(items):
+            at = item.get("reveal_at_s")
+            if at is None:
+                at = (0.22 + i * props["stagger_s"] if block_id == "metric_grid" else
+                      0.25 + i * max(0, duration * 0.72 - 0.25) / max(1, len(items) - 1))
+            last = max(last, at)
+    settle = 1.08 if block_id == "metric_grid" else 0.7 if block_id == "split_compare" else 0.55
+    return duration - last - settle
 
 
 def media_generation_forbidden(text: str) -> bool:
@@ -749,6 +914,11 @@ async def create_video(db, turn, args: CreateVideoArgs):
     fingerprint = canonical_json_hash({"tool": "create_video", "args": args.model_dump(mode="json")})
     markers = (opening.intent or {}).get("editor_commits", [])
     marker = next((item for item in markers if item["request"] == identity), None)
+    from app.tools.video.design import explicit_design_constraints
+
+    required = explicit_design_constraints(getattr(turn, "text", ""), brief=turn.project.pending_brief)
+    sync_warnings = marker.get("sync_warnings", []) if marker else []
+    narration_phrase_map = marker.get("narration_phrases", {}) if marker else {}
     if marker:
         if marker["fingerprint"] != fingerprint:
             raise RequestMismatch("This call already saved different content.")
@@ -787,11 +957,6 @@ async def create_video(db, turn, args: CreateVideoArgs):
                 if owned != parents - ids:
                     raise ValueError("The webpage behind this view is unavailable in this project.")
                 facts.update(await snapshot_facts(db, owned))
-        from app.tools.video.design import explicit_design_constraints
-
-        required = explicit_design_constraints(
-            getattr(turn, "text", ""), brief=turn.project.pending_brief,
-        )
         total_acts = len(args.shots) + len(args.motion_blocks)
         if required.get("scene_count") is not None and total_acts != required["scene_count"]:
             raise ValueError(f"The user fixed {required['scene_count']} shots; received {total_acts}.")
@@ -920,7 +1085,6 @@ async def create_video(db, turn, args: CreateVideoArgs):
 
             narration_language = (args.narration_language or "").strip().lower()
             deferred_captions: list[tuple[str, int, int, str, Any, CaptionDerivation | SourceCaptionDerivation]] = []
-            narration_phrase_map: dict[str, list[dict[str, Any]]] = {}
             for idx, mb in enumerate(args.motion_blocks):
                 resolved_props, resolved_resources = await resolve_motion_block_resources(
                     db,
@@ -968,6 +1132,7 @@ async def create_video(db, turn, args: CreateVideoArgs):
                                 min(mb.duration_seconds, measured_s + 1.5),
                             )
 
+                act_warnings = []
                 resolved_props = resolve_motion_block_cue_phrases(
                     mb.block_id,
                     resolved_props,
@@ -976,6 +1141,8 @@ async def create_video(db, turn, args: CreateVideoArgs):
                     duration_s=eff_duration_s,
                     speech_lead_s=0.15 if mb.narration is not None else 0.0,
                     language=eff_lang,
+                    spoken_seconds=narr_prep["duration_s"] if narr_prep and narr_prep["mode"] == "prepared" else None,
+                    warnings=act_warnings,
                 )
                 validate_motion_block_props(mb.block_id, coerce_motion_block_props(mb.block_id, resolved_props))
 
@@ -993,6 +1160,8 @@ async def create_video(db, turn, args: CreateVideoArgs):
                     or args.name
                 )[:120]
                 clip_id = f"clp_mg_{idx + 1}"
+                sync_warnings.extend({"act_index": scene_index, "clip_id": clip_id, "block_id": mb.block_id, **w}
+                                     for w in act_warnings)
                 object_id = f"obj_mg_{idx + 1}"
                 block_ops = motion_block_ops(
                     comp_content,
@@ -1349,6 +1518,8 @@ async def create_video(db, turn, args: CreateVideoArgs):
         opening.intent = {**(opening.intent or {}), "editor_commits": [*markers, {
             "request": identity, "tool": "create_video", "fingerprint": fingerprint,
             "activity_row": str(activity) if activity else None,
+            **({"sync_warnings": sync_warnings} if sync_warnings else {}),
+            **({"narration_phrases": narration_phrase_map} if narration_phrase_map else {}),
         }]}
         _, saved, _ = await apply_composition_edits(db, owner_id=owner, origin_project_id=project,
                                                     name=args.name, content=content, request_id=identity,
@@ -1406,6 +1577,25 @@ async def create_video(db, turn, args: CreateVideoArgs):
         (clip["range"]["end"] / rate_saved for track in saved.timeline["tracks"] for clip in track["clips"]),
         default=0.0,
     )
+    visual_cues = []
+    warnings = list(sync_warnings)
+    act_indices = {s["scene_id"]: i for i, s in enumerate(saved.scenes, 1)}
+    for track in saved.timeline["tracks"]:
+        for clip in track["clips"]:
+            obj = clip["object"]
+            if obj["kind"] != "motion_block":
+                continue
+            start = clip["range"]["start"] / rate_saved
+            duration = clip["range"]["end"] / rate_saved - start
+            block_id, props = obj["block_id"], obj["props"]
+            context = {"act_index": act_indices[clip["scene_id"]], "clip_id": clip["clip_id"], "block_id": block_id}
+            events = _visual_cues(block_id, props)
+            visual_cues.extend({**context, "kind": kind, "label": label, "at_seconds": round(start + at, 3)}
+                               for at, kind, label in events if 0 <= at < duration)
+            hold = _dead_hold_seconds(block_id, props, duration, events)
+            if hold > 1.3 and hold > duration * 0.38:
+                warnings.append({**context, "kind": "dead_hold", "seconds": round(hold, 3),
+                                 "message": "Bring the cut closer or add a later visual event."})
     duration_meta: dict[str, Any] = {}
     if args.motion_blocks and required.get("target_seconds") is not None:
         target_s = float(required["target_seconds"])
@@ -1422,6 +1612,8 @@ async def create_video(db, turn, args: CreateVideoArgs):
         "version": saved.version,
         "content_digest": saved.content_digest,
         "duration_seconds": total_duration_seconds,
+        "resolved_visual_cues": sorted(visual_cues, key=lambda event: event["at_seconds"])[:32],
+        "sync_warnings": warnings,
         **duration_meta,
         "workbench_link": f"#workbench:version/{saved.id}",
         "storyboard_link": f"#workbench:storyboard/{saved.id}",

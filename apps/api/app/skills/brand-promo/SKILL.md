@@ -36,13 +36,15 @@ metadata:
   - 真实界面演示与数据证据：`voice_speed: 0.96–1.02`、`voice_emotion: "calm"`（沉稳可信，不念经）；
   - 核心突破或高潮揭示：`voice_emotion: "fluent"` 或 `"happy"`（克制提亮，不夸张）；
   - 结尾品牌定版：`voice_speed: 0.94–0.98`、`voice_emotion: "calm"`，给画面留出 1 秒余韵。
-- **视觉冲击拍穿插**：在开场、中段转折与高潮前主动插入 2–4 幕 **0.7–1.5 秒无旁白视觉拍**（`narration` 留空，用 `kinetic_beat` / `ui_montage` 配重拍音效制造呼吸反差），避免从头念到尾的匀速感。
+- 30–45 秒宣传片安排一段 2–3.5 秒无旁白视觉节奏段。可在段内组合短促字效与真实界面，让配乐接过节奏。
 
 ## 4. 词级与停顿卡点（画面跟说话走）
 
 - 给 `product_showcase.callout_steps[]`、`product_showcase.cursor`、`metric_grid.items[]`、`flow_diagram.nodes[]`、`step_timeline.steps[]`、`bento_features.cards[]`、`split_compare` 条目、`data_chart.points[]` 或 `statement_hook` 声明 **`cue_phrase`**（填写该幕 `narration` 中对应的关键词或数字短语，如 `"£18.7m"`、`"four steps"`、`"audit"`），服务端会在合成旁白后按真实语音时间戳自动解算精确出现秒数，让高亮框、光标点击和卡片逐一踩在念到该词的瞬间。
+- **声画 1-to-1 对位法**要求口播按屏上顺序逐项念出相同数量的卡片、步骤和精确数字。画面写 `£18.7m`，中文口播念「一千八百七十万英镑」。按口播可容纳的条目数裁剪文案。
+- 点击用 `cue_phrase`，地址栏打字与加载分别用 `type_cue_phrase`、`load_cue_phrase`。换词文案与口播用词不同时，按 `words` 顺序提供 `word_cues`。同页多个细节用 `callout_steps[].zoom_scale` 连续推拉。
 - 幕间转场（`whip_pan` / `zoom_through` / `wipe_reveal` / `iris_focus`）自然落在口播收尾后的停顿气口；0.7–1.5 秒无旁白快切间用干脆硬切。
-- `create_video` 返回每幕实测切点与 `narration_clips` 区间后，批量调用 `generate_sfx(align_peak_at_seconds=...)` 将转场扫音、重拍与微点击严丝合缝对齐真实切点与关键词落点。
+- 收到 `create_video.sync_warnings` 后，预览前用 `update_motion_block` 或对应修订工具逐项消除孤儿卡、数字误差与节奏问题。在修订后的时间线上核对 `resolved_visual_cues[].at_seconds`，从中挑 3–5 处核心弹卡或点击，用 `generate_sfx` 的 `align_peak_at_seconds` 对齐 `select_tick` 或 `soft_pop`。
 
 ## 5. 多样化选曲与视觉混搭
 

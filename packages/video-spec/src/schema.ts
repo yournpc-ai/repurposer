@@ -240,20 +240,69 @@ const screenStyleProps = {
 const headline = z.string().trim().min(1).max(80);
 const detail = z.string().trim().min(1).max(120);
 const targetCoordinate = z.number().min(0.1).max(0.9);
+/** Split a headline line into reveal tokens (Latin words or CJK chunks). */
+export function tokenizeLine(line: string): string[] {
+  if (/\s/.test(line)) {
+    return line.split(/(\s+)/).filter((part) => part.length > 0 && !/^\s+$/.test(part));
+  }
+  const chars = Array.from(line);
+  if (chars.length <= 8) return chars;
+  const chunks: string[] = [];
+  for (let i = 0; i < chars.length; i += 2) {
+    chunks.push(chars.slice(i, i + 2).join(""));
+  }
+  return chunks;
+}
+
+const cueSecond = z.number().finite().nonnegative();
 const interactiveProps = {
   cursor_magnetic_click: z.object({
-    ...studioProps, eyebrow: shortLabel.nullish(), headline, cta_label: shortLabel, subcopy: detail.nullish(),
+    ...studioProps, click_at_s: cueSecond.optional(), eyebrow: shortLabel.nullish(), headline, cta_label: shortLabel, subcopy: detail.nullish(),
   }).strict(),
   zoom_follows_click: z.object({
     ...screenStyleProps, headline: headline.nullish(), callout_label: shortLabel.nullish(),
     target_x: targetCoordinate, target_y: targetCoordinate,
     zoom_scale: z.number().min(1.3).max(2.6).optional(),
+    click_at_s: cueSecond.optional(),
     click_at_ratio: z.number().min(0.25).max(0.65).optional(),
   }).strict(),
   browser_url_load: z.object({
-    ...screenStyleProps, url_text: detail, headline: headline.nullish(), badge: shortLabel.nullish(),
+    ...screenStyleProps, type_at_s: cueSecond.optional(), load_at_s: cueSecond.optional(),
+    url_text: detail, headline: headline.nullish(), badge: shortLabel.nullish(),
   }).strict(),
 };
+const wordReveals = z.array(cueSecond).refine(times => times.every((t, i) => !i || t >= times[i - 1]));
+const callout = z.object({
+  x: z.number().min(0).max(1), y: z.number().min(0).max(1),
+  width: z.number().positive().max(1), height: z.number().positive().max(1), label: z.string().nullish(),
+}).strict();
+const calloutStep = callout.extend({
+  label: z.string().min(1).max(64), start_s: cueSecond, end_s: cueSecond,
+  zoom_scale: z.number().finite().min(1).max(2.2).optional(),
+}).refine(s => s.end_s > s.start_s && s.x + s.width <= 1.001 && s.y + s.height <= 1.001);
+const showcaseProps = z.object({
+  ...studioProps, url_bar: z.string().nullish(), badge: z.string().nullish(), chrome_mode: z.string().optional(),
+  camera_motion: z.string().optional(), camera_preset: z.string().optional(), entrance_duration_s: z.number().optional(),
+  zoom_scale: z.number().min(1).max(1.35).optional(), focus_x: targetCoordinate.optional(), focus_y: targetCoordinate.optional(),
+  scroll_from_y: z.number().optional(), scroll_to_y: z.number().optional(), callout: callout.nullish(),
+  cursor: z.object({ x: z.number(), y: z.number(), click_at_s: cueSecond,
+    start_x: z.number().nullish(), start_y: z.number().nullish() }).strict().nullish(),
+  callout_steps: z.array(calloutStep).max(4).refine(steps => steps.every((s, i) => !i || s.start_s >= steps[i-1].end_s)).optional(),
+}).strict();
+const statementProps = z.object({
+  ...studioProps, headline: z.string().optional(), eyebrow: z.string().nullish(), subheadline: z.string().nullish(),
+  highlight_phrase: z.string().nullish(), highlight_at_s: cueSecond.optional(), layout_variant: z.string().optional(),
+  entrance_duration_s: z.number().optional(), exit_duration_s: z.number().optional(), word_reveals_s: wordReveals.optional(),
+}).strict().refine(p => !p.word_reveals_s || p.word_reveals_s.length ===
+  (p.headline ?? "").split("\n").flatMap(line => tokenizeLine(line.trim())).length);
+const kineticProps = z.object({
+  ...studioProps, mode: z.string().optional(), headline: z.string().nullish(), highlight_phrase: z.string().nullish(),
+  prefix: z.string().nullish(), words: z.array(z.string()).max(6).optional(), word_reveals_s: wordReveals.optional(),
+  left_text: z.string().nullish(), right_text: z.string().nullish(), badge_text: z.string().nullish(),
+  badge_icon: z.string().nullish(), rows: z.number().optional(), scale_emphasis: z.string().optional(),
+  entrance_duration_s: z.number().optional(), items: z.array(z.object({text: z.string(), icon: z.string().nullish()}).strict()).optional(),
+}).strict().refine(p => !p.word_reveals_s || p.word_reveals_s.length === (p.words?.length ?? 0));
+
 export type InteractiveBlockProps = {
   [K in keyof typeof interactiveProps]: z.infer<(typeof interactiveProps)[K]>;
 };
@@ -454,6 +503,14 @@ const clipSchema = z
     }
     if (clip.object.kind === "motion_block") {
       const block = clip.object;
+      const timedProps = block.block_id === "product_showcase" ? showcaseProps
+        : block.block_id === "statement_hook" ? statementProps : block.block_id === "kinetic_beat" ? kineticProps : null;
+      if (timedProps) {
+        const parsed = timedProps.safeParse(block.props);
+        if (!parsed.success) for (const issue of parsed.error.issues) {
+          ctx.addIssue({ ...issue, path: ["object", "props", ...issue.path] });
+        }
+      }
       if (block.block_id in interactiveProps) {
         const schema = interactiveProps[block.block_id as keyof typeof interactiveProps];
         const parsed = schema.safeParse(block.props);

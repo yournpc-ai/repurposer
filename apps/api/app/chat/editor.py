@@ -1522,12 +1522,14 @@ async def edit_clip(
     elif isinstance(args, UpdateMotionBlockArgs):
         from app.chat.editor_create import resolve_motion_block_cue_phrases
         from app.editing.revisions import coerce_motion_block_props
-        from app.models.tables import SourceSnapshot
+        from app.models.tables import SourceSnapshot, VideoNarration
 
         target = clips.get(args.clip_id)
         if target is None or not isinstance(target.object, MotionBlockObject):
             raise ValueError("Select an existing motion_block clip to update.")
         merged_raw = {**target.object.props, **args.props_patch}
+        if {"headline", "words", "word_cues"} & args.props_patch.keys() and "word_reveals_s" not in args.props_patch:
+            merged_raw.pop("word_reveals_s", None)
         # Resolve any authoring-time cue_phrase patches against overlapping narration cues.
         narration_text: str | None = None
         narration_cues: list[dict[str, Any]] | None = None
@@ -1541,7 +1543,16 @@ async def edit_clip(
                     meta = (snap.meta or {}) if snap else {}
                     narration_text = meta.get("text") or meta.get("transcript")
                     narration_cues = meta.get("cues")
-                    narration_lead_s = max(0.0, (ac.range.start - target.range.start) / rate)
+                    original_hash = (meta.get("origin") or {}).get("video_narration_hash")
+                    if original_hash and not narration_text:
+                        original = await db.scalar(select(VideoNarration).where(
+                            VideoNarration.user_id == project.user_id, VideoNarration.content_hash == original_hash,
+                            VideoNarration.audio_digest == ac.source.snapshot_digest,
+                        ))
+                        if original:
+                            narration_text, narration_cues = original.text, original.subtitles
+                    source_start = ac.source.source_range.start / SOURCE_TIMEBASE if ac.source.source_range else 0
+                    narration_lead_s = (ac.range.start - target.range.start) / rate - source_start
                     break
             if narration_text:
                 break

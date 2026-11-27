@@ -1,6 +1,7 @@
 import React from "react";
 import { cueProgress, easeInOutCubic } from "../engine/math";
 import {
+  activeFocusStyle,
   appear,
   cardFace,
   Heading,
@@ -38,6 +39,7 @@ export function SplitCompareBlock({
     { heading: props.left_heading, items: props.left_items },
     { heading: props.right_heading, items: props.right_items },
   ];
+  const times = sides.flatMap(({ items }) => items.map((item, i) => itemTime(item.reveal_at_s, i, items.length, frame.durSec)));
   return (
     <Stage style={props} frame={frame}>
       <Heading title={props.title} eyebrow={props.eyebrow} colors={c} />
@@ -77,7 +79,8 @@ export function SplitCompareBlock({
               {heading}
             </strong>
             {items.map((item, i) => {
-              const start = itemTime(item.reveal_at_s, i, items.length, frame.durSec);
+              const index = side ? props.left_items.length + i : i;
+              const start = times[index];
               const opposed = props.right_items[i];
               const strike =
                 opposed && !side && props.dim_left !== false
@@ -94,7 +97,7 @@ export function SplitCompareBlock({
                 <div
                   key={i}
                   style={{
-                    ...appear(frame.tSec, start),
+                    ...appear(frame.tSec, start, activeFocusStyle(frame.tSec, times, index, frame.durSec)),
                     borderTop: `1px solid ${c.line}`,
                     flex: 1,
                     display: "flex",

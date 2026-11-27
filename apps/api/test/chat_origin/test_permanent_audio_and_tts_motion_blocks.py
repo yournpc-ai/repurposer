@@ -450,7 +450,7 @@ async def test_chat_origin_permanent_audio_flywheel_and_tts_motion_blocks(
             assert cap.object.style.background_padding == (20.0, 10.0)
             assert cap.object.style.background_radius == 10.0
             assert cap.object.style.secondary_line_scale == 0.74
-        from app.chat.editor import EditTextArgs, SetCompositionStyleArgs, edit_clip
+        from app.chat.editor import EditTextArgs, SetCompositionStyleArgs, UpdateMotionBlockArgs, edit_clip
         from app.editing.schemas import SourceCaptionDerivation, speech_text_digest
         from app.editing.timing import source_ticks_to_output_ticks
 
@@ -487,6 +487,14 @@ async def test_chat_origin_permanent_audio_flywheel_and_tts_motion_blocks(
             version = await db.get(CompositionVersion, UUID(result["version_id"]))
             return result
 
+        await edit("update_motion_block", "retime-headline", UpdateMotionBlockArgs(
+            clip_id=mg_clips[0].clip_id, props_patch={"headline": "Cut videos", "cue_phrase": "videos"},
+        ))
+        revised = next(c.object.props for t in content_of(version).timeline.tracks for c in t.clips
+                       if c.clip_id == mg_clips[0].clip_id)
+        first, second = revised["word_reveals_s"]
+        assert first < second
+        assert revised["highlight_at_s"] == pytest.approx(second - 0.08)
         style = await edit("set_composition_style", "restyle", SetCompositionStyleArgs(preset_id="swiss_paper"))
         assert style["style_summary"]["captions_updated"] == len(caps)
         batch = await edit("edit_text", "preset", EditTextArgs(scope="all_derived_captions", preset_id="bilingual_cinema"))
@@ -549,12 +557,28 @@ async def test_create_video_motion_block_pending_speech_and_voice_forbidden_guar
                     "props": {"brand_name": "Rookie Cut", "tagline": "Direct by chat"},
                     "narration": "Start creating now.",
                 },
+                {
+                    "block_id": "metric_grid", "duration_seconds": 5,
+                    "props": {"items": [{"label": "Speed", "value": "2×", "reveal_at_s": 0},
+                                        {"label": "Coverage", "value": "94%", "reveal_at_s": 1}]},
+                },
             ],
         )
         with bind_progress("create-pending-vo-1", None):
             result = await create_video(db, turn, args)
 
         assert result["saved"] is True
+        visual_cues = result["resolved_visual_cues"]
+        assert visual_cues == sorted(visual_cues, key=lambda event: event["at_seconds"])
+        start = result["motion_blocks"][2]["start_seconds"]
+        assert [c for c in visual_cues if c["act_index"] == 3] == [
+            {"act_index": 3, "clip_id": "clp_mg_3", "block_id": "metric_grid", "kind": "reveal",
+             "label": label, "at_seconds": at} for label, at in [("Speed", start), ("Coverage", start + 1)]
+        ]
+        assert any(w["kind"] == "dead_hold" and w["act_index"] == 3 for w in result["sync_warnings"])
+        with bind_progress("create-pending-vo-1", None):
+            replay = await create_video(db, turn, args)
+        assert replay == result
         assert len(result["narration_clips"]) == 2
         assert all(c["kind"] == "speech" for c in result["narration_clips"])
 

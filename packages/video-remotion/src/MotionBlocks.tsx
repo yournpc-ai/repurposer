@@ -1,8 +1,9 @@
 import React from "react";
 import { Img } from "remotion";
+import { tokenizeLine } from "@repurposer/video-spec";
 import type { VideoClip, VideoMotionBlockObject, VideoSpec } from "@repurposer/video-spec";
 
-import { clamp01, cueProgress, easeOutCubic, easeOutExpo, easeOutQuart, hexToRgba, springOut } from "./engine/math";
+import { clamp01, cueProgress, easeInOutCubic, lerp, easeOutCubic, easeOutExpo, easeOutQuart, hexToRgba, springOut } from "./engine/math";
 import { StudioBackdrop, studioInk, type BackdropStyle } from "./engine/backdrop";
 import { evaluateCamera, type CameraPreset } from "./engine/camera";
 import { VirtualCursor, type CursorCue } from "./engine/cursor";
@@ -13,7 +14,7 @@ import {
   type ResolvedStyleTokens,
 } from "./engine/styles";
 
-import { ImageAdapter, type Frame } from "./blocks/Stage";
+import { activeFocusStyle, ImageAdapter, type Frame } from "./blocks/Stage";
 import { KineticBeatBlock } from "./blocks/KineticBeatBlock";
 import { UiMontageBlock } from "./blocks/UiMontageBlock";
 import { ChatDemoBlock } from "./blocks/ChatDemoBlock";
@@ -60,20 +61,6 @@ function formatCountUp(raw: string, progress: number): string {
   return `${prefix}${decPart !== undefined ? `${withCommas}.${decPart}` : withCommas}${suffix}`;
 }
 
-/** Split a headline line into reveal tokens (Latin words or CJK chunks). */
-function tokenizeLine(line: string): string[] {
-  if (/\s/.test(line)) {
-    return line.split(/(\s+)/).filter((part) => part.length > 0 && !/^\s+$/.test(part));
-  }
-  const chars = Array.from(line);
-  if (chars.length <= 8) return chars;
-  const chunks: string[] = [];
-  for (let i = 0; i < chars.length; i += 2) {
-    chunks.push(chars.slice(i, i + 2).join(""));
-  }
-  return chunks;
-}
-
 interface ProductShowcaseCallout {
   x: number;
   y: number;
@@ -105,7 +92,7 @@ const ProductShowcaseBlock: React.FC<{
     scroll_from_y?: number;
     scroll_to_y?: number;
     cursor?: CursorCue | null;
-    callout_steps?: (ProductShowcaseCallout & { start_s: number; end_s: number })[];
+    callout_steps?: (ProductShowcaseCallout & { start_s: number; end_s: number; zoom_scale?: number })[];
     callout?: ProductShowcaseCallout | null;
     accent_color?: string | null;
     backdrop_style?: BackdropStyle | null;
@@ -133,10 +120,30 @@ const ProductShowcaseBlock: React.FC<{
   const focusX = Math.max(0.1, Math.min(0.9, props.focus_x ?? 0.5));
   const focusY = Math.max(0.1, Math.min(0.9, props.focus_y ?? 0.35));
 
+  const cueSec = (frame - cueOffsetFrames) / fps;
+  const steps = props.callout_steps ?? [];
+  const stepCamera = props.camera_preset !== "scroll_reveal" && (steps.length >= 2 || steps.some(s => s.zoom_scale != null));
+  let x = focusX;
+  let y = focusY;
+  let zoom = zoomScale;
+  if (stepCamera) {
+    for (const [i, step] of steps.entries()) {
+      // Touching windows still need a continuous move into the next focus.
+      const previous = steps[i - 1];
+      const from = !previous ? step.start_s - 0.45
+        : previous.end_s < step.start_s ? previous.end_s
+        : Math.max(previous.start_s, step.start_s - 0.45);
+      const blend = easeInOutCubic(cueProgress(cueSec, from, step.start_s - from));
+      x = lerp(x, step.x + step.width / 2, blend);
+      y = lerp(y, step.y + step.height / 2, blend);
+      zoom = lerp(zoom, step.zoom_scale ?? Math.max(zoomScale, 1.32), blend);
+      if (cueSec < step.start_s) break;
+    }
+  }
   const camera = evaluateCamera(
     props.camera_preset ?? "flat", tSec, Math.max(1, durationFrames - 1) / fps,
-    focusX, focusY, zoomScale, props.scroll_from_y ?? 0, props.scroll_to_y ?? 1,
-    { motion: cameraMotion, entranceSec: entranceDur, unit: scaleUnit },
+    x, y, zoom, props.scroll_from_y ?? 0, props.scroll_to_y ?? 1,
+    { motion: cameraMotion, entranceSec: entranceDur, unit: scaleUnit, stepCamera },
   );
   const imageUrl = resolveResourceUrl(clip, obj, 0);
   const padX = Math.round((chromeMode === "frameless" ? 72 : 96) * scaleUnit);
@@ -186,7 +193,6 @@ const ProductShowcaseBlock: React.FC<{
     }
   }, []);
 
-  const cueSec = (frame - cueOffsetFrames) / fps;
   const step = props.callout_steps?.find(s => s.start_s <= cueSec && cueSec < s.end_s);
   const callout = props.callout_steps?.length ? step : props.callout;
   const sinceReveal = step ? cueSec - step.start_s : tSec - entranceDur * 0.68;
@@ -851,6 +857,7 @@ const StatementHookBlock: React.FC<{
     eyebrow?: string | null;
     highlight_phrase?: string | null;
     highlight_at_s?: number | null;
+    word_reveals_s?: number[];
     subheadline?: string | null;
     theme?: "light" | "dark" | null;
     layout_variant?: "centered" | "editorial_left";
@@ -1090,9 +1097,9 @@ const StatementHookBlock: React.FC<{
                     const inHighlight =
                       matchIdx >= 0 &&
                       tokPos >= 0 &&
-                      tokPos >= matchIdx &&
-                      tokPos + tok.length <= matchEnd;
-                    const delay = 0.08 + runningTokenIdx * tokenStep;
+                      tokPos < matchEnd && tokPos + tok.length > matchIdx;
+                    const at = props.word_reveals_s?.[runningTokenIdx];
+                    const delay = at == null ? 0.08 + runningTokenIdx * tokenStep : at + cueOffsetFrames / fps;
                     runningTokenIdx += 1;
                     const localT = Math.max(0, tSec - delay);
                     const s = springOut(localT, 12.5, 0.80);
@@ -1225,7 +1232,8 @@ const MetricGridBlock: React.FC<{
   fps: number;
   frame: number;
   cueOffsetFrames: number;
-}> = ({ clip, fonts, compositionStyle, fps, cueOffsetFrames, frame }) => {
+  tailFrames: number;
+}> = ({ clip, fonts, compositionStyle, fps, cueOffsetFrames, tailFrames, frame }) => {
   const obj = clip.object;
   const props = obj.props as {
     eyebrow?: string | null;
@@ -1256,6 +1264,7 @@ const MetricGridBlock: React.FC<{
   const stagger = props.stagger_s ?? 0.14;
   const countUp = props.count_up ?? true;
   const items = props.items ?? [];
+  const times = items.map((item, i) => item.reveal_at_s == null ? 0.22 + i * stagger : item.reveal_at_s + cueOffsetFrames / fps);
   const cols = items.length === 2 || items.length === 4 ? 2 : (props.columns ?? 3);
 
   const inkPrimary = tokens.hasCompositionStyle ? tokens.ink : (isDark ? "#F8FAFC" : "#0F172A");
@@ -1394,7 +1403,8 @@ const MetricGridBlock: React.FC<{
           }}
         >
           {items.map((item, idx) => {
-            const cardDelay = item.reveal_at_s == null ? 0.22 + idx * stagger : item.reveal_at_s + cueOffsetFrames / fps;
+            const cardDelay = times[idx];
+            const focus = activeFocusStyle(tSec, times, idx, (clip.end_frame - clip.start_frame - tailFrames) / fps);
             const localT = Math.max(0, tSec - cardDelay);
             const settle = springOut(localT, 12.2, 0.80);
             const alpha = easeOutCubic(localT / 0.34);
@@ -1424,7 +1434,8 @@ const MetricGridBlock: React.FC<{
                   display: "flex",
                   flexDirection: "column",
                   justifyContent: "center",
-                  opacity: alpha,
+                  opacity: alpha * focus.opacity,
+                  scale: focus.scale,
                   transform: `translateY(${(1 - settle) * 34 * scaleUnit}px) scale(${0.955 + 0.045 * settle})`,
                 }}
               >
@@ -1947,6 +1958,7 @@ export const MotionBlockView: React.FC<{
         />
       ) : id === "metric_grid" ? (
         <MetricGridBlock
+          tailFrames={tailFrames}
           cueOffsetFrames={cueOffsetFrames}
           clip={clip}
           fonts={fonts}

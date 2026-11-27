@@ -1166,6 +1166,29 @@ def test_compile_all_20_motion_blocks_and_zod_video_spec_parity():
             if preset_id in ("vox_editorial", "institutional_dark"):
                 specs_to_validate.append(spec)
 
+    # Pass serialized Python models with the optional timing fields through the real TS consumer too.
+    from copy import deepcopy
+    from app.editing.schemas import validate_motion_block_props
+
+    timed = deepcopy(specs_to_validate[0])
+    for track in timed["tracks"]:
+        for clip in track["clips"]:
+            obj = clip["object"]
+            if obj["kind"] != "motion_block":
+                continue
+            block, props = obj["block_id"], obj["props"]
+            if block in {"zoom_follows_click", "cursor_magnetic_click"}:
+                props["click_at_s"] = 0
+            elif block == "browser_url_load":
+                props.update(type_at_s=0.15, load_at_s=1.4)
+            elif block == "product_showcase" and props.get("callout_steps"):
+                props["callout_steps"][0]["zoom_scale"] = 2.2
+            elif block == "statement_hook":
+                props.update(headline="First act", word_reveals_s=[0.2, 1.4])
+            elif block == "kinetic_beat":
+                props.update(mode="slot_flip", words=["Verify", "Ship"], word_reveals_s=[0.2, 0.7])
+            obj["props"] = validate_motion_block_props(block, props).model_dump(mode="json")
+    specs_to_validate.append(timed)
     from app.tools.video.presets import MOTION_PREVIEW_CATALOG, build_motion_preview_spec
     specs_to_validate.extend(build_motion_preview_spec(key) for key in MOTION_PREVIEW_CATALOG)
     # Verify exact parity against packages/video-spec Zod videoSpecSchema.parse!

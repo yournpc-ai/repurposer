@@ -24,6 +24,7 @@ function Glyph({ icon }: { icon: Icon }) {
 interface Props extends StudioStyle {
   mode: "impact_cut" | "typewriter_swap" | "slot_flip" | "inline_badge_split" | "marquee_wall";
   headline?: string; highlight_phrase?: string; prefix?: string; words: string[];
+  word_reveals_s?: number[];
   left_text?: string; right_text?: string; badge_text?: string; badge_icon?: Icon;
   items: {text: string; icon?: Icon}[]; rows: number;
   scale_emphasis?: string; entrance_duration_s: number;
@@ -55,8 +56,12 @@ export function KineticBeatBlock({ props, frame }: { props: Props; frame: Frame 
   const style = resolveBlockStyle(frame.compositionStyle, props, { theme: "dark", accent: "#F59E0B", backdrop_style: "clean" });
   const words = props.words ?? [];
   const position = Math.min(words.length - 0.000001, progress * words.length);
-  const index = Math.floor(position);
-  const phase = position - index;
+  const times = props.word_reveals_s;
+  const timed = times && times.length > 0 && times.length === words.length;
+  const index = timed ? Math.max(0, times.filter(at => at <= t).length - 1) : Math.floor(position);
+  const phase = timed
+    ? clamp01((t - times[index]) / Math.max(0.001, (times[index + 1] ?? frame.durSec) - times[index]))
+    : position - index;
   const portrait = height > width;
   const budget = width * 0.91 / u;
   const fit = (text: string, ideal: number) => u * typeSize(text, ideal, budget);
@@ -122,6 +127,6 @@ export function KineticBeatBlock({ props, frame }: { props: Props; frame: Frame 
     fontWeight: 900, letterSpacing: "-0.035em", whiteSpace: "pre", lineHeight: 1.08 }}>
     {props.show_backdrop && <StudioBackdrop theme={style.theme} accent={style.accent} style={style.backdropStyle}
       tSec={t} scaleUnit={u} canvasBg={style.canvasBg} />}
-    <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center" }}>{body}</div>
+    <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", visibility: timed && frame.tSec < times[0] ? "hidden" : undefined }}>{body}</div>
   </div>;
 }

@@ -597,6 +597,106 @@ def test_resolve_motion_block_cue_phrases_maps_words_to_numeric_props():
     assert validated_showcase.callout_steps[0].end_s <= validated_showcase.callout_steps[1].start_s
 
 
+@pytest.mark.parametrize(("block", "props", "times"), [
+    ("cursor_magnetic_click", {"headline": "Ready", "cta_label": "Go", "cue_phrase": "Launch"}, {"click_at_s": 1.47}),
+    ("zoom_follows_click", {"target_x": 0.5, "target_y": 0.6, "click_at_ratio": 0.3,
+                            "cue_phrase": "Launch"}, {"click_at_s": 1.55}),
+    ("browser_url_load", {"url_text": "example.org", "type_cue_phrase": "Prepare", "load_cue_phrase": "Launch"},
+     {"type_at_s": 0.35, "load_at_s": 1.55}),
+    ("browser_url_load", {"url_text": "example.org", "cue_phrase": "Launch"}, {"load_at_s": 1.55}),
+    ("kinetic_beat", {"mode": "typewriter_swap", "words": ["Prepare", "Launch"]}, {"word_reveals_s": [0.35, 1.55]}),
+    ("kinetic_beat", {"mode": "slot_flip", "words": ["Ready", "Go"], "word_cues": ["Prepare", "Launch"]},
+     {"word_reveals_s": [0.35, 1.55]}),
+    ("statement_hook", {"headline": "Prepare Launch", "highlight_phrase": "Launch"},
+     {"word_reveals_s": [0.35, 1.55], "highlight_at_s": 1.47}),
+    ("statement_hook", {"headline": "另一句"}, {"word_reveals_s": [0.15, 0.9, 1.65]}),
+])
+def test_interaction_uses_acoustic_onsets_and_serializes_only_numeric_cues(block, props, times):
+    from app.chat.editor_create import resolve_motion_block_cue_phrases
+    from app.editing.schemas import validate_motion_block_props
+
+    words = [{"word": "Prepare", "time_begin": 200, "time_end": 650},
+             {"word": "Launch", "time_begin": 1400, "time_end": 2000}]
+    def resolve(narration):
+        result = resolve_motion_block_cue_phrases(block, props, narration=narration,
+            cues=[{"text": "Prepare Launch", "time_begin": 0, "time_end": 2000, "words": words}], duration_s=4)
+        return validate_motion_block_props(block, result).model_dump(mode="json")
+
+    saved = resolve("Prepare Launch")
+    for key, value in times.items():
+        assert saved[key] == value
+        assert key not in resolve(None)
+    assert not {"cue_phrase", "type_cue_phrase", "load_cue_phrase", "word_cues"} & saved.keys()
+
+
+@pytest.mark.parametrize("spoken", ["一千八百万", "eighteen million", "18m", "十八"])
+def test_metric_sync_warnings_distinguish_orphans_precision_and_density(spoken):
+    from app.chat.editor_create import resolve_motion_block_cue_phrases
+
+    props = {"items": [{"value": "£18.7m", "label": "估值"}, {"value": "94%", "label": "覆盖率"},
+                       {"value": "03", "label": "待审阅", "cue_phrase": "拼写错误"}]}
+    warnings = []
+    resolve_motion_block_cue_phrases("metric_grid", props, narration=f"估值{spoken}，覆盖率百分之九十四。",
+                                     cues=None, duration_s=3.1, spoken_seconds=2.5, warnings=warnings)
+    assert {w["kind"] for w in warnings} == {"orphan_item", "numeric_parity", "density", "unmatched_cue"}
+    assert [(w["item_index"], w["visual"], w["spoken"]) for w in warnings if w["kind"] == "numeric_parity"] == [
+        (0, "18.7m", spoken)]
+    assert [w["item_index"] for w in warnings if w["kind"] == "orphan_item"] == [2]
+
+    for precise in ("一千八百七十万", "eighteen point seven million", "18.7m"):
+        warnings.clear()
+        resolve_motion_block_cue_phrases("metric_grid", {"items": props["items"][:2]},
+            narration=f"{precise}，九十四。", cues=None, duration_s=3.1, warnings=warnings)
+        assert warnings == []
+
+
+def test_visual_click_uses_the_whole_spoken_number_after_a_similar_number():
+    from app.chat.editor_create import resolve_motion_block_cue_phrases
+
+    words = [{"word": "194", "time_begin": 0, "time_end": 300},
+             {"word": ", then ", "time_begin": 330, "time_end": 550},
+             {"word": "94", "time_begin": 1200, "time_end": 1600}]
+    warnings = []
+    result = resolve_motion_block_cue_phrases("zoom_follows_click", {"cue_phrase": "ninety-four"},
+        narration="194, then 94", cues=[{"words": words, "time_begin": 0, "time_end": 1600}],
+        duration_s=2.1, warnings=warnings)
+    assert result["click_at_s"] == 1.35
+    assert warnings == []
+
+
+def test_unmatched_final_callout_has_a_valid_window_and_nonblocking_warning():
+    from app.chat.editor_create import resolve_motion_block_cue_phrases
+    from app.editing.schemas import validate_motion_block_props
+
+    box = dict(x=0.1, y=0.2, width=0.3, height=0.2)
+    warnings = []
+    result = resolve_motion_block_cue_phrases("product_showcase", {"callout_steps": [
+        {**box, "label": "Open", "cue_phrase": "Open", "zoom_scale": 2.2},
+        {**box, "label": "Detail", "cue_phrase": "Missing"},
+    ]}, narration="Open", cues=[{"text": "Open", "time_begin": 1600, "time_end": 1800}],
+        duration_s=2.0, warnings=warnings)
+    first, last = validate_motion_block_props("product_showcase", result).callout_steps
+    assert first.start_s < first.end_s <= last.start_s < last.end_s <= 2
+    assert [w["kind"] for w in warnings] == ["unmatched_cue"]
+
+
+def test_closed_timing_props_check_zoom_and_token_shape():
+    from app.editing.schemas import validate_motion_block_props
+
+    step = dict(x=0.1, y=0.2, width=0.3, height=0.4, label="Data", start_s=0, end_s=2)
+    for zoom in (1, 2.2):
+        props = validate_motion_block_props("product_showcase", {"callout_steps": [{**step, "zoom_scale": zoom}]})
+        assert props.callout_steps[0].zoom_scale == zoom
+    for patch in ({"zoom_scale": 2.21}, {"zoom_scale": 0.99}, {"cue_phrase": "Data"}):
+        with pytest.raises(ValueError):
+            validate_motion_block_props("product_showcase", {"callout_steps": [{**step, **patch}]})
+    for block, props in [("statement_hook", {"headline": "One two"}),
+                         ("kinetic_beat", {"mode": "slot_flip", "words": ["One", "two"]})]:
+        for times in ([1], [1, 0], [0, float("inf")], [-1, 0]):
+            with pytest.raises(ValueError):
+                validate_motion_block_props(block, {**props, "word_reveals_s": times})
+
+
 def test_narration_synth_config_distinguishes_speed_and_emotion():
     from app.tools.video.narration import narration_synth_config
 

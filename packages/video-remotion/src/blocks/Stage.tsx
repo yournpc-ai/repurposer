@@ -1,6 +1,6 @@
 import React, { type CSSProperties, type ReactNode } from "react";
 import { StudioBackdrop, type BackdropStyle } from "../engine/backdrop";
-import { cueProgress, easeOutQuart, springOut } from "../engine/math";
+import { clamp01, cueProgress, easeOutQuart, springOut } from "../engine/math";
 import {
   cardSurfaceStyle,
   resolveBlockStyle,
@@ -91,6 +91,7 @@ export function Stage({
   children: ReactNode;
 }): React.JSX.Element {
   const c = palette(style, frame.compositionStyle);
+  const breath = 1 + 0.018 * clamp01(frame.tSec / Math.max(frame.durSec, 0.5));
   return (
     <div style={{ position: "relative", height: "100%", width: "100%", overflow: "hidden" }}>
       {style.show_backdrop !== false && (
@@ -112,7 +113,7 @@ export function Stage({
           height: 1080,
           top: "50%",
           left: "50%",
-          transform: `translate(-50%, -50%) scale(${frame.scaleUnit})`,
+          transform: `translate(-50%, -50%) scale(${frame.scaleUnit * breath})`,
           fontFamily: frame.fontFamily,
           color: c.ink,
           overflowWrap: "anywhere",
@@ -132,10 +133,22 @@ export function typeSize(text: string, ideal: number, width: number, lines = 1):
   return Math.min(ideal, Math.floor((width * (lines === 1 ? 1 : lines * 0.82)) / Math.max(1, ems)));
 }
 
-export function appear(tSec: number, start: number): CSSProperties {
+export function activeFocusStyle(tSec: number, itemTimes: number[], index: number, durSec: number) {
+  const start = itemTimes[index];
+  const next = Math.min(...itemTimes.filter((at, i) => at > start || (at === start && i > index)));
+  const enter = easeOutQuart(cueProgress(tSec, start, 0.22));
+  const past = next <= tSec ? easeOutQuart(cueProgress(tSec, next, 0.22)) : 0;
+  const settleAt = Math.max(durSec - 0.5, ...itemTimes);
+  const settle = easeOutQuart(cueProgress(tSec, settleAt, Math.min(0.35, durSec - settleAt)));
+  return { opacity: 1 - 0.22 * past * (1 - settle),
+    scale: 1 + (0.025 * enter * (1 - past) - 0.01 * past) * (1 - settle) };
+}
+
+export function appear(tSec: number, start: number, focus = { opacity: 1, scale: 1 }): CSSProperties {
   const elapsed = tSec - start;
   return {
-    opacity: easeOutQuart(cueProgress(tSec, start, 0.32)),
+    opacity: focus.opacity * easeOutQuart(cueProgress(tSec, start, 0.32)),
+    scale: focus.scale,
     transform: `translateY(${(1 - springOut(elapsed)) * 28}px)`,
   };
 }

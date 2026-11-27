@@ -682,6 +682,7 @@ UnitCoordinate = Annotated[float, Field(ge=0, le=1, allow_inf_nan=False)]
 
 
 class ShowcaseStep(ProductShowcaseCallout):
+    zoom_scale: float | None = Field(default=None, ge=1, le=2.2, allow_inf_nan=False, exclude_if=lambda v: v is None)
     start_s: CueSecond
     end_s: CueSecond
     label: str = Field(min_length=1, max_length=64)
@@ -781,6 +782,23 @@ class ProductShowcaseProps(BaseModel):
         return data
 
 
+def headline_tokens(headline: str) -> list[str]:
+    """Match the Remotion line breaks and reveal units, including unspaced CJK."""
+    tokens = []
+    for line in map(str.strip, headline.split("\n")):
+        if len(line.split()) > 1:
+            tokens.extend(line.split())
+        else:
+            size = 1 if len(line) <= 8 else 2
+            tokens.extend(line[i:i + size] for i in range(0, len(line), size))
+    return tokens
+
+
+def _validate_word_reveals(times: list[float] | None, count: int) -> None:
+    if times is not None and (len(times) != count or any(a > b for a, b in zip(times, times[1:]))):
+        raise ValueError("word_reveals_s must have one nondecreasing time per reveal token")
+
+
 class StatementHookProps(BaseModel):
     """Closed, pure-JSON props for native `statement_hook` MotionBlockObject."""
 
@@ -788,6 +806,7 @@ class StatementHookProps(BaseModel):
 
     headline: str = Field(min_length=1, max_length=160)
     eyebrow: str | None = Field(default=None, max_length=60)
+    word_reveals_s: list[CueSecond] | None = Field(default=None, exclude_if=lambda v: not v)
     highlight_at_s: CueSecond | None = Field(default=None, exclude_if=lambda value: value is None)
     highlight_phrase: str | None = Field(default=None, max_length=80)
     subheadline: str | None = Field(default=None, max_length=200)
@@ -798,6 +817,11 @@ class StatementHookProps(BaseModel):
     exit_duration_s: float = Field(default=0.35, ge=0.0, le=1.5, allow_inf_nan=False)
     backdrop_style: BackdropStyle | None = Field(default=None, exclude_if=lambda v: v is None)
     show_backdrop: bool = True
+
+    @model_validator(mode="after")
+    def _timed_headline(self):
+        _validate_word_reveals(self.word_reveals_s, len(headline_tokens(self.headline)))
+        return self
 
     @model_validator(mode="before")
     @classmethod
@@ -888,6 +912,7 @@ class NarrativeStyle(StudioFields):
 
 
 class CursorMagneticClickProps(NarrativeStyle):
+    click_at_s: CueSecond | None = Field(default=None, exclude_if=lambda v: v is None)
     eyebrow: ShortLabel | None = None
     headline: BlockHeading
     cta_label: ShortLabel
@@ -895,6 +920,7 @@ class CursorMagneticClickProps(NarrativeStyle):
 
 
 class ZoomFollowsClickProps(StudioFields):
+    click_at_s: CueSecond | None = Field(default=None, exclude_if=lambda v: v is None)
     headline: BlockHeading | None = None
     callout_label: ShortLabel | None = None
     target_x: float = Field(ge=0.1, le=0.9)
@@ -904,6 +930,8 @@ class ZoomFollowsClickProps(StudioFields):
 
 
 class BrowserUrlLoadProps(StudioFields):
+    type_at_s: CueSecond | None = Field(default=None, exclude_if=lambda v: v is None)
+    load_at_s: CueSecond | None = Field(default=None, exclude_if=lambda v: v is None)
     url_text: BlockDetail
     headline: BlockHeading | None = None
     badge: ShortLabel | None = None
@@ -1089,6 +1117,7 @@ class KineticBeatProps(BaseModel):
     headline: str | None = Field(default=None, min_length=1, max_length=120)
     highlight_phrase: str | None = Field(default=None, min_length=1, max_length=60)
     prefix: str | None = Field(default=None, min_length=1, max_length=60)
+    word_reveals_s: list[CueSecond] | None = Field(default=None, exclude_if=lambda v: not v)
     words: list[str] = Field(default_factory=list, max_length=6)
     left_text: str | None = Field(default=None, min_length=1, max_length=40)
     right_text: str | None = Field(default=None, min_length=1, max_length=40)
@@ -1105,6 +1134,7 @@ class KineticBeatProps(BaseModel):
 
     @model_validator(mode="after")
     def validate_copy(self) -> KineticBeatProps:
+        _validate_word_reveals(self.word_reveals_s, len(self.words))
         if any(not word.strip() or len(word) > 48 for word in self.words):
             raise ValueError("Each kinetic word must contain 1–48 characters")
         if self.mode == "impact_cut" and not self.headline:

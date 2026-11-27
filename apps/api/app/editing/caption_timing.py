@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterator
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Any
 
 from typing_extensions import TypedDict
@@ -375,6 +376,70 @@ def _int_to_en(n: int) -> list[str]:
     return [f"{_EN_ONES[h]} hundred {sub}" for sub in _int_to_en(rem)]
 
 
+_EN_NUMBERS = {word: i for i, word in enumerate(_EN_ONES)}
+_EN_NUMBERS.update({word: i * 10 for i, word in enumerate(_EN_TENS) if word})
+_EN_NUMBER = "|".join([*_EN_NUMBERS, "hundred", "thousand", "million", "billion"])
+_ZH_NUMBER = "零〇一二两三四五六七八九十百千万亿"
+_SCALES = {"k": 1000, "m": 10**6, "b": 10**9, "thousand": 1000, "million": 10**6,
+           "billion": 10**9, "万": 10000, "百万": 10**6, "亿": 10**8}
+_NUMBER_RE = re.compile(
+    rf"(?P<digits>\d+(?:,\d{{3}})*(?:\.\d+)?)"
+    rf"|(?P<zh>[{_ZH_NUMBER}]+(?:点[零〇一二三四五六七八九]+)?)"
+    rf"|(?<![a-z])(?P<en>(?:{_EN_NUMBER})(?![a-z])(?:(?:[ -]+|(?<=hundred) and |(?<=thousand) and )(?:{_EN_NUMBER})(?![a-z]))*"
+    rf"(?: point (?:{'|'.join(_EN_ONES[:10])})(?: (?:{'|'.join(_EN_ONES[:10])}))*)?)",
+    re.I,
+)
+_SCALE_RE = re.compile(r"\s*(thousand|million|billion|[kmb](?![a-z])|百万|万|亿)", re.I)
+
+
+def spoken_numbers(text: str) -> list[tuple[str, Decimal]]:
+    """Keep each spoken spelling alongside its exact magnitude for cue lookup and parity."""
+    text = strip_pause_tags(text).lower().replace("百分之", " ")
+    result = []
+    end = 0
+    for match in _NUMBER_RE.finditer(text):
+        if match.start() < end:
+            continue
+        if match["digits"]:
+            value = Decimal(match[0].replace(",", ""))
+        elif match["zh"]:
+            whole, _, fraction = match[0].translate(str.maketrans("〇两", "零二")).partition("点")
+            total = section = digit = 0
+            for char in whole:
+                if char in _ZH_DIGITS:
+                    digit = digit * 10 + _ZH_DIGITS.index(char)
+                elif char in "十百千":
+                    section += (digit or 1) * 10 ** ("十百千".index(char) + 1)
+                    digit = 0
+                else:
+                    total += (section + digit) * _SCALES[char]
+                    section = digit = 0
+            value = Decimal(total + section + digit)
+            if fraction:
+                value += Decimal("0." + "".join(str(_ZH_DIGITS.index(c)) for c in fraction))
+        else:
+            whole, _, fraction = match[0].partition(" point ")
+            total = section = 0
+            for word in re.split(r"[ -]+", whole):
+                if word == "hundred":
+                    section *= 100
+                elif word in _SCALES:
+                    total += section * _SCALES[word]
+                    section = 0
+                else:
+                    section += _EN_NUMBERS.get(word, 0)
+            value = Decimal(total + section)
+            if fraction:
+                value += Decimal("0." + "".join(str(_EN_NUMBERS[w]) for w in fraction.split()))
+        end = match.end()
+        scale = _SCALE_RE.match(text, end)
+        if scale:
+            value *= _SCALES[scale[1]]
+            end = scale.end()
+        result.append((text[match.start():end], value))
+    return result
+
+
 def _phrase_match_variants(phrase: str) -> list[str]:
     """Generate exact + spoken-number variants so '27 个' matches '二十七个' and '27' matches 'twenty-seven'."""
     base = _norm_match_text(phrase)
@@ -406,7 +471,7 @@ def _phrase_match_variants(phrase: str) -> list[str]:
         _add(en_hyphen)
         _add(en_space)
         # Also bare spoken number itself when the phrase is a short metric value like "27 个" or "8%"
-        if len(nums) == 1 and len(base) <= 10:
+        if len(nums) == 1 and re.fullmatch(r"[£$€]?\d+\s*(?:个|%|×)?", base):
             val = int(nums[0].group(1))
             _add(_int_to_zh(val))
             for ef in _int_to_en(val):
@@ -501,9 +566,9 @@ def resolve_cue_phrase_window_s(
             char_map.append(idx)
     c_haystack = "".join(compact_chars)
 
-    def _offset_to_ms(char_offset: int) -> float:
+    def _offset_to_ms(char_offset: int, *, right_edge: bool = False) -> float:
         for s_ch, e_ch, norm_part, tb_ms, te_ms in span_ranges:
-            if char_offset <= e_ch:
+            if char_offset < e_ch or (right_edge and char_offset == e_ch):
                 local_idx = max(0, char_offset - s_ch)
                 if local_idx <= 0 or not norm_part:
                     return tb_ms
@@ -517,13 +582,24 @@ def resolve_cue_phrase_window_s(
 
     min_ms = max(0.0, (min_start_s - speech_lead_s) * 1000.0)
 
+    def _at_number_boundary(start: int, end: int) -> bool:
+        # "94" in "194", or "十八" in "二十八", is a different metric.
+        first, last = haystack[start], haystack[end - 1]
+        before, after = haystack[start - 1:start] if start else "", haystack[end:end + 1]
+        if first.isdigit() and (before.isdigit() or (before == "." and start >= 2 and haystack[start - 2].isdigit())):
+            return False
+        if last.isdigit() and (after.isdigit() or (after == "." and haystack[end + 1:end + 2].isdigit())):
+            return False
+        return not ((first in _ZH_NUMBER and before and before in _ZH_NUMBER)
+                    or (last in _ZH_NUMBER and after and after in _ZH_NUMBER))
+
     def _find_after_min(needle: str) -> tuple[int, int] | None:
         search_from = 0
         while True:
             pos = haystack.find(needle, search_from)
             if pos < 0:
                 break
-            if _offset_to_ms(pos) >= min_ms - 50.0:
+            if _at_number_boundary(pos, pos + len(needle)) and _offset_to_ms(pos) >= min_ms - 50.0:
                 return pos, pos + len(needle)
             search_from = pos + 1
         compact_needle = re.sub(r"[^\w\u4e00-\u9fff]+", "", needle)
@@ -536,7 +612,7 @@ def resolve_cue_phrase_window_s(
                 return None
             pos = char_map[c_pos]
             end_pos = char_map[min(len(char_map) - 1, c_pos + len(compact_needle) - 1)] + 1
-            if _offset_to_ms(pos) >= min_ms - 50.0:
+            if _at_number_boundary(pos, end_pos) and _offset_to_ms(pos) >= min_ms - 50.0:
                 return pos, end_pos
             c_from = c_pos + 1
 
@@ -550,7 +626,7 @@ def resolve_cue_phrase_window_s(
 
     pos, end_pos = match_span
     start_ms = _offset_to_ms(pos)
-    end_ms = max(start_ms + 150.0, _offset_to_ms(end_pos))
+    end_ms = max(start_ms + 150.0, _offset_to_ms(end_pos, right_edge=True))
     start_s = round(max(0.0, min(duration_s - 0.1, speech_lead_s + start_ms / 1000.0)), 3)
     end_s = round(max(start_s + 0.15, min(duration_s, speech_lead_s + end_ms / 1000.0)), 3)
     return start_s, end_s

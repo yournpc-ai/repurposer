@@ -1,6 +1,7 @@
 import React from "react";
 import {
   Heading,
+  activeFocusStyle,
   appear,
   cardFace,
   itemTime,
@@ -27,6 +28,7 @@ interface BentoProps extends StudioStyle {
 export function BentoFeaturesBlock({ props, frame }: { props: BentoProps; frame: Frame }): React.JSX.Element {
   const c = palette(props, frame.compositionStyle);
   const three = props.cards.length === 3;
+  const times = props.cards.map((item, i) => itemTime(item.reveal_at_s, i, props.cards.length, frame.durSec));
   return (
     <Stage style={props} frame={frame}>
       <Heading eyebrow={props.eyebrow} title={props.title} colors={c} />
@@ -48,7 +50,7 @@ export function BentoFeaturesBlock({ props, frame }: { props: BentoProps; frame:
               key={i}
               style={{
                 ...cardFace(c, { selected }),
-                ...appear(frame.tSec, itemTime(card.reveal_at_s, i, props.cards.length, frame.durSec)),
+                ...appear(frame.tSec, times[i], activeFocusStyle(frame.tSec, times, i, frame.durSec)),
                 gridRow: lead ? "span 2" : undefined,
                 padding: lead ? 48 : "24px 38px",
                 display: "flex",

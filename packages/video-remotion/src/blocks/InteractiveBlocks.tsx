@@ -3,7 +3,7 @@ import { Img } from "remotion";
 import type { InteractiveBlockProps } from "@repurposer/video-spec";
 import { DeviceFrame } from "../engine/DeviceFrame";
 import { VirtualCursor } from "../engine/cursor";
-import { clamp01, cueProgress, easeInOutCubic, easeOutCubic, springOut } from "../engine/math";
+import { cueProgress, easeInOutCubic, easeOutCubic, springOut } from "../engine/math";
 import { ImageAdapter, palette, Stage, type Frame, type StudioStyle, typeSize } from "./Stage";
 
 type Block<K extends keyof InteractiveBlockProps> = { props: InteractiveBlockProps[K]; frame: Frame };
@@ -17,7 +17,7 @@ function studioStyle(props: StudioStyle, frame: Frame, darkBackdrop: "warm_obsid
 export function CursorMagneticClick({ props, frame }: Block<"cursor_magnetic_click">) {
   const style = studioStyle(props, frame, "warm_obsidian");
   const c = palette(style, frame.compositionStyle);
-  const click = frame.durSec * 0.48;
+  const click = props.click_at_s ?? frame.durSec * 0.48;
   const elapsed = frame.tSec - click;
   const attract = easeInOutCubic(cueProgress(frame.tSec, click - 0.48, 0.45));
   const release = springOut(elapsed, 13, 0.76);
@@ -88,7 +88,7 @@ export function ZoomFollowsClick({ props, frame }: Block<"zoom_follows_click">) 
       image.style.width = `${Math.min(screenWidth, screenHeight * image.naturalWidth / image.naturalHeight)}px`;
     }
   }, []);
-  const click = frame.durSec * (props.click_at_ratio ?? 0.4);
+  const click = props.click_at_s ?? frame.durSec * (props.click_at_ratio ?? 0.4);
   const focus = springOut(frame.tSec - click, 9, 0.85);
   const zoom = props.zoom_scale ?? 1.85;
   const scale = 1 + (zoom - 1) * focus;
@@ -119,11 +119,14 @@ export function BrowserUrlLoad({ props, frame }: Block<"browser_url_load">) {
   const style = studioStyle(props, frame, "studio_spotlight");
   const c = palette(style, frame.compositionStyle);
   const Image = React.useContext(ImageAdapter);
-  const time = clamp01(frame.tSec / frame.durSec);
+  const { tSec, durSec } = frame;
+  const typeAt = props.type_at_s ?? Math.min(0.055 * durSec, props.load_at_s ?? durSec);
+  const loadAt = props.load_at_s ?? typeAt + 0.36 * durSec;
+  const revealAt = props.load_at_s ?? loadAt + 0.025 * durSec;
   const chars = Array.from(props.url_text);
-  const typed = Math.floor(chars.length * cueProgress(time, 0.055, 0.36));
-  const load = easeInOutCubic(cueProgress(time, 0.415, 0.3));
-  const reveal = easeOutCubic(cueProgress(time, 0.44, 0.37));
+  const typed = Math.floor(chars.length * cueProgress(tSec, typeAt, loadAt - typeAt));
+  const load = easeInOutCubic(cueProgress(tSec, loadAt, 0.3 * durSec));
+  const reveal = easeOutCubic(cueProgress(tSec, revealAt, 0.37 * durSec));
   const dark = c.tokens.isDark;
   return <ScreenStage frame={frame} style={style} headline={props.headline}>
     <div style={{ height: "100%", display: "flex", flexDirection: "column", background: dark ? "#1b1d21" : "#dedbd6" }}>
@@ -140,7 +143,7 @@ export function BrowserUrlLoad({ props, frame }: Block<"browser_url_load">) {
           fontSize: typeSize(props.url_text, 24, 880), whiteSpace: "pre" }}>
           {chars.slice(0, typed).join("")}
           <i style={{ height: "1em", width: 2, marginLeft: 2, background: "currentColor",
-            opacity: time < 0.49 && Math.floor(frame.tSec * 3.5) % 2 === 0 ? 1 : 0 }} />
+            opacity: tSec < loadAt + 0.075 * durSec && Math.floor(frame.tSec * 3.5) % 2 === 0 ? 1 : 0 }} />
         </div>
       </div>
       <div style={{ position: "relative", flex: 1, overflow: "hidden", background: dark ? "#25272a" : "#eae8e3" }}>
@@ -150,7 +153,7 @@ export function BrowserUrlLoad({ props, frame }: Block<"browser_url_load">) {
           background: "#18191ce8", border: "1px solid #ffffff45", color: "#faf7f1",
           fontSize: 25, borderRadius: 45, padding: "9px 22px" }}>{props.badge}</div>}
         <div style={{ position: "absolute", top: 0, left: 0, height: 4, width: `${100 * load}%`,
-          background: c.accent, opacity: 1 - cueProgress(time, 0.73, 0.13), boxShadow: `0 0 12px ${c.accent}` }} />
+          background: c.accent, opacity: 1 - cueProgress(tSec, loadAt + 0.315 * durSec, 0.13 * durSec), boxShadow: `0 0 12px ${c.accent}` }} />
       </div>
     </div>
   </ScreenStage>;

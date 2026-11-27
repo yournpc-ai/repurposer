@@ -144,27 +144,27 @@ VoiceId = Literal[
 MOTION_BLOCK_CATALOG: dict[str, dict[str, Any]] = {
     "cursor_magnetic_click": {
         "id": "cursor_magnetic_click", "version": 1, "domain": "product", "category": "cursors",
-        "name": "Magnetic Click", "desc": "A capsule follows the approaching pointer, compresses and lights on contact.",
+        "name": "Magnetic Click", "desc": "A capsule follows the approaching pointer, compresses and lights on contact. Anchor contact to narration with cue_phrase.",
         "use_for": ["Confirm a single invitation to act."], "avoid": ["Multiple competing actions."],
         "supports_alpha": True, "suggested_duration_s": [2, 5],
         "required_slots": ["headline", "cta_label"],
-        "optional_slots": ["eyebrow", "subcopy", "accent_color", "theme", "backdrop_style", "show_backdrop"],
+        "optional_slots": ["cue_phrase", "click_at_s", "eyebrow", "subcopy", "accent_color", "theme", "backdrop_style", "show_backdrop"],
     },
     "zoom_follows_click": {
         "id": "zoom_follows_click", "version": 1, "domain": "product", "category": "cursors",
-        "name": "Zoom Follows Click", "desc": "Click normalized screenshot coordinates and push the lens toward the selected detail.",
+        "name": "Zoom Follows Click", "desc": "Click normalized screenshot coordinates and push the lens toward the selected detail. Anchor the click with cue_phrase.",
         "use_for": ["Show precisely where a feature lives."], "avoid": ["Uncaptured controls or a sequence of clicks."],
         "supports_alpha": True, "suggested_duration_s": [2, 5],
         "required_slots": ["image_resource"],
-        "optional_slots": ["headline", "callout_label", "zoom_scale", "click_at_ratio", "theme", "backdrop_style", "show_backdrop"],
+        "optional_slots": ["headline", "callout_label", "zoom_scale", "cue_phrase", "click_at_s", "click_at_ratio", "theme", "backdrop_style", "show_backdrop"],
     },
     "browser_url_load": {
         "id": "browser_url_load", "version": 1, "domain": "product", "category": "interfaces",
-        "name": "Browser URL Load", "desc": "Type the supplied address, trace loading progress and resolve a pinned product capture.",
+        "name": "Browser URL Load", "desc": "Type the supplied address, trace loading progress and resolve a pinned product capture. Anchor typing with type_cue_phrase and loading with load_cue_phrase (or cue_phrase).",
         "use_for": ["Introduce a site before demonstrating its workflow."], "avoid": ["Live navigation or an unverified destination."],
         "supports_alpha": True, "suggested_duration_s": [2, 5],
         "required_slots": ["image_resource"],
-        "optional_slots": ["headline", "badge", "theme", "backdrop_style", "show_backdrop"],
+        "optional_slots": ["type_cue_phrase", "load_cue_phrase", "cue_phrase", "type_at_s", "load_at_s", "headline", "badge", "theme", "backdrop_style", "show_backdrop"],
     },
     "chat_demo": {
         "id": "chat_demo", "version": 1, "domain": "product", "category": "interfaces",
@@ -179,12 +179,12 @@ MOTION_BLOCK_CATALOG: dict[str, dict[str, Any]] = {
     "kinetic_beat": {
         "id": "kinetic_beat", "version": 1, "domain": "typography", "category": "rhythm",
         "name": "Kinetic Beat",
-        "desc": "impact_cut needs headline; typewriter_swap and slot_flip need 2–6 words; inline_badge_split needs left_text and right_text; marquee_wall needs 3–12 items with text.",
+        "desc": "impact_cut needs headline; typewriter_swap and slot_flip need 2–6 words aligned to narration in order (optional word_cues for alternate spoken copy); inline_badge_split needs left_text and right_text; marquee_wall needs 3–12 items with text.",
         "use_for": ["Beat-led launch typography and single-act polarity changes."],
         "avoid": ["Paragraphs or extended narration."],
         "supports_alpha": False, "suggested_duration_s": [0.4, 1.6],
         "required_slots": ["mode"],
-        "optional_slots": ["headline", "highlight_phrase", "prefix", "words", "left_text", "right_text", "badge_text", "badge_icon", "items", "rows", "scale_emphasis", "theme", "backdrop_style", "accent_color", "show_backdrop", "entrance_duration_s"],
+        "optional_slots": ["headline", "highlight_phrase", "prefix", "words", "word_cues", "word_reveals_s", "left_text", "right_text", "badge_text", "badge_icon", "items", "rows", "scale_emphasis", "theme", "backdrop_style", "accent_color", "show_backdrop", "entrance_duration_s"],
     },
     "ui_montage": {
         "id": "ui_montage", "version": 1, "domain": "product", "category": "interfaces",
@@ -297,6 +297,8 @@ MOTION_BLOCK_CATALOG: dict[str, dict[str, Any]] = {
         "required_slots": ["headline"],
         "optional_slots": [
             "eyebrow",
+            "cue_phrase",
+            "word_reveals_s",
             "highlight_at_s",
             "highlight_phrase",
             "subheadline",
@@ -341,7 +343,7 @@ MOTION_BLOCK_CATALOG: dict[str, dict[str, Any]] = {
         "domain": "product",
         "category": "interfaces",
         "name": "Product Showcase",
-        "desc": "Precision light/dark studio frame presenting a captured web UI screenshot. camera_motion must be subtle_push|settle_tilt|drift_focus|static; camera_preset must be flat|tilt_left|tilt_right|dolly_zoom|scroll_reveal. Bind optional cursor {x,y,cue_phrase?,click_at_s?} and up to 4 non-overlapping callout_steps [{cue_phrase?,start_s?,end_s?,label,x,y,width,height}] using normalized 0..1 coordinates (or element_id from capture). When narrated, pass cue_phrase (spoken words from this act's narration) so spotlights and clicks align to exact speech word timestamps.",
+        "desc": "Precision light/dark studio frame presenting a captured web UI screenshot. camera_motion must be subtle_push|settle_tilt|drift_focus|static; camera_preset must be flat|tilt_left|tilt_right|dolly_zoom|scroll_reveal. Bind optional cursor {x,y,cue_phrase?,click_at_s?} and up to 4 non-overlapping callout_steps [{cue_phrase?,start_s?,end_s?,label,x,y,width,height,zoom_scale?}] using normalized 0..1 coordinates (or element_id from capture). Set step zoom_scale (1–2.2) to pan and zoom between details on one capture. When narrated, pass cue_phrase (spoken words from this act's narration) so spotlights and clicks align to exact speech word timestamps.",
         "use_for": [
             "real website view reveal from capture_web",
             "zoomed UI workflow showcase with callout spotlight on a key feature region",

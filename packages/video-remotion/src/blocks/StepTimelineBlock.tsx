@@ -1,6 +1,6 @@
 import React from "react";
 import { cueProgress, easeInOutCubic } from "../engine/math";
-import { appear, Heading, itemTime, palette, Stage, typeSize, type Frame, type StudioStyle } from "./Stage";
+import { activeFocusStyle, appear, Heading, itemTime, palette, Stage, typeSize, type Frame, type StudioStyle } from "./Stage";
 
 interface Step {
   number?: number | string;
@@ -47,7 +47,7 @@ export function StepTimelineBlock({
           const progress = easeInOutCubic(cueProgress(frame.tSec, times[i], 0.55));
           const badge = String(step.number ?? String(i + 1).padStart(2, "0"));
           return (
-            <div key={i} style={{ width, position: "relative", boxSizing: "border-box", paddingRight: 45 }}>
+            <div key={i} style={{ ...activeFocusStyle(frame.tSec, times, i, frame.durSec), width, position: "relative", boxSizing: "border-box", paddingRight: 45 }}>
               {i > 0 && (
                 <i
                   style={{

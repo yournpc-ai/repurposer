@@ -133,6 +133,31 @@ test("the serialized native block library accepts all twenty IDs and validates i
   parse("browser_url_load", [image], { url_text: "example.com" });
   assert.throws(() => parse("browser_url_load", [], { url_text: "example.com" }));
   assert.throws(() => parse("browser_url_load", [image], { url_text: "" }));
+  const step = { x: 0, y: 0, width: 0.3, height: 0.3, label: "View", start_s: 0, end_s: 1 };
+  parse("product_showcase", [image], { callout_steps: [{ ...step, zoom_scale: 2.2 }] });
+  for (const patch of [{ zoom_scale: 2.21 }, { zoom_scale: 0.99 }, { cue_phrase: "Open" }]) {
+    assert.throws(() => parse("product_showcase", [image], { callout_steps: [{ ...step, ...patch }] }));
+  }
+  for (const [id, props, key] of [
+    ["browser_url_load", { url_text: "example.org" }, "type_at_s"],
+    ["browser_url_load", { url_text: "example.org" }, "load_at_s"],
+    ["cursor_magnetic_click", { headline: "Go", cta_label: "Open" }, "click_at_s"],
+    ["zoom_follows_click", target, "click_at_s"],
+  ] as const) {
+    parse(id, [image], { ...props, [key]: 0 });
+    for (const bad of [-0.01, Infinity, "1"]) assert.throws(() => parse(id, [image], { ...props, [key]: bad }));
+    assert.throws(() => parse(id, [image], { ...props, cue_phrase: "Open" }));
+  }
+  for (const [id, props] of [
+    ["kinetic_beat", { mode: "slot_flip", words: ["A", "B"] }],
+    ["statement_hook", { headline: "One two" }],
+  ] as const) {
+    parse(id, [], { ...props, word_reveals_s: [0, 0] });
+    for (const times of [[1], [1, 0], [-1, 0], [0, Infinity]]) {
+      assert.throws(() => parse(id, [], { ...props, word_reveals_s: times }));
+    }
+    assert.throws(() => parse(id, [], { ...props, word_cues: ["A", "B"] }));
+  }
   assert.throws(() => parse("unknown"));
   assert.throws(() => parse("ui_montage", []));
   assert.throws(() => parse("device_mockup", []));

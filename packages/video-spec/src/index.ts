@@ -1,6 +1,7 @@
 // Public contract surface of the video-spec family. This package never
 // imports React/Remotion — renderer adapters consume it from the outside.
 export {
+  tokenizeLine,
   transitionKinds,
   motionBlockIds,
   stylePresetIds,
