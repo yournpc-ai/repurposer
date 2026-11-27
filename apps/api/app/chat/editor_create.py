@@ -486,7 +486,10 @@ async def create_video(db, turn, args: CreateVideoArgs):
                     + sum(seconds_to_ticks(mb.duration_seconds) for mb in args.motion_blocks)
                 )
                 if abs(actual_ticks - ticks) > 3000:
-                    raise ValueError("The ordered shots do not match the user's fixed total duration.")
+                    raise ValueError(
+                        f"The ordered shots do not match the user's fixed total duration "
+                        f"(got {actual_ticks / 30000:g}s, expected {ticks / 30000:g}s)."
+                    )
         for field in ("aspect", "background", "fps"):
             if required.get(field) is not None and getattr(args, field) != required[field]:
                 raise ValueError(f"The requested {field} does not match the user's fixed value.")

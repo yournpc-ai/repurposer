@@ -464,3 +464,26 @@ def test_search_voices_uses_voices_activity_key():
     tools = {t.name: t for t in perception_chat_tools("search_voices", "search_music")}
     assert tools["search_voices"].presentation.active_key == "chat.inspecting.voices"
     assert tools["search_music"].presentation.active_key == "chat.inspecting.music"
+
+
+def test_coerce_motion_block_props_covers_zoom_follows_click_and_int_fields():
+    from app.editing.revisions import coerce_motion_block_props
+    from app.editing.schemas import validate_motion_block_props
+
+    coerced = coerce_motion_block_props(
+        "zoom_follows_click",
+        {
+            "theme": "dark",
+            "headline": "Every figure keeps its evidence",
+            "target_x": "0.84",
+            "target_y": "0.45",
+            "zoom_scale": "1.7",
+            "click_at_ratio": "0.4",
+            "show_backdrop": "true",
+        },
+    )
+    validated = validate_motion_block_props("zoom_follows_click", coerced)
+    assert validated.target_x == 0.84
+    assert validated.target_y == 0.45
+    assert validated.click_at_ratio == 0.4
+    assert validated.show_backdrop is True

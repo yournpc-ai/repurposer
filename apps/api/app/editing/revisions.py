@@ -509,13 +509,24 @@ _MOTION_FLOAT_KEYS = frozenset({
     "zoom_scale",
     "focus_x",
     "focus_y",
+    "target_x",
+    "target_y",
+    "click_at_ratio",
     "entrance_duration_s",
     "exit_duration_s",
     "stagger_s",
     "scroll_from_y",
     "scroll_to_y",
 })
-_MOTION_INT_KEYS = frozenset({"active_step", "highlight_index", "columns", "rows"})
+_MOTION_INT_KEYS = frozenset({
+    "active_step",
+    "highlight_index",
+    "highlight_line",
+    "points",
+    "resource_index",
+    "columns",
+    "rows",
+})
 _MOTION_STR_KEYS = frozenset({"step_label", "badge", "tag", "number"})
 
 
