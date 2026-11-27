@@ -487,3 +487,23 @@ def test_coerce_motion_block_props_covers_zoom_follows_click_and_int_fields():
     assert validated.target_y == 0.45
     assert validated.click_at_ratio == 0.4
     assert validated.show_backdrop is True
+
+
+def test_project_editor_reply_preserves_workbench_deep_links():
+    from app.chat.editor import project_editor_reply
+
+    out_id = "0dc71ce0-08e1-5b89-bdff-6b5494588de0"
+    ver_id = "452cc303-db44-4a76-bf4b-0df7b46ff55f"
+    labels = {
+        out_id: ("这份素材", "this media"),
+        ver_id: ("第 32 版", "version 32"),
+    }
+    raw = (
+        f"[打开成片](#workbench:output/{out_id}) ｜ "
+        f"[分镜脚本](#workbench:storyboard/{ver_id})\n"
+        f"已基于 {ver_id} 导出 {out_id}。"
+    )
+    projected = project_editor_reply(raw, labels, "导出成片")
+    assert f"(#workbench:output/{out_id})" in projected
+    assert f"(#workbench:storyboard/{ver_id})" in projected
+    assert "已基于 第 32 版 导出 这份素材。" in projected

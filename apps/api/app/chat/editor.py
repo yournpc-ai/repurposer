@@ -1724,12 +1724,16 @@ def project_editor_reply(text, labels, user_text):
     if not text or not labels:
         return text
     zh = any("\u4e00" <= c <= "\u9fff" for c in user_text)
-    pattern = (
-        r"(?<![\w-])`?("
-        + "|".join(re.escape(key) for key in sorted(labels, key=len, reverse=True))
-        + r")`?(?![\w-])"
+    keys = "|".join(re.escape(key) for key in sorted(labels, key=len, reverse=True))
+    # Preserve internal #workbench:<kind>/<id> deep-link targets untouched while
+    # still replacing raw IDs in user-visible prose.
+    pattern = rf"(#workbench:[^\s)\]]+)|(?<![\w-])`?({keys})`?(?![\w-])"
+    return re.sub(
+        pattern,
+        lambda m: m[1] if m[1] is not None else labels[m[2]][0 if zh else 1],
+        text,
+        flags=re.ASCII,
     )
-    return re.sub(pattern, lambda m: labels[m[1]][0 if zh else 1], text, flags=re.ASCII)
 
 
 def _remember_labels(turn, facts, version_id, digest, number, composition_id=None):
