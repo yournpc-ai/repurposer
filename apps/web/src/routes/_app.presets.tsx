@@ -16,6 +16,7 @@ import { SegmentedControl } from "@/components/ui/segmented-control-clean"
 import { Select } from "@/components/ui/select-clean"
 import { Spinner } from "@/components/ui/spinner-clean"
 import { TextField } from "@/components/ui/text-field-clean"
+import { useAuth } from "@/lib/auth-context"
 
 const VisualPresetGalleryPanel = lazy(
   () => import("@/components/workbench/VisualPresetGalleryPanel"),
@@ -39,6 +40,7 @@ export const Route = createFileRoute("/_app/presets")({
 
 function PresetsPage() {
   const { t } = useTranslation()
+  const { user } = useAuth()
   const navigate = useNavigate()
   const [section, setSection] = useState<PresetSection>("block")
   const [view, setView] = useState<PresetView>("list")
@@ -216,7 +218,7 @@ function PresetsPage() {
               />
             ) : (
               <VisualPresetGalleryPanel
-                key={section}
+                key={`${section}:${user?.id ?? "guest"}`}
                 kind={section}
                 view={view}
                 hideToolbar

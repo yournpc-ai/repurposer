@@ -452,14 +452,17 @@ async def _ready_web_pages(db, *, project_id, owner_id, asset_ids=None, urls=Non
     query = select(Asset).where(Asset.user_id == owner_id, Asset.type == AssetType.WEB_PAGE)
     query = query.where(Asset.id.in_(asset_ids)) if asset_ids else query.where(Asset.project_id == project_id)
     rows = list((await db.scalars(query.execution_options(populate_existing=True))).all())
+    from app.chat.readiness import canonical_url
+
+    url_keys = {canonical_url(u) for u in urls} if urls is not None else None
     parent_ids = {
         a.id for a in rows
-        if urls is None or (a.meta or {}).get("capture_url") in urls
+        if url_keys is None or canonical_url(str((a.meta or {}).get("capture_url") or "")) in url_keys
     }
     def selected(asset):
         return (
-            urls is None
-            or (asset.meta or {}).get("capture_url") in urls
+            url_keys is None
+            or canonical_url(str((asset.meta or {}).get("capture_url") or "")) in url_keys
             or (asset.meta or {}).get("discovered_from") in {str(parent_id) for parent_id in parent_ids}
         ) and (asset_ids or not (asset.meta or {}).get("capture_plan"))
     rows = [a for a in rows if selected(a)]

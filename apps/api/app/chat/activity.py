@@ -959,18 +959,17 @@ class ActivityProjector:
                 failed = self._fail_repair()
                 if failed is not None:
                     frames.append(failed)
-        if self._open_call is not None:
-            _name, activity_id = self._open_call
-            if activity_id is not None and activity_id in self._active:
-                kind, key, _started = self._active[activity_id]
-                frames.append(
-                    self._settle(
-                        activity_id,
-                        status,
-                        self._completion_keys.get(activity_id) or self._done_key(kind, key) if status == STATUS_COMPLETED else key,
-                    )
+        for activity_id, (kind, key, _started) in list(self._active.items()):
+            frames.append(
+                self._settle(
+                    activity_id,
+                    status,
+                    self._completion_keys.get(activity_id) or self._done_key(kind, key)
+                    if status == STATUS_COMPLETED
+                    else key,
                 )
-            self._open_call = None
+            )
+        self._open_call = None
         return frames
 
     def open_activity(self) -> tuple[str, str, str | None] | None:

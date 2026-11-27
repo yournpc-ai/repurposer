@@ -616,3 +616,21 @@ async def test_sse_pump_detaches_without_cancelling_turn_and_explicit_stop_cance
     assert _cancel_active_turn_task(stop_turn_id) is True
     with pytest.raises(asyncio.CancelledError):
         await stop_task
+
+
+def test_projector_sweep_settles_all_parallel_active_activities():
+    from app.agents.tool_loop import ReadExecuting
+    from app.chat.activity import ActivityProjector
+
+    projector = ActivityProjector(_video_material_tools())
+    projector.name_known("analyze_brand")
+    f1 = projector.feed_event(ReadExecuting(tool_name="analyze_brand", params=object(), call_id="c1"))
+    # Simulate an additional still-active activity when _open_call has moved on.
+    extra_id, _ = projector._start("read", "chat.activity.understanding")
+    assert f1 and extra_id in projector._active
+    assert projector.has_active()
+
+    swept = projector.sweep("failed")
+    assert len(swept) == 2
+    assert all(frame.status == "failed" for frame in swept)
+    assert not projector.has_active()

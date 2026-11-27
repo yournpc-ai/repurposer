@@ -1004,6 +1004,8 @@ async def _turn_stream(user_id: UUID, data: ChatRequest, ui_language: str):
                     run_id=run_id,
                 )
             await _sweep_activities(queue, projector, "completed", mirror)
+            if cancel_open is not None:
+                await cancel_open()
             if turn_conversation_id is not None and turn_user_message_id is not None:
                 await _persist_activity_forensics(
                     turn_conversation_id, str(turn_user_message_id), projector
@@ -1235,6 +1237,8 @@ async def _answer_stream(
                     run_id=run_id,
                 )
             await _sweep_activities(queue, projector, "completed", mirror)
+            if cancel_open is not None:
+                await cancel_open()
             await _persist_activity_forensics(
                 UUID(str(conversation_id)), str(message_id), projector
             )
@@ -1506,6 +1510,8 @@ async def _resume_stream(
                 if assistant_message is not None:
                     await db.refresh(assistant_message)
             await _sweep_activities(queue, projector, "completed", mirror)
+            if cancel_open is not None:
+                await cancel_open()
             await _persist_activity_forensics(conversation_id, str(turn_user_message_id), projector)
             await _persist_candidates_log(
                 conversation_id, str(turn_user_message_id), candidate_events, turn_user_message_id

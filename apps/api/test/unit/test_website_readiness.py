@@ -648,3 +648,31 @@ def test_website_round_excludes_unrelated_project_resources():
     assert "unrelated.example" not in assembly.context
     assert not assembly.include_project_context
 
+
+def test_bare_domain_matches_www_captured_snapshot_for_readiness_and_creation():
+    from app.chat.readiness import canonical_url
+
+    assert canonical_url("https://oxvalue.ai") == canonical_url("https://www.oxvalue.ai/")
+    assert canonical_url("https://agent.oxvalue.ai") != canonical_url("https://oxvalue.ai")
+
+    bare_url = URL.replace("https://www.", "https://")
+    www_url = URL if "://www." in URL else URL.replace("https://", "https://www.")
+    www_asset = {**asset(), "url": www_url, "meta": {**asset()["meta"], "capture_url": www_url}}
+    www_snap = {**snapshot(), "canonical_url": www_url}
+
+    readiness = compute_source_readiness(
+        user_text=f"给 {bare_url} 做一只宣传片",
+        assets=[www_asset],
+        snapshots=[www_snap],
+    )
+    assert readiness.text_ready is True
+    assert readiness.required_views_ready is True
+    assert readiness.capture_ready is True
+
+    assembly = round_assembly(
+        f"给 {bare_url} 做一只宣传片",
+        assets=[www_asset],
+        snapshots=[www_snap],
+    )
+    assert "create_video" in {tool.name for tool in assembly.tools}
+

@@ -52,8 +52,11 @@ def canonical_url(url: str) -> str:
         parts = urlsplit(url.strip())
     except ValueError:
         return url.strip().rstrip("/").lower()
+    host = parts.netloc.lower()
+    if host.startswith("www.") and host.count(".") >= 2:
+        host = host[4:]
     path = parts.path.rstrip("/") or "/"
-    return urlunsplit((parts.scheme.lower(), parts.netloc.lower(), path, parts.query, ""))
+    return urlunsplit((parts.scheme.lower(), host, path, parts.query, ""))
 
 
 def infer_task_kind(user_text: str) -> str:
