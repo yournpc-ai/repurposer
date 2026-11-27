@@ -1228,7 +1228,11 @@ class ToolLoopAgent:
                         detail=str(e)[:200],
                         duration_ms=int((time.monotonic() - iteration_started) * 1000),
                     ),
-                    feedback=str(e),
+                    feedback=(
+                        f"{e}\n"
+                        "Use strict compact JSON for all tool arguments: represent lists as JSON arrays [...] "
+                        "(never XML/nested {\"item\": ...}), keep descriptions short, and escape any quotes."
+                    ),
                     iteration=iteration,
                 )
                 if stopped is not None:
