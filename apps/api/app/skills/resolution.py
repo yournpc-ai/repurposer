@@ -22,6 +22,7 @@ from app.skills.store import get_skill_version
 # Only packs with a real create_video / current-Editor consumer are selectable video Skills.
 # The broader instruction-pack registry also contains writers and other crafts.
 _BUILTIN_VIDEO_CAPABILITIES = {
+    "brand-promo": ("native_motion_graphics", "website_capture", "timed_captions", "text_style_presets"),
     "kinetic-launch": ("native_motion_graphics", "beat_led_typography", "ui_montage", "website_capture", "text_style_presets"),
     "promo-video": (
         "website_capture",
@@ -39,6 +40,10 @@ _BUILTIN_VIDEO_CAPABILITIES = {
     "knowledge-explainer": ("narration_alignment", "drawing_v1", "remotion_project"),
 }
 
+# Managed external CLI packs (like Shotcraft promo-video) are only activated on
+# explicit user selection via `/promo-video`, never auto-discovered in free chat.
+_EXPLICIT_ONLY_BUILTIN_SKILLS = frozenset({"promo-video"})
+
 class SkillResolutionError(ValueError):
     """An explicit reference is unknown, foreign, stale or undeclared."""
 
@@ -46,9 +51,10 @@ class SkillResolutionError(ValueError):
 def get_builtin_skill_option(skill_id: str, *, version: str | None = None) -> SkillOption:
     from app.config import settings
     from app.skills.package_reader import SkillPackageError, open_builtin_skill_package
+    from app.tools.video.components import component_bake_supported
 
     capabilities = _BUILTIN_VIDEO_CAPABILITIES.get(skill_id)
-    if capabilities and not settings.component_bake_enabled:
+    if capabilities and not component_bake_supported():
         capabilities = tuple(item for item in capabilities if item != "remotion_project")
     pack = SKILL_REGISTRY.get(skill_id)
     active_version = settings.managed_skill_versions.get(skill_id)
@@ -91,13 +97,14 @@ def _blueprint_summary_for_version(
 
 
 def _external_option(skill: UserSkill, version: SkillVersion) -> SkillOption:
-    from app.config import settings
+    from app.tools.video.components import component_bake_supported
 
+    bake_ok = component_bake_supported()
     capabilities = [
         str(item)
         for item in ((version.capability_report or {}).get("supported") or [])
         if isinstance(item, str) and item
-        and (settings.component_bake_enabled or item not in {"remotion_project", "runtime:remotion-source"})
+        and (bake_ok or item not in {"remotion_project", "runtime:remotion-source"})
     ]
     resolved_caps = capabilities or ["progressive_skill_package"]
     return SkillOption(
@@ -163,7 +170,8 @@ async def list_available_skills(
     options = [
         get_builtin_skill_option(skill_id)
         for skill_id in sorted(_BUILTIN_VIDEO_CAPABILITIES)
-        if skill_id in SKILL_REGISTRY or skill_id in settings.managed_skill_versions
+        if (skill_id in SKILL_REGISTRY or skill_id in settings.managed_skill_versions)
+        and not (methods_only and skill_id in _EXPLICIT_ONLY_BUILTIN_SKILLS)
     ]
     if methods_only:
         rows = (await db.execute(_latest_methods(owner_id).limit(16 - len(options)))).all()

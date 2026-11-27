@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next"
 
 import { useOptionalWorkbench } from "@/components/workbench/WorkbenchContext"
 import { apiFetch } from "@/lib/api"
-import { formatDuration } from "@/lib/utils"
+import { formatTimestamp } from "@/lib/utils"
 import type { VideoStoryboardBlock, VideoScrubTarget } from "../timeline/types"
 import { presentationAckReady } from "../timeline/reveal"
 import { CompositionPreview, type VideoPreviewRead } from "./preview/CompositionPreview"
@@ -204,7 +204,7 @@ export function StoryboardCard({
     const metaParts = [
       versionNumber != null ? `v${versionNumber}` : null,
       scrubRange
-        ? `${formatDuration(scrubRange.start)}–${formatDuration(scrubRange.end)}`
+        ? `${formatTimestamp(scrubRange.start)}–${formatTimestamp(scrubRange.end)}`
         : verMeta?.duration_seconds
           ? `${Math.round(verMeta.duration_seconds * 10) / 10}s`
           : null,

@@ -22,6 +22,16 @@ from app.config import settings
 logger = structlog.get_logger()
 
 _TTS_MODEL = "speech-2.6-hd"
+VOICE_EMOTIONS = frozenset({
+    "happy",
+    "sad",
+    "angry",
+    "fearful",
+    "disgusted",
+    "surprised",
+    "calm",
+    "fluent",
+})
 
 
 def tts_model() -> str:
@@ -261,18 +271,25 @@ def _synthesize_t2a(
     speed: float,
     *,
     subtitles: bool,
+    emotion: str | None = None,
 ) -> T2AResult:
     if not settings.minimax_api_key:
         raise VoiceError("MINIMAX_API_KEY not configured")
     if not 0.5 <= speed <= 2.0:
         raise VoiceError(f"T2A speed {speed} is outside the provider's 0.5–2.0 range")
+    voice_setting: dict = {"voice_id": voice_id, "speed": speed, "vol": 1, "pitch": 0}
+    if emotion is not None:
+        norm_emotion = emotion.strip().lower()
+        if norm_emotion not in VOICE_EMOTIONS:
+            raise VoiceError(f"T2A emotion {emotion!r} is not supported")
+        voice_setting["emotion"] = norm_emotion
     payload = {
         "model": _TTS_MODEL,
         "text": text,
         "stream": False,
         "language_boost": _LANG_BOOST.get(language, "auto"),
         "output_format": "hex",
-        "voice_setting": {"voice_id": voice_id, "speed": speed, "vol": 1, "pitch": 0},
+        "voice_setting": voice_setting,
         "audio_setting": {
             "sample_rate": 32000,
             "bitrate": 128000,
@@ -323,15 +340,22 @@ def synthesize(text: str, voice_id: str, language: str = "en", speed: float = 1.
 
 
 def synthesize_detailed(
-    text: str, voice_id: str, language: str = "en", speed: float = 1.0
+    text: str,
+    voice_id: str,
+    language: str = "en",
+    speed: float = 1.0,
+    *,
+    emotion: str | None = None,
 ) -> T2AResult:
     """One narrated synthesis with sentence-timing metadata, never truncated."""
     if not text or len(text) > 9000:
         raise VoiceError("T2A narration takes 1–9000 characters without truncation")
-    return _synthesize_t2a(text, voice_id, language, speed, subtitles=True)
+    return _synthesize_t2a(text, voice_id, language, speed, subtitles=True, emotion=emotion)
 
 
 def _parse_subtitle_cues(payload: object, *, source_text: str) -> list[dict]:
+    from app.editing.caption_timing import strip_pause_tags
+
     entries = payload
     if isinstance(payload, dict):
         entries = payload.get("subtitles") or payload.get("results")
@@ -340,9 +364,12 @@ def _parse_subtitle_cues(payload: object, *, source_text: str) -> list[dict]:
             entries = data if isinstance(data, list) else (data or {}).get("subtitles")
     if not isinstance(entries, list) or not entries:
         raise VoiceError("T2A subtitle file has no sentence entries")
+    has_pause_tags = "<#" in source_text
+    clean_source = strip_pause_tags(source_text) if has_pause_tags else source_text
     cues: list[dict] = []
     expected_begin = 0
     previous_time_end = 0.0
+    collected_clean: list[str] = []
     for entry in entries:
         if not isinstance(entry, dict):
             raise VoiceError("T2A subtitle entry is not an object")
@@ -355,24 +382,37 @@ def _parse_subtitle_cues(payload: object, *, source_text: str) -> list[dict]:
             for v in (start, finish)
         ):
             raise VoiceError("T2A subtitle times must be finite millisecond numbers")
-        if begin != expected_begin or end <= begin or end > len(source_text):
-            raise VoiceError("T2A subtitles do not cover the exact narration text contiguously")
-        original = source_text[begin:end]
-        if "".join(str(entry.get("text") or "").split()) != "".join(original.split()):
-            raise VoiceError("T2A subtitle text differs from the reviewed narration")
         if start < 0 or start < previous_time_end or finish <= start:
             raise VoiceError("T2A subtitle times are not ordered and non-overlapping")
+        if not has_pause_tags:
+            if begin != expected_begin or end <= begin or end > len(source_text):
+                raise VoiceError("T2A subtitles do not cover the exact narration text contiguously")
+            original = source_text[begin:end]
+            if "".join(str(entry.get("text") or "").split()) != "".join(original.split()):
+                raise VoiceError("T2A subtitle text differs from the reviewed narration")
+            expected_begin = end
+            cue_text = original
+        else:
+            raw_entry_text = str(entry.get("text") or "")
+            cue_text = strip_pause_tags(raw_entry_text)
+            if not cue_text:
+                previous_time_end = float(finish)
+                continue
+            collected_clean.append(cue_text)
         cues.append({
-            "text": original,
+            "text": cue_text,
             "text_begin": begin,
             "text_end": end,
             "time_begin": float(start),
             "time_end": float(finish),
         })
-        expected_begin = end
         previous_time_end = float(finish)
-    if expected_begin != len(source_text):
-        raise VoiceError("T2A subtitles omit part of the reviewed narration")
+    if not has_pause_tags:
+        if expected_begin != len(source_text):
+            raise VoiceError("T2A subtitles omit part of the reviewed narration")
+    else:
+        if not cues or "".join("".join(collected_clean).split()) != "".join(clean_source.split()):
+            raise VoiceError("T2A subtitle text differs from the reviewed narration")
     return cues
 
 

@@ -9,6 +9,7 @@ from app.editing.caption_timing import (
     chunk_timed_words,
     align_translations_to_phrases,
     build_motion_block_caption_phrases,
+    format_caption_punctuation,
     split_cue_into_timed_phrases,
 )
 
@@ -320,3 +321,35 @@ async def test_insert_captions_slice_the_bound_word_axis_and_keep_local_offsets(
         assert [cue["text"][w["text_start"]:w["text_end"]] for w in timings] == cue["text"].split()
         assert [w["start_s"] for w in timings] == list(range(len(timings)))
         assert [w["end_s"] for w in timings] == [i + 0.5 for i in range(len(timings))]
+
+
+def test_format_caption_punctuation_zh_and_en_broadcast_rules():
+    # Chinese: omit 。，、；： (internal -> single space, trailing stripped), keep ？！《》“”……——·
+    assert (
+        format_caption_punctuation("过去剪一支产品宣传片，你要在时间线上反复对齐音频和画面。")
+        == "过去剪一支产品宣传片 你要在时间线上反复对齐音频和画面"
+    )
+    assert format_caption_punctuation("透明、高效、可验证。") == "透明 高效 可验证"
+    assert (
+        format_caption_punctuation("真的能做到吗？《估值报告》说：可以！")
+        == "真的能做到吗？《估值报告》说 可以！"
+    )
+    assert (
+        format_caption_punctuation("迈克尔·波特——“核心竞争力”……")
+        == "迈克尔·波特——“核心竞争力”……"
+    )
+    assert format_caption_punctuation("每天 10:30 准时更新。") == "每天 10:30 准时更新"
+
+    # English: strip trailing . , ; : while keeping ? ! ... decimals, domains, abbreviations
+    assert format_caption_punctuation("confidence and reviews.") == "confidence and reviews"
+    assert format_caption_punctuation("built to withstand scrutiny.") == "built to withstand scrutiny"
+    assert format_caption_punctuation("£18.7m on OxValue.AI.") == "£18.7m on OxValue.AI"
+    assert format_caption_punctuation("Wait... is it live?") == "Wait... is it live?"
+    assert format_caption_punctuation("Built for U.S.") == "Built for U.S."
+    assert format_caption_punctuation("Ready now!") == "Ready now!"
+
+    # Bilingual multi-line: formats each line by its own language convention
+    assert (
+        format_caption_punctuation("confidence and reviews.\n信心、背书与复核。")
+        == "confidence and reviews\n信心 背书与复核"
+    )

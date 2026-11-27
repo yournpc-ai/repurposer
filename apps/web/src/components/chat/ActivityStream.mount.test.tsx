@@ -378,3 +378,17 @@ it("drops synthetic repair/exhaustion markers from tool trail and displays norma
   fireEvent.click(header)
   expect(screen.getAllByRole("listitem")).toHaveLength(2)
 })
+
+it("ticks a live elapsed timer on standalone Thinking rows without explicit startedAtMs and renders a circular progress ring on settled steps pills", () => {
+  const { container, rerender } = render(<WorkSegmentRow liveLabel="思考中..." />)
+  expect(container.querySelector(".ui-thinkc__time")?.textContent).toMatch(/^\d+s$/)
+
+  const settledSteps = [
+    { title: "准备素材与配音配乐", status: "done" as const },
+    { title: "编排分镜与字幕", status: "done" as const },
+    { title: "导出审片并交付", status: "done" as const },
+  ]
+  rerender(<WorkSegmentRow trail={trail} elapsedMs={12_000} attachedSteps={settledSteps} />)
+  const pill = screen.getByTestId("steps-toggle-pill")
+  expect(pill.querySelector('[data-testid="steps-progress-ring"]')).toBeTruthy()
+})

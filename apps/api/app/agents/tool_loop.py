@@ -291,26 +291,16 @@ def _compose_speech(parts: list[str]) -> str:
     return "\n\n".join(part.strip() for part in parts if part and part.strip())
 
 
-def _unwrap_item_dialect(value: Any) -> Any:
-    """The provider's array-wrap dialect (iter-2 live-gate evidence,
-    2026-09-23 — probe D 5/12 runs): MiniMax's tool-args serialization
-    intermittently wraps a LIST argument in a single-key object
-    (``{"item": [...]}``), and occasionally wraps a single nested object the
-    same way — at any depth (``plans.0.outputs``, a plans list element).
-    The model cannot see or avoid the dialect, and every params rejection
-    costs a loop iteration (probe D burned 8-iteration budgets on it).
-    Unwrap recursively at the wire so validation judges the CONTENT. Safe
-    because every tool params model is ``extra="forbid"`` and no field is
-    legitimately named ``item`` (grepped) — a sole-"item"-key dict here is
-    always the dialect, never payload. Same repair-economy law as the
-    null/habit tolerances below."""
-    if isinstance(value, dict):
-        if set(value) == {"item"}:
-            return _unwrap_item_dialect(value["item"])
-        return {k: _unwrap_item_dialect(v) for k, v in value.items()}
-    if isinstance(value, list):
-        return [_unwrap_item_dialect(v) for v in value]
-    return value
+def _unwrap_item_dialect(value: Any, schema: dict | None = None) -> Any:
+    """The provider's array-wrap dialect: MiniMax's tool-args serialization
+    intermittently wraps multi-item lists as ``{"item": [...]}``, single-item
+    lists as ``{"item": x}``, and single nested objects as ``{"item": {...}}``.
+    Delegate to the schema-aware unwrapper so single-item arrays restore ``[x]``
+    when the target JSON schema expects an array.
+    """
+    from app.agents.arguments import unwrap_item_dialect
+
+    return unwrap_item_dialect(value, schema)
 
 
 @dataclass(frozen=True)
@@ -1608,7 +1598,7 @@ class ToolLoopAgent:
                     prose = habit_prose
                 is_correction = call.name == CORRECTION_TOOL_NAME
                 if not is_correction:
-                    raw = _unwrap_item_dialect(raw)
+                    raw = _unwrap_item_dialect(raw, parameter_schemas.get(call.name))
                 dispatch_name = call.name
                 dispatch_tool = tool
                 candidate_record = active_repair if is_correction else None

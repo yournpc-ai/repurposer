@@ -42,7 +42,7 @@ from app.editing.store import (
     get_video_version,
 )
 from app.editing.temporal import resolve_temporal_target, timeline_duration
-from app.editing.timing import SOURCE_TIMEBASE
+from app.editing.timing import SOURCE_TIMEBASE, seconds_to_ticks
 from app.models.database import AsyncSessionLocal
 from app.models.schemas import VideoRangeScrubTarget, canonical_json_hash
 from app.tools.music.score import GenerateMusicArgs
@@ -157,7 +157,7 @@ class GenerateSfxArgs(BaseModel):
     )
     gain_db: float | None = Field(
         default=None, ge=-48.0, le=6.0, allow_inf_nan=False,
-        description="Optional clip gain in dB when placing the SFX onto the timeline (defaults to -12.0 dB).",
+        description="Optional clip gain in dB when placing the SFX onto the timeline (defaults to -14.5 dB; prefer -17 to -13 dB under narration).",
     )
 
     sfx_id: str | None = Field(default=None, max_length=84, description="Permanent dsp_ ID from search_sfx_library.")
@@ -612,7 +612,7 @@ EDITOR_TOOLS = (
     ),
     _editor_tool(
         "edit_audio_clip",
-        "Update absolute gain_db (e.g. -24 to -26 dB for BGM under narration, -14 to -10 dB for SFX accents), replace source_id, and/or set smooth fade_in_seconds, fade_out_seconds, or duck_windows (compiled to audio.gain keyframes) on one existing audio clip only, preserving object_id and all other clips. "
+        "Update absolute gain_db (e.g. -24 to -26 dB for BGM under narration, -17 to -13 dB for SFX accents), replace source_id, and/or set smooth fade_in_seconds, fade_out_seconds, or duck_windows (compiled to audio.gain keyframes) on one existing audio clip only, preserving object_id and all other clips. "
         "For relative gain requests (e.g. '-3 dB'), compute once from the pre-turn clip gain_db and check already_saved_this_turn so the delta is never applied twice.",
         EditAudioClipArgs, "editAudioClip",
     ),
@@ -751,10 +751,7 @@ WRITE_TOOLS = {
 
 
 def _ticks(seconds, timebase):
-    ticks = Fraction(str(seconds)) * timebase
-    if ticks.denominator != 1:
-        raise ValueError("The time must fall on an exact composition tick.")
-    return int(ticks)
+    return seconds_to_ticks(seconds, timebase)
 
 
 def _transform_animations(animations):

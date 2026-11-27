@@ -427,6 +427,7 @@ async def test_skills_api_endpoints_owner_isolation_and_fonts(database, installe
         available = await list_available_skills(db, owner_id=owner.id)
         builtin_ids = {o.reference.skill_id for o in available if o.reference.kind == "builtin"}
         assert builtin_ids == {
+            "brand-promo",
             "kinetic-launch",
             "promo-video",
             "talking-head-video",

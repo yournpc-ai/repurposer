@@ -131,6 +131,17 @@ class RunEventBus:
             state.subscribers.discard(q)
 
     @staticmethod
+    def _active_step_title(steps: list[dict[str, Any]] | None) -> str | None:
+        if not steps:
+            return None
+        for step in steps:
+            if isinstance(step, dict) and step.get("status") == "in_progress":
+                title = step.get("title")
+                if isinstance(title, str) and title.strip():
+                    return title.strip()
+        return None
+
+    @staticmethod
     def _inspect_sse_frame(state: RunState, frame: str) -> None:
         """Parse lightweight snapshot fields (focus, steps, seq) from SSE frames."""
         if not frame.startswith("event: "):
@@ -154,6 +165,10 @@ class RunEventBus:
             elif kind == "steps":
                 steps = payload.get("steps")
                 if isinstance(steps, list) and steps:
+                    prev_active = RunEventBus._active_step_title(state.steps)
+                    next_active = RunEventBus._active_step_title(steps)
+                    if prev_active is not None and next_active != prev_active:
+                        state.live_focus = None
                     state.steps = steps
         elif event == "assistant.interim_prose":
             state.live_focus = None

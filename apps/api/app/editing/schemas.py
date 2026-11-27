@@ -1319,6 +1319,18 @@ class NarrationAlignmentRef(BaseModel):
     audio_digest: str = Field(min_length=64, max_length=64)
 
 
+VoiceEmotion = Literal[
+    "happy",
+    "sad",
+    "angry",
+    "fearful",
+    "disgusted",
+    "surprised",
+    "calm",
+    "fluent",
+]
+
+
 class SpeechObject(BaseModel):
     """已审阅的旁白，制作时转换为普通音频。待合成的 Speech 需要 TTS 请求字段。已与源音频对齐的 Speech 使用固定音频来源，不启动新合成。"""
 
@@ -1331,6 +1343,8 @@ class SpeechObject(BaseModel):
     model: Literal["speech-2.6-hd"] | None = "speech-2.6-hd"
     voice_id: str | None = Field(default=None, min_length=1, max_length=255)
     language: str | None = Field(default=None, min_length=2, max_length=16)
+    speed: float = Field(default=1.0, ge=0.5, le=2.0, allow_inf_nan=False, exclude_if=lambda v: v == 1.0)
+    emotion: VoiceEmotion | None = Field(default=None, exclude_if=lambda v: v is None)
     gain_db: float = Field(default=0.0, ge=-60, le=12)
     alignment: NarrationAlignmentRef | None = None
 

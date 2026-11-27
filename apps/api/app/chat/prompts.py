@@ -46,9 +46,9 @@ def _source_creation_facts(resources) -> list[dict]:
 
 
 def _native_creation_tools(tools, *, facts):
-    from app.config import settings
     from app.chat.turn_tools import _explicit_constraint_wire
     from app.models.schemas import ExternalSkillReference
+    from app.tools.video.components import component_bake_supported
     from app.tools.video.design import explicit_design_constraints
 
     resources = list(getattr(facts.get("snapshot"), "resources", ()) or ())
@@ -79,7 +79,7 @@ def _native_creation_tools(tools, *, facts):
             def creation_wire(description, parameters, *, constraints=constraints):
                 parameters = _explicit_constraint_wire(parameters, constraints, include_fixed=True)
                 hidden = set()
-                if not external or not settings.component_bake_enabled:
+                if not external or not component_bake_supported():
                     hidden.add("skill_resource")
                 if fixed_voice or voice_excluded:
                     hidden.update({"narration", "narration_voice_id", "narration_language"})
@@ -101,8 +101,8 @@ def _native_creation_tools(tools, *, facts):
                 parameters = prune_wire_parameters(parameters, set())
                 if not external:
                     description += "未绑定外部 Skill，不使用 skill_resource。"
-                elif not settings.component_bake_enabled:
-                    description += "当前部署不支持受控 Generator；使用现有图片、视频和原生文字。"
+                elif not component_bake_supported():
+                    description += "当前不支持受控 Generator；使用现有图片、视频和原生文字。"
                 return description, parameters
 
             projected.append(replace(tool, wire_view=creation_wire))

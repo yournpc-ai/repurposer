@@ -11,7 +11,13 @@ from app.agents.tool_progress import current_call_id
 from app.editing.catalog import MOTION_BLOCK_CATALOG, MotionBlockId
 from app.editing.edits import AddClip, AddScene, AddTrack, BindSource, SetTransition, apply_ops
 from app.editing.revisions import coerce_motion_block_props, motion_block_ops, text_safe_layout
-from app.editing.caption_timing import build_motion_block_caption_phrases, detect_text_language
+from app.editing.caption_timing import (
+    build_motion_block_caption_phrases,
+    detect_text_language,
+    format_caption_punctuation,
+    resolve_cue_phrase_window_s,
+    strip_pause_tags,
+)
 from app.editing.schemas import (
     AudioObject,
     CaptionDerivation,
@@ -28,6 +34,7 @@ from app.editing.schemas import (
     Transition,
     TransitionKind,
     VersionSettings,
+    VoiceEmotion,
     speech_text_digest,
     validate_motion_block_props,
 )
@@ -40,6 +47,7 @@ from app.editing.text_presets import (
     text_style_from_token,
 )
 from app.editing.timing import (
+    DEFAULT_TIMEBASE,
     output_ticks_to_source_ticks,
     seconds_to_ticks,
     source_ticks_to_output_ticks,
@@ -64,6 +72,7 @@ async def resolve_motion_block_resources(
     props: dict[str, Any],
     resources: list[UUID] | None,
     view_id: str | None = None,
+    validate_props: bool = True,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Resolve owner-scoped image or captured-webpage snapshots for a MotionBlockObject."""
     from app.editing.sources import register_web_view_snapshot
@@ -109,8 +118,143 @@ async def resolve_motion_block_resources(
         })
     # Authoring inputs may refer to captured elements. Check the resolved props
     # before preparing narration or using them to assemble a timeline.
-    validate_motion_block_props(block_id, coerce_motion_block_props(block_id, resolved_props))
+    if validate_props:
+        validate_motion_block_props(block_id, coerce_motion_block_props(block_id, resolved_props))
     return resolved_props, resolved_resources
+
+
+def resolve_motion_block_cue_phrases(
+    block_id: MotionBlockId,
+    props: dict[str, Any],
+    *,
+    narration: str | None,
+    cues: list[dict[str, Any]] | None,
+    duration_s: float,
+    speech_lead_s: float = 0.15,
+    language: str | None = None,
+) -> dict[str, Any]:
+    """Resolve authoring-time ``cue_phrase`` anchors against measured speech timing and strip them.
+
+    Leaves saved ``CompositionVersion`` and ``video-spec`` strictly numeric while
+    letting visuals (reveals, callouts, cursor clicks, keyword highlights) snap
+    to the exact moment the corresponding word or phrase is spoken.
+    """
+    if not isinstance(props, dict):
+        return props
+    result = dict(props)
+
+    def _window(phrase: Any) -> tuple[float, float] | None:
+        if not narration or not isinstance(phrase, str) or not phrase.strip():
+            return None
+        return resolve_cue_phrase_window_s(
+            narration,
+            phrase,
+            cues=cues,
+            duration_s=duration_s,
+            speech_lead_s=speech_lead_s,
+            language=language,
+        )
+
+    if block_id == "statement_hook":
+        raw_phrase = result.pop("cue_phrase", None)
+        if result.get("highlight_at_s") is None:
+            hit = _window(raw_phrase or result.get("highlight_phrase"))
+            if hit is not None:
+                result["highlight_at_s"] = hit[0]
+
+    elif block_id == "device_mockup":
+        raw_phrase = result.pop("cue_phrase", None)
+        if result.get("reveal_at_s") is None:
+            hit = _window(raw_phrase)
+            if hit is not None:
+                result["reveal_at_s"] = hit[0]
+
+    elif block_id == "product_showcase":
+        if isinstance(result.get("cursor"), dict):
+            cur = dict(result["cursor"])
+            raw_phrase = cur.pop("cue_phrase", None)
+            hit = _window(raw_phrase)
+            if hit is not None:
+                cur["click_at_s"] = hit[0]
+            elif "click_at_s" not in cur:
+                cur["click_at_s"] = round(min(max(0.4, duration_s * 0.35), max(0.4, duration_s - 0.3)), 3)
+            result["cursor"] = cur
+        if isinstance(result.get("callout_steps"), list) and result["callout_steps"]:
+            steps_out: list[dict[str, Any]] = []
+            resolved_starts: list[tuple[float, float] | None] = []
+            for raw_step in result["callout_steps"]:
+                if not isinstance(raw_step, dict):
+                    steps_out.append(raw_step)
+                    resolved_starts.append(None)
+                    continue
+                step = dict(raw_step)
+                raw_phrase = step.pop("cue_phrase", None)
+                hit = _window(raw_phrase)
+                steps_out.append(step)
+                resolved_starts.append(hit)
+            # Fill missing/anchored start_s and non-overlapping end_s in order.
+            prev_end = 0.0
+            n = len(steps_out)
+            for idx, (step, hit) in enumerate(zip(steps_out, resolved_starts, strict=True)):
+                if not isinstance(step, dict):
+                    continue
+                if hit is not None:
+                    start_s = max(prev_end, hit[0])
+                    next_hit = next((h for h in resolved_starts[idx + 1 :] if h is not None), None)
+                    natural_end = max(hit[1] + 0.55, start_s + 1.1)
+                    max_end = (next_hit[0] - 0.05) if next_hit is not None else duration_s
+                    end_s = min(duration_s, max(start_s + 0.35, min(natural_end, max_end)))
+                    step["start_s"] = round(start_s, 3)
+                    step["end_s"] = round(end_s, 3)
+                    prev_end = step["end_s"]
+                elif "start_s" in step and "end_s" in step:
+                    s_val = max(prev_end, float(step["start_s"]))
+                    e_val = max(s_val + 0.25, min(duration_s, float(step["end_s"])))
+                    step["start_s"] = round(s_val, 3)
+                    step["end_s"] = round(e_val, 3)
+                    prev_end = step["end_s"]
+                else:
+                    slot = duration_s / max(1, n)
+                    s_val = round(max(prev_end, idx * slot + 0.15), 3)
+                    e_val = round(min(duration_s, max(s_val + 0.35, (idx + 1) * slot - 0.1)), 3)
+                    step["start_s"] = s_val
+                    step["end_s"] = e_val
+                    prev_end = e_val
+            result["callout_steps"] = steps_out
+
+    elif block_id == "chat_demo":
+        for list_key in ("messages", "work_steps"):
+            if isinstance(result.get(list_key), list):
+                updated = []
+                for raw_item in result[list_key]:
+                    if not isinstance(raw_item, dict):
+                        updated.append(raw_item)
+                        continue
+                    item = dict(raw_item)
+                    raw_phrase = item.pop("cue_phrase", None)
+                    hit = _window(raw_phrase)
+                    if hit is not None and item.get("at_s") is None:
+                        item["at_s"] = hit[0]
+                    updated.append(item)
+                result[list_key] = updated
+
+    else:
+        for list_key in ("items", "nodes", "left_items", "right_items", "steps", "cards", "points"):
+            if isinstance(result.get(list_key), list):
+                updated = []
+                for raw_item in result[list_key]:
+                    if not isinstance(raw_item, dict):
+                        updated.append(raw_item)
+                        continue
+                    item = dict(raw_item)
+                    raw_phrase = item.pop("cue_phrase", None)
+                    hit = _window(raw_phrase)
+                    if hit is not None and item.get("reveal_at_s") is None:
+                        item["reveal_at_s"] = hit[0]
+                    updated.append(item)
+                result[list_key] = updated
+
+    return result
 
 
 def media_generation_forbidden(text: str) -> bool:
@@ -195,7 +339,22 @@ class FirstMotionBlock(SelectedMotionBlock):
         default=None,
         min_length=1,
         max_length=2000,
-        description="Optional spoken voiceover script for this act. Omit on 0.6-1.6s visual punch-cut / beat acts so cutting stays kinetic; keep narrated acts vivid and concise (8-20 EN words or 14-34 ZH chars).",
+        description=(
+            "Optional spoken voiceover script for this act. Omit on 0.6-1.6s visual punch-cut / beat acts so cutting "
+            "stays kinetic; keep narrated acts vivid and concise (8-20 EN words or 14-34 ZH chars). Supports inline "
+            "MiniMax pause tags like '<#0.3#>' for natural breaths (automatically stripped from subtitles)."
+        ),
+    )
+    voice_speed: float = Field(
+        default=1.0,
+        ge=0.75,
+        le=1.35,
+        allow_inf_nan=False,
+        description="Optional per-act narration speed (0.75-1.35, default 1.0). E.g. 1.04 for energetic hooks, 0.96 for calm closing.",
+    )
+    voice_emotion: VoiceEmotion | None = Field(
+        default=None,
+        description="Optional per-act MiniMax speech-2.6-hd emotion tone ('calm', 'fluent', 'happy', 'surprised', 'sad', 'angry', 'fearful', 'disgusted').",
     )
     caption_translations: list[str] | None = Field(
         default=None,
@@ -335,8 +494,10 @@ async def _prepare_motion_block_narration(
     language: str,
     execution_id: str,
     scene_id: str,
+    speed: float = 1.0,
+    emotion: VoiceEmotion | None = None,
 ) -> dict[str, Any]:
-    """Synthesize or reuse a speed-1.0 narration original for a motion block act.
+    """Synthesize or reuse a narration original for a motion block act.
 
     Uses cached ``video_narrations`` originals first; synthesizes via MiniMax when
     configured; otherwise degrades cleanly to a pending ``SpeechObject`` plan so
@@ -357,6 +518,8 @@ async def _prepare_motion_block_narration(
         text=text,
         voice_id=provider_voice_id,
         language=language,
+        speed=speed,
+        emotion=emotion,
     )
     original = await peek_original(project.user_id, speech)
     if original is None and settings.minimax_api_key:
@@ -485,20 +648,28 @@ async def create_video(db, turn, args: CreateVideoArgs):
                     sum(seconds_to_ticks(shot.duration_seconds or 0) for shot in args.shots)
                     + sum(seconds_to_ticks(mb.duration_seconds) for mb in args.motion_blocks)
                 )
-                if abs(actual_ticks - ticks) > 3000:
+                # Motion-block films use target_seconds as a pacing tier (e.g. 30/45/60s)
+                # so measured narration and natural breath pauses are never clipped;
+                # pure non-narrated shots keep tight exact-duration matching.
+                tolerance_ticks = (
+                    max(seconds_to_ticks(4.0), int(ticks * 0.25))
+                    if args.motion_blocks
+                    else 3000
+                )
+                if abs(actual_ticks - ticks) > tolerance_ticks:
                     raise ValueError(
-                        f"The ordered shots do not match the user's fixed total duration "
-                        f"(got {actual_ticks / 30000:g}s, expected {ticks / 30000:g}s)."
+                        f"The ordered shots do not match the user's target duration "
+                        f"(got {actual_ticks / DEFAULT_TIMEBASE:g}s, expected ~{ticks / DEFAULT_TIMEBASE:g}s)."
                     )
         for field in ("aspect", "background", "fps"):
             if required.get(field) is not None and getattr(args, field) != required[field]:
                 raise ValueError(f"The requested {field} does not match the user's fixed value.")
         if any(shot.skill_resource is not None for shot in args.shots):
-            from app.config import settings
             from app.models.schemas import ExternalSkillReference
+            from app.tools.video.components import component_bake_supported
 
-            if not settings.component_bake_enabled:
-                raise ValueError("Controlled Skill Generators are unavailable in this deployment. Use fixed media or native text.")
+            if not component_bake_supported():
+                raise ValueError("Controlled Skill Generators are unavailable. Use fixed media or native text.")
             if not isinstance(getattr(turn, "explicit_skill", getattr(turn, "skill", None)), ExternalSkillReference):
                 raise ValueError("A controlled Generator requires the current bound external Skill.")
         creative_state, provenance, skill_loader, _ = _creation_context(db, turn)
@@ -582,6 +753,7 @@ async def create_video(db, turn, args: CreateVideoArgs):
 
             narration_language = (args.narration_language or "").strip().lower()
             deferred_captions: list[tuple[str, int, int, str, Any, CaptionDerivation | SourceCaptionDerivation]] = []
+            narration_phrase_map: dict[str, list[dict[str, Any]]] = {}
             for idx, mb in enumerate(args.motion_blocks):
                 resolved_props, resolved_resources = await resolve_motion_block_resources(
                     db,
@@ -591,6 +763,7 @@ async def create_video(db, turn, args: CreateVideoArgs):
                     props=mb.props,
                     resources=mb.resources,
                     view_id=mb.view_id,
+                    validate_props=False,
                 )
                 for res in resolved_resources:
                     bound_digests[UUID(res["snapshot_id"])] = res["snapshot_digest"]
@@ -600,7 +773,7 @@ async def create_video(db, turn, args: CreateVideoArgs):
                 eff_duration_s = mb.duration_seconds
                 narr_prep: dict[str, Any] | None = None
                 eff_lang = (
-                    (narration_language or detect_text_language(mb.narration))
+                    (narration_language or detect_text_language(strip_pause_tags(mb.narration)))
                     if mb.narration is not None
                     else None
                 )
@@ -614,8 +787,10 @@ async def create_video(db, turn, args: CreateVideoArgs):
                         language=eff_lang,
                         execution_id=identity,
                         scene_id=scene_id,
+                        speed=mb.voice_speed,
+                        emotion=mb.voice_emotion,
                     )
-                    if narr_prep["mode"] == "prepared" and required.get("target_seconds") is None:
+                    if narr_prep["mode"] == "prepared":
                         measured_s = float(narr_prep["duration_s"])
                         has_visual_callout = bool(resolved_props.get("callout_steps"))
                         if has_visual_callout:
@@ -625,6 +800,17 @@ async def create_video(db, turn, args: CreateVideoArgs):
                                 measured_s + 0.45,
                                 min(mb.duration_seconds, measured_s + 1.5),
                             )
+
+                resolved_props = resolve_motion_block_cue_phrases(
+                    mb.block_id,
+                    resolved_props,
+                    narration=mb.narration,
+                    cues=(narr_prep.get("cues") if narr_prep and narr_prep["mode"] == "prepared" else None),
+                    duration_s=eff_duration_s,
+                    speech_lead_s=0.15 if mb.narration is not None else 0.0,
+                    language=eff_lang,
+                )
+                validate_motion_block_props(mb.block_id, coerce_motion_block_props(mb.block_id, resolved_props))
 
                 dur_ticks = seconds_to_ticks(eff_duration_s, rate)
                 if dur_ticks <= 0:
@@ -742,15 +928,21 @@ async def create_video(db, turn, args: CreateVideoArgs):
                             ce = speech_start + source_ticks_to_output_ticks(src_e, rate)
                             if ce <= cs:
                                 continue
+                            display_caption = format_caption_punctuation(phrase.text) or phrase.text
                             deferred_captions.append(
-                                (scene_id, cs, ce, phrase.text, caption_style, SourceCaptionDerivation(
+                                (scene_id, cs, ce, display_caption, caption_style, SourceCaptionDerivation(
                                     snapshot_id=snap.id, snapshot_digest=snap.digest,
                                     sentence_id=f"{scene_id}_p{phrase_index}",
                                     source_range=TimeRange(start=src_s, end=src_e),
-                                    source_text_digest=speech_text_digest(phrase.text.split("\n", 1)[0]),
+                                    source_text_digest=speech_text_digest(display_caption.split("\n", 1)[0]),
                                     alignment="minimax-t2a-v2-sentence-v1",
                                 ))
                             )
+                            narration_phrase_map.setdefault(f"clp_vo_{scene_id}", []).append({
+                                "text": phrase.text.split("\n", 1)[0],
+                                "start_seconds": round(cs / rate, 3),
+                                "end_seconds": round(ce / rate, 3),
+                            })
                             prev_end = ce
                     else:
                         assert resolved_provider_voice_id is not None and eff_lang is not None
@@ -772,6 +964,8 @@ async def create_video(db, turn, args: CreateVideoArgs):
                                         text=mb.narration,
                                         voice_id=resolved_provider_voice_id,
                                         language=eff_lang,
+                                        speed=mb.voice_speed,
+                                        emotion=mb.voice_emotion,
                                         gain_db=0.0,
                                     ),
                                     animations=[],
@@ -779,6 +973,7 @@ async def create_video(db, turn, args: CreateVideoArgs):
                             )
                         )
                         pending_line2: str | None = None
+                        clean_narr = strip_pause_tags(mb.narration)
                         if mb.caption_translations:
                             cleaned_trans = [t.strip() for t in mb.caption_translations if t and t.strip()]
                             if cleaned_trans:
@@ -787,9 +982,9 @@ async def create_video(db, turn, args: CreateVideoArgs):
                             lines = [ln.strip() for ln in mb.caption_text.splitlines() if ln.strip()]
                             if len(lines) >= 2:
                                 pending_line2 = " ".join(lines[1:])
-                            elif len(lines) == 1 and detect_text_language(lines[0]) != detect_text_language(mb.narration, hint=eff_lang):
+                            elif len(lines) == 1 and detect_text_language(lines[0]) != detect_text_language(clean_narr, hint=eff_lang):
                                 pending_line2 = lines[0]
-                        caption_display = f"{mb.narration}\n{pending_line2}" if pending_line2 else mb.narration
+                        caption_display = f"{clean_narr}\n{pending_line2}" if pending_line2 else clean_narr
                         caption_style = _resolve_create_caption_style(
                             comp_content.settings,
                             caption_preset=args.caption_preset,
@@ -977,7 +1172,9 @@ async def create_video(db, turn, args: CreateVideoArgs):
                 (clip["range"]["end"] for track in content["timeline"]["tracks"] for clip in track["clips"]),
                 default=0,
             )
-            if abs(total_ticks - seconds_to_ticks(required["target_seconds"])) > 3000:
+            target_ticks = seconds_to_ticks(required["target_seconds"])
+            # Narrated motion-block timelines stretch naturally to avoid truncating speech.
+            if not args.motion_blocks and abs(total_ticks - target_ticks) > 3000:
                 raise ValueError("The assembled work does not match the user's fixed total duration.")
         activity = await db.scalar(select(Message.id).where(Message.turn_id == opening.id,
                                    Message.intent["frame"]["call_id"].astext == current_call_id(),
@@ -1042,12 +1239,23 @@ async def create_video(db, turn, args: CreateVideoArgs):
         (clip["range"]["end"] / rate_saved for track in saved.timeline["tracks"] for clip in track["clips"]),
         default=0.0,
     )
+    duration_meta: dict[str, Any] = {}
+    if args.motion_blocks and required.get("target_seconds") is not None:
+        target_s = float(required["target_seconds"])
+        tolerance_s = max(4.0, target_s * 0.25)
+        delta_s = total_duration_seconds - target_s
+        duration_meta["target_seconds"] = target_s
+        if abs(delta_s) <= tolerance_s:
+            duration_meta["duration_status"] = "within_natural_tolerance"
+        else:
+            duration_meta["duration_status"] = "over_target" if delta_s > 0 else "under_target"
     return {
         "composition_id": str(saved.composition_id),
         "version_id": str(saved.id),
         "version": saved.version,
         "content_digest": saved.content_digest,
         "duration_seconds": total_duration_seconds,
+        **duration_meta,
         "workbench_link": f"#workbench:version/{saved.id}",
         "storyboard_link": f"#workbench:storyboard/{saved.id}",
         "saved": True,
@@ -1079,6 +1287,11 @@ async def create_video(db, turn, args: CreateVideoArgs):
                 "kind": clip["object"]["kind"],
                 "start_seconds": clip["range"]["start"] / rate_saved,
                 "end_seconds": clip["range"]["end"] / rate_saved,
+                **(
+                    {"spoken_phrases": narration_phrase_map[clip["clip_id"]]}
+                    if args.motion_blocks and clip["clip_id"] in narration_phrase_map
+                    else {}
+                ),
             }
             for track in saved.timeline["tracks"]
             if track["kind"] == "audio" and track["role"] == "dialogue"

@@ -49,7 +49,13 @@ async def search_audio(
             .exists()
         )
     doc = model.search_text
-    score = 0.3 * func.ln(1 + model.use_count)
+    # When browsing the full music library without an explicit filter, surface
+    # curated platform tracks evenly instead of letting one high-use_count
+    # user track dominate every future project.
+    if music and not (query or mood or tags or style or genre or energy or bpm):
+        score = case((Music.scope == "platform", 1.0), else_=0.0)
+    else:
+        score = 0.3 * func.ln(1 + model.use_count)
     fields = model.tags if music else model.tone_tags
     for needle, column in ((style, model.compatible_styles), (tone, fields)):
         if needle:

@@ -507,3 +507,228 @@ def test_project_editor_reply_preserves_workbench_deep_links():
     assert f"(#workbench:output/{out_id})" in projected
     assert f"(#workbench:storyboard/{ver_id})" in projected
     assert "已基于 第 32 版 导出 这份素材。" in projected
+
+
+def test_pause_tags_strip_from_captions_and_parse_minimax_cues():
+    from app.editing.caption_timing import (
+        build_motion_block_caption_phrases,
+        strip_pause_tags,
+    )
+    from app.providers.voice import _parse_subtitle_cues
+
+    raw = "Most real value <#0.4#> never reaches the balance sheet."
+    assert strip_pause_tags(raw) == "Most real value never reaches the balance sheet."
+
+    # MiniMax may return cleaned subtitle text with pause tags omitted
+    cues = _parse_subtitle_cues(
+        [
+            {
+                "text": "Most real value never reaches the balance sheet.",
+                "text_begin": 0,
+                "text_end": 48,
+                "time_begin": 0,
+                "time_end": 3200,
+            }
+        ],
+        source_text=raw,
+    )
+    assert len(cues) == 1
+    assert "<#" not in cues[0]["text"]
+
+    phrases, bilingual = build_motion_block_caption_phrases(
+        raw, cues=None, duration_ms=3400.0, language="en"
+    )
+    assert bilingual is False
+    assert phrases
+    assert all("<#" not in p.text for p in phrases)
+
+
+def test_resolve_motion_block_cue_phrases_maps_words_to_numeric_props():
+    from app.chat.editor_create import resolve_motion_block_cue_phrases
+    from app.editing.revisions import coerce_motion_block_props
+    from app.editing.schemas import validate_motion_block_props
+
+    narration = "Live valuation shows £18.7m enterprise value <#0.3#> backed by 94% evidence coverage."
+    cues = [{"text": "Live valuation shows £18.7m enterprise value backed by 94% evidence coverage.", "time_begin": 0.0, "time_end": 4200.0}]
+
+    resolved_metrics = resolve_motion_block_cue_phrases(
+        "metric_grid",
+        {
+            "title": "Live Valuation",
+            "items": [
+                {"value": "£18.7m", "label": "Enterprise Value", "cue_phrase": "£18.7m"},
+                {"value": "94%", "label": "Evidence Coverage", "cue_phrase": "94%"},
+            ],
+        },
+        narration=narration,
+        cues=cues,
+        duration_s=4.8,
+        speech_lead_s=0.15,
+        language="en",
+    )
+    validated_metrics = validate_motion_block_props(
+        "metric_grid", coerce_motion_block_props("metric_grid", resolved_metrics)
+    )
+    assert validated_metrics.items[0].reveal_at_s is not None
+    assert validated_metrics.items[1].reveal_at_s is not None
+    assert validated_metrics.items[0].reveal_at_s < validated_metrics.items[1].reveal_at_s
+
+    resolved_showcase = resolve_motion_block_cue_phrases(
+        "product_showcase",
+        {
+            "cursor": {"x": 0.5, "y": 0.4, "cue_phrase": "£18.7m"},
+            "callout_steps": [
+                {"x": 0.3, "y": 0.3, "width": 0.25, "height": 0.15, "label": "Value", "cue_phrase": "£18.7m"},
+                {"x": 0.6, "y": 0.3, "width": 0.25, "height": 0.15, "label": "Coverage", "cue_phrase": "94%"},
+            ],
+        },
+        narration=narration,
+        cues=cues,
+        duration_s=4.8,
+        speech_lead_s=0.15,
+        language="en",
+    )
+    validated_showcase = validate_motion_block_props(
+        "product_showcase", coerce_motion_block_props("product_showcase", resolved_showcase)
+    )
+    assert validated_showcase.cursor is not None
+    assert validated_showcase.cursor.click_at_s > 0.5
+    assert len(validated_showcase.callout_steps) == 2
+    assert validated_showcase.callout_steps[0].end_s <= validated_showcase.callout_steps[1].start_s
+
+
+def test_narration_synth_config_distinguishes_speed_and_emotion():
+    from app.tools.video.narration import narration_synth_config
+
+    default_cfg = narration_synth_config()
+    assert "speed" not in default_cfg
+    assert "emotion" not in default_cfg
+
+    fast_calm = narration_synth_config(speed=1.06, emotion="calm")
+    assert fast_calm["speed"] == 1.06
+    assert fast_calm["emotion"] == "calm"
+    assert fast_calm != default_cfg
+
+
+def test_brand_promo_skill_registered_and_cli_promo_excluded_from_auto_discovery():
+    from app.skills import SKILL_REGISTRY
+    from app.skills.resolution import _EXPLICIT_ONLY_BUILTIN_SKILLS, get_builtin_skill_option
+
+    assert "brand-promo" in SKILL_REGISTRY
+    opt = get_builtin_skill_option("brand-promo")
+    assert opt.skill_id == "brand-promo"
+    assert "promo-video" in _EXPLICIT_ONLY_BUILTIN_SKILLS
+
+
+def test_editor_ticks_quantizes_arbitrary_floats_cleanly():
+    from app.chat.editor import _ticks
+
+    assert _ticks(2.9333, 90000) == 263997
+    assert _ticks(4.16667, 90000) == 375000
+    assert _ticks(0, 90000) == 0
+    with pytest.raises(ValueError, match="non-negative"):
+        _ticks(-0.5, 90000)
+
+
+def test_run_event_bus_clears_stale_live_focus_when_active_step_advances():
+    import json
+
+    from app.chat.run_bus import RunEventBus
+
+    bus = RunEventBus()
+    conv_id = uuid4()
+    bus.start_run(conv_id, run_id="r1")
+
+    def _sse(payload: dict) -> str:
+        return f"event: assistant.activity\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+    bus.observe_frame(
+        conv_id,
+        "r1",
+        _sse({
+            "kind": "steps",
+            "steps": [
+                {"title": "准备素材与配音配乐", "status": "done"},
+                {"title": "编排 45 秒分镜、字幕与动效", "status": "in_progress"},
+                {"title": "铺排音效并预览复查", "status": "pending"},
+            ],
+        }),
+    )
+    bus.observe_frame(conv_id, "r1", _sse({"kind": "focus", "focus": "正在编排 45 秒分镜、字幕与动效"}))
+    assert bus.active_run_summary(conv_id)["live_focus"] == "正在编排 45 秒分镜、字幕与动效"
+
+    # Advancing to Step 3 clears stale Step 2 focus
+    bus.observe_frame(
+        conv_id,
+        "r1",
+        _sse({
+            "kind": "steps",
+            "steps": [
+                {"title": "准备素材与配音配乐", "status": "done"},
+                {"title": "编排 45 秒分镜、字幕与动效", "status": "done"},
+                {"title": "铺排音效并预览复查", "status": "in_progress"},
+            ],
+        }),
+    )
+    assert bus.active_run_summary(conv_id)["live_focus"] is None
+
+
+def test_unwrap_item_dialect_restores_single_item_arrays_using_json_schema():
+    from app.agents.arguments import normalize_numeric_arguments, unwrap_item_dialect
+    from app.tools.research.capture import CaptureRequest
+
+    schema = CaptureRequest.model_json_schema()
+    raw = {
+        "source_url": "https://agent.oxvalue.ai/",
+        "source_snapshot_id": "a5c88812-0a03-5777-99eb-32b441b0540c",
+        "source_snapshot_digest": "eaa91242cf07f53bd69da3aed33a6f2eb88fd934e3515d2b112ed2b7ef55565e",
+        "route": "/",
+        "viewport": {"width": "1440", "height": "900"},
+        "states": [
+            {
+                "state_id": "st1",
+                "actions": {"item": {"kind": "wait", "milliseconds": "400"}},
+            }
+        ],
+        "targets": [{"target_id": "t_val", "element_id": "s0e7"}],
+        "outputs": [
+            {
+                "output_id": "out_val",
+                "state_id": "st1",
+                "kind": "elements",
+                "target_ids": {"item": "t_val"},
+                "scale": "4",
+            }
+        ],
+    }
+    unwrapped = unwrap_item_dialect(raw, schema)
+    normalized, _ = normalize_numeric_arguments(unwrapped, schema)
+    validated = CaptureRequest.model_validate(normalized)
+    assert len(validated.states[0].actions) == 1
+    assert validated.states[0].actions[0].milliseconds == 400
+    assert validated.outputs[0].target_ids == ["t_val"]
+    assert validated.outputs[0].scale == 4
+
+    # Stray leaked <item> XML prefix/suffix on list elements is also cleaned
+    cleaned = unwrap_item_dialect(
+        {"resources": ["<item>dfdb41b2-7adf-52d3-a0c6-ca8d0f2a1961", "31a54431-4ffb-57a2-b372-394b2e64765d</item>"]}
+    )
+    assert cleaned["resources"] == [
+        "dfdb41b2-7adf-52d3-a0c6-ca8d0f2a1961",
+        "31a54431-4ffb-57a2-b372-394b2e64765d",
+    ]
+
+
+def test_brief_question_target_seconds_infers_value_from_label_not_ordinal_id():
+    from app.models.schemas import BriefQuestionItem
+
+    item = BriefQuestionItem.model_validate({
+        "slot": "target_seconds",
+        "question": "成片时长？",
+        "options": [
+            {"id": "1", "label": "45 秒"},
+            {"id": "2", "label": "30 秒"},
+            {"id": "3", "label": "60 秒"},
+        ],
+    })
+    assert [opt.value for opt in item.options] == [45, 30, 60]

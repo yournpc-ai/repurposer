@@ -391,4 +391,31 @@ describe("Studio WorkbenchPane focused artifact viewer & Markdown links", () => 
     expect(screen.getByTestId("wb-probe").getAttribute("data-open")).toBe("true")
     expect(screen.getByTestId("wb-probe").getAttribute("data-artifact")).toBe("version:ver-2")
   })
+
+  it("keeps OutputArtifactView video stage non-shrinking and formats 0:00 scene timestamps cleanly", async () => {
+    const workbenchWithOutput: WorkbenchData = {
+      ...sampleWorkbench,
+      outputs: [
+        {
+          id: "out-1",
+          type: "video",
+          status: "completed",
+          composition_id: "comp-1",
+          composition_version_id: "ver-2",
+          files: { video: "https://cdn.example.com/final.mp4" },
+          created_at: "2026-11-27T12:00:00Z",
+        },
+      ],
+    }
+    const { container } = render(
+      <WorkbenchProvider projectId="proj-1" initialData={workbenchWithOutput} defaultOpen>
+        <WorkbenchPane />
+      </WorkbenchProvider>,
+    )
+
+    const video = container.querySelector("video")
+    expect(video).toBeTruthy()
+    expect(video?.parentElement?.className).toContain("shrink-0")
+    expect(await screen.findByText("0:00–0:05")).toBeTruthy()
+  })
 })

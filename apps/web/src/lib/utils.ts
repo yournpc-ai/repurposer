@@ -18,6 +18,19 @@ export function formatDuration(
   return `${m}:${s.toString().padStart(2, "0")}`
 }
 
+/** Format a timeline timestamp (including 0 as 0:00) as MM:SS. */
+export function formatTimestamp(
+  seconds: number | null | undefined,
+  fallback = "--:--"
+): string {
+  if (seconds == null || seconds < 0 || !Number.isFinite(seconds)) {
+    return fallback
+  }
+  const m = Math.floor(seconds / 60)
+  const s = Math.floor(seconds % 60)
+  return `${m}:${s.toString().padStart(2, "0")}`
+}
+
 /** Format an ISO timestamp as a localized relative time ("3 days ago" /
  * "3 天前") via Intl.RelativeTimeFormat — follows the active i18n locale,
  * no extra copy to maintain. Returns "" for unparseable input. */

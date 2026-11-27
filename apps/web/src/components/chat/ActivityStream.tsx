@@ -1,5 +1,5 @@
 /** User-visible work and receipts, projected from the original transcript. */
-import { lazy, Suspense, useRef, useState } from "react"
+import { lazy, Suspense, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
 import { AlertCircle, CheckCircle2, ChevronRight, Circle, Film, MinusCircle, Play, TriangleAlert, Video } from "@/components/ui/icons"
@@ -921,7 +921,25 @@ export function WorkSegmentRow({
     stepsPlan && stepsPlan.length > 0
       ? t("chat.activityFold.stepsProgress", { done: doneStepsCount, total: stepsPlan.length })
       : undefined
+  const [fallbackLiveStartMs, setFallbackLiveStartMs] = useState<number | null>(() =>
+    live && startedAtMs == null ? Date.now() : null,
+  )
+  useEffect(() => {
+    if (live && startedAtMs == null) {
+      setFallbackLiveStartMs((prev) => prev ?? Date.now())
+    } else {
+      setFallbackLiveStartMs(null)
+    }
+  }, [live, startedAtMs])
+  const effectiveStartedAtMs = startedAtMs ?? fallbackLiveStartMs
   const doneAttachedCount = attachedSteps?.filter((s) => s.status === "done").length ?? 0
+  const attachedRatio =
+    attachedSteps && attachedSteps.length > 0
+      ? Math.min(1, Math.max(0, doneAttachedCount / attachedSteps.length))
+      : 0
+  const attachedRingRadius = 5
+  const attachedRingCircumference = 2 * Math.PI * attachedRingRadius
+  const attachedRingOffset = attachedRingCircumference * (1 - attachedRatio)
   const attachedStepsPill =
     attachedStepsSettled && attachedSteps ? (
       <button
@@ -933,13 +951,39 @@ export function WorkSegmentRow({
           setStepsExpanded((current) => !current)
         }}
         className={cn(
-          "inline-flex h-6 shrink-0 items-center gap-1.5 rounded-md border px-2 text-xs font-medium tabular-nums transition-colors outline-none focus-visible:bg-accent/60",
+          "inline-flex h-6 shrink-0 items-center gap-1.5 rounded-md px-1.5 text-[13px] font-medium tabular-nums transition-colors outline-none focus-visible:bg-accent/60",
           stepsExpanded
-            ? "border-border-strong bg-muted/70 text-foreground"
-            : "border-border bg-transparent text-muted-foreground hover:border-border-strong hover:bg-muted/40 hover:text-foreground",
+            ? "bg-[var(--ui-tkc-wash)] text-[var(--ui-tkc-ink)]"
+            : "bg-transparent text-[var(--ui-tkc-muted)] hover:bg-[var(--ui-tkc-wash)] hover:text-[var(--ui-tkc-ink)]",
         )}
       >
-        <Circle className="size-3 shrink-0 stroke-[2]" aria-hidden="true" />
+        <svg
+          viewBox="0 0 14 14"
+          className="size-3.5 shrink-0 -rotate-90"
+          data-testid="steps-progress-ring"
+          aria-hidden="true"
+        >
+          <circle
+            cx="7"
+            cy="7"
+            r={attachedRingRadius}
+            fill="none"
+            stroke="currentColor"
+            strokeOpacity={0.25}
+            strokeWidth={1.75}
+          />
+          <circle
+            cx="7"
+            cy="7"
+            r={attachedRingRadius}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={1.75}
+            strokeLinecap="round"
+            strokeDasharray={attachedRingCircumference}
+            strokeDashoffset={attachedRingOffset}
+          />
+        </svg>
         <span>
           {t("chat.activityFold.stepsProgress", {
             done: doneAttachedCount,
@@ -955,7 +999,7 @@ export function WorkSegmentRow({
           <StepsPlanCard steps={attachedSteps} />
         </div>
       ) : null}
-      <ThinkingState steps={steps} live={live} headerLabel={header} startedAtMs={startedAtMs}
+      <ThinkingState steps={steps} live={live} headerLabel={header} startedAtMs={effectiveStartedAtMs}
         open={open}
         headerTrailing={attachedStepsPill}
         stepsPlan={stepsPlan}

@@ -646,11 +646,12 @@ class Agent(Generic[OutT]):
                 if tool is None or call.name not in available_names:
                     observation = ToolObservation("当前阶段不可用此工具，请提交完整设计。", ok=False)
                 else:
-                    raw = _unwrap_item_dialect(dict(call.arguments))
+                    tool_schema = tool.params_model.model_json_schema() if tool.params_model is not None else None
+                    raw = _unwrap_item_dialect(dict(call.arguments), tool_schema)
                     for key in ("type", "kind", "prose"):
                         raw.pop(key, None)
-                    if tool.params_model is not None:
-                        raw, changes = normalize_numeric_arguments(raw, tool.params_model.model_json_schema())
+                    if tool_schema is not None:
+                        raw, changes = normalize_numeric_arguments(raw, tool_schema)
                         trace_argument_normalization(model_call_id=(current_model_prompt() or {}).get("model_call_id"), tool_call_id=call_id, agent=self.name, iteration=iteration, changes=changes)
                     if call.name == submit.name and previous_candidate is not None:
                         if correction_fields is not None:

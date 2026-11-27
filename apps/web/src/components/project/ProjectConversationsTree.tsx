@@ -18,7 +18,6 @@ import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 
 import { DeleteProjectDialog } from "@/components/project/project-dialogs"
-import { Badge } from "@/components/ui/badge-clean"
 import { Button } from "@/components/ui/button-clean"
 import { AlertDialog, Dialog } from "@/components/ui/dialog-clean"
 import { DropdownMenu } from "@/components/ui/dropdown-menu-clean"
@@ -528,12 +527,6 @@ export function ProjectConversationsTree({
                       const awaitingInput =
                         !working &&
                         (pendingOverride ?? Boolean(conv.has_pending_question))
-                      const completed =
-                        !working &&
-                        !awaitingInput &&
-                        (activityState.completed.has(conv.id) ||
-                          (active &&
-                            activityState.completed.has(fallbackActiveKey)))
                       const relTime =
                         nowMs != null
                           ? formatCompactAge(
@@ -616,10 +609,6 @@ export function ProjectConversationsTree({
                                     />
                                   </span>
                                 </Tooltip>
-                              ) : completed ? (
-                                <Badge tone="neutral" size="sm" dot>
-                                  {t("chat.completed")}
-                                </Badge>
                               ) : relTime ? (
                                 <span>{relTime}</span>
                               ) : null}

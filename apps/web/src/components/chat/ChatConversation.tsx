@@ -149,6 +149,10 @@ interface ChatConversationProps {
 }
 
 const CHAT_STATUS_MIN_DISPLAY_MS = 1000
+const LEGACY_DELIVERY_BOILERPLATE = new Set([
+  "正式成片已交付。",
+  "Your reviewed MP4 is ready.",
+])
 
 function useChatStatusLabel(label: string | null, standalone: boolean) {
   const [displayedLabel, setDisplayedLabel] = useState<string | null>(null)
@@ -216,8 +220,9 @@ export function ChatConversation({
   const { openCreditTopup } = useSettingsDialog()
   const liveActivity = liveWorkFoldKey != null ? nowRow : bottomNowRow
   // Always track the real running tool action (tool_name / semantic detail) in
-  // the live status header so it never gets stuck on a stale update_focus string;
-  // fall back to liveFocus between tool batches (post-tool thinking / planning).
+  // the live status header so it never gets stuck on a stale update_focus string.
+  // Between tool batches (live_post_tool_thinking), surface "Thinking…" honestly
+  // rather than snapping back to an earlier phase's focus label.
   const activeToolLabel =
     liveActivity &&
     liveActivity.status === "active" &&
@@ -226,11 +231,13 @@ export function ChatConversation({
       : null
   const rawStatusLabel = activeToolLabel
     ? activeToolLabel
-    : liveFocus && chatBusy
-      ? liveFocus
-      : liveActivity
-        ? activityText(liveActivity, t)
-        : null
+    : liveMode === "live_post_tool_thinking"
+      ? t("chat.thinking")
+      : liveFocus && chatBusy
+        ? liveFocus
+        : liveActivity
+          ? activityText(liveActivity, t)
+          : null
   const chatStatusLabel = useChatStatusLabel(
     rawStatusLabel,
     liveWorkFoldKey == null,
@@ -336,7 +343,12 @@ export function ChatConversation({
           </div>
         ) : (
           <>
-            {m.content ? (
+            {m.content &&
+            !(
+              deliveryOutputSlot != null &&
+              Boolean(m.reviewedVersionId) &&
+              LEGACY_DELIVERY_BOILERPLATE.has(m.content.trim())
+            ) ? (
               <div className="group/msg">
                 <AssistantText
                   text={m.content}

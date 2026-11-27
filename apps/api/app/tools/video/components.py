@@ -64,13 +64,20 @@ class ComponentError(ValueError):
         )
 
 
-def assert_component_bake_enabled() -> None:
-    """Fail closed before design, cache reuse, or any indirect public bake.
+# Product capability baseline: controlled component baking is part of the
+# product capability surface (gated at runtime by runner health/isolation
+# verification in ``assert_component_bake_available`` rather than an env flag).
+_COMPONENT_BAKE_SUPPORTED = True
 
-    Process policy is not a sandbox. Only an explicitly isolated deployment
-    may open this seam; the default refuses untrusted execution.
-    """
-    if not settings.component_bake_enabled:
+
+def component_bake_supported() -> bool:
+    """Single domain capability seat for controlled remotion-project TSX baking."""
+    return _COMPONENT_BAKE_SUPPORTED
+
+
+def assert_component_bake_enabled() -> None:
+    """Fail closed before design, cache reuse, or any indirect public bake."""
+    if not component_bake_supported():
         raise ComponentError(
             "remotion-project bake is disabled because this deployment has no "
             "verified isolated component runner"

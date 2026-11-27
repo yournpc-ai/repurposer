@@ -371,7 +371,11 @@ def _compile_derived_caption(
         "text_digest"
     ) != obj.caption.source_text_digest:
         raise CompileError(f"clip {clip.clip_id}: caption and prepared speech versions differ")
-    from app.editing.caption_timing import align_translations_to_phrases, split_cue_into_timed_phrases
+    from app.editing.caption_timing import (
+        align_translations_to_phrases,
+        format_caption_punctuation,
+        split_cue_into_timed_phrases,
+    )
 
     primary = obj.text
     translation = ""
@@ -398,10 +402,11 @@ def _compile_derived_caption(
             end = start + 1
         if start < clip_start or end > clip_end:
             raise CompileError(f"clip {clip.clip_id}: a derived caption escapes its fixed window")
+        raw_cue_text = f"{phrase.text}\n{secondary}" if secondary else phrase.text
         cue_object = obj.model_copy(
             update={
                 "object_id": f"{obj.object_id}:cue:{index}",
-                "text": f"{phrase.text}\n{secondary}" if secondary else phrase.text,
+                "text": format_caption_punctuation(raw_cue_text) or raw_cue_text,
                 "caption": None,
             }
         )

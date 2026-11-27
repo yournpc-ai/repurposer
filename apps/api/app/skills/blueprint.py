@@ -241,7 +241,7 @@ class BlueprintSfxCue(BaseModel):
     tune: SoundTuneArgs | None = Field(default=None, exclude_if=lambda value: value is None)
     params: dict[str, int | float] = Field(default_factory=dict)
     seed: int = Field(default=1248, ge=0, le=0xFFFFFFFF)
-    gain_db: float = Field(default=-13.0, ge=-60.0, le=6.0)
+    gain_db: float = Field(default=-15.5, ge=-60.0, le=6.0)
     act_index: int = Field(ge=0)
     anchor: Literal["act_start", "act_end", "cut_after"] = "cut_after"
     offset_s: float = Field(default=0.0, ge=-2.0, le=2.0)

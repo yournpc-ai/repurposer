@@ -44,7 +44,7 @@ import { Spinner } from "@/components/ui/spinner-clean"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { apiFetch } from "@/lib/api"
 import type { MediaRegionSelection } from "@/lib/mediaRegionSelection"
-import { cn, formatDuration } from "@/lib/utils"
+import { cn, formatDuration, formatTimestamp } from "@/lib/utils"
 import type { WorkbenchAsset, WorkbenchOutput } from "@/lib/workbench"
 import {
   useWorkbench,
@@ -193,7 +193,7 @@ function normalizeScenes(
 }
 
 function formatTimeRange(start: number, end: number): string {
-  return `${formatDuration(Math.max(0, start))}–${formatDuration(Math.max(start, end))}`
+  return `${formatTimestamp(Math.max(0, start))}–${formatTimestamp(Math.max(start, end))}`
 }
 
 function DirectorSceneList({
@@ -417,7 +417,7 @@ function OutputArtifactView({
   return (
     <div className="flex flex-1 flex-col gap-3 overflow-y-auto p-4 thin-scroll">
       {hasNewerDraft && matchingComp?.current_version_id ? (
-        <div className="flex items-center justify-between gap-2 rounded-lg border border-subtle bg-muted px-3 py-2 text-xs">
+        <div className="flex shrink-0 items-center justify-between gap-2 rounded-lg border border-subtle bg-muted px-3 py-2 text-xs">
           <span className="text-muted-foreground">
             {t("workbench.player.newerDraftAvailable")}
           </span>
@@ -439,7 +439,7 @@ function OutputArtifactView({
       ) : null}
 
       {/* Full-length Video Stage with inline Pause-and-Select Region */}
-      <div className="relative overflow-hidden rounded-lg border border-subtle bg-black">
+      <div className="relative shrink-0 overflow-hidden rounded-lg border border-subtle bg-black">
         <video
           key={output.id}
           ref={videoRef}
@@ -467,7 +467,7 @@ function OutputArtifactView({
       </div>
 
       {/* Action Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-1.5">
           <Button
             size="sm"
@@ -772,7 +772,7 @@ function VersionArtifactView({
   return (
     <div className="flex flex-1 flex-col gap-3 overflow-y-auto p-4 thin-scroll">
       {/* Quiet Version Metadata & Switcher */}
-      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
         <div className="flex min-w-0 items-center gap-2">
           <span className="truncate font-medium text-foreground">
             {activeVersion.compositionName}
@@ -812,46 +812,48 @@ function VersionArtifactView({
       </div>
 
       {/* Main Live Draft Stage */}
-      {loading ? (
-        <Loading label={t("common.loading")} className="aspect-video w-full">
-          <Skeleton width="100%" height="100%" radius={10} />
-        </Loading>
-      ) : error ? (
-        <div className="flex aspect-video w-full flex-col items-center justify-center gap-3 rounded-lg border border-subtle bg-muted p-4 text-center">
-          <p className="text-xs text-muted-foreground">{error}</p>
-          <Button
-            size="sm"
-            variant="secondary"
-            icon={<RefreshCw className="size-3.5" />}
-            onClick={() => setReloadNonce((n) => n + 1)}
+      <div className="shrink-0">
+        {loading ? (
+          <Loading label={t("common.loading")} className="aspect-video w-full">
+            <Skeleton width="100%" height="100%" radius={10} />
+          </Loading>
+        ) : error ? (
+          <div className="flex aspect-video w-full flex-col items-center justify-center gap-3 rounded-lg border border-subtle bg-muted p-4 text-center">
+            <p className="text-xs text-muted-foreground">{error}</p>
+            <Button
+              size="sm"
+              variant="secondary"
+              icon={<RefreshCw className="size-3.5" />}
+              onClick={() => setReloadNonce((n) => n + 1)}
+            >
+              {t("workbench.player.retry")}
+            </Button>
+          </div>
+        ) : previewSpec ? (
+          <Suspense
+            fallback={
+              <Loading label={t("common.loading")} className="aspect-video w-full">
+                <Skeleton width="100%" height="100%" radius={10} />
+              </Loading>
+            }
           >
-            {t("workbench.player.retry")}
-          </Button>
-        </div>
-      ) : previewSpec ? (
-        <Suspense
-          fallback={
-            <Loading label={t("common.loading")} className="aspect-video w-full">
-              <Skeleton width="100%" height="100%" radius={10} />
-            </Loading>
-          }
-        >
-          <LazyWorkbenchDraftPlayer
-            rawSpec={previewSpec}
-            windowStartSeconds={windowRange.start}
-            seekRequest={seekRequest}
-            onTimeSecondsChange={setPlayheadSeconds}
-          />
-        </Suspense>
-      ) : (
-        <div className="flex aspect-video w-full flex-col items-center justify-center gap-2 rounded-lg border border-subtle bg-muted p-4 text-center text-xs text-muted-foreground">
-          <Play className="size-5 opacity-60" />
-          <span>{`${activeVersion.compositionName} · v${activeVersion.version}`}</span>
-        </div>
-      )}
+            <LazyWorkbenchDraftPlayer
+              rawSpec={previewSpec}
+              windowStartSeconds={windowRange.start}
+              seekRequest={seekRequest}
+              onTimeSecondsChange={setPlayheadSeconds}
+            />
+          </Suspense>
+        ) : (
+          <div className="flex aspect-video w-full flex-col items-center justify-center gap-2 rounded-lg border border-subtle bg-muted p-4 text-center text-xs text-muted-foreground">
+            <Play className="size-5 opacity-60" />
+            <span>{`${activeVersion.compositionName} · v${activeVersion.version}`}</span>
+          </div>
+        )}
+      </div>
 
       {/* Window Hint + Quick Actions */}
-      <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 text-xs">
         {isPartialWindow ? (
           <span className="font-mono text-[11px] text-muted-foreground">
             {t("workbench.player.previewWindowHint", {

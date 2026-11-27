@@ -349,6 +349,7 @@ async def synthesize_with_voice_resilience(
     voice_ref: str,
     language: str = "en",
     speed: float = 1.0,
+    emotion: str | None = None,
     owner_id: UUID | None = None,
     voice_row: Voice | None = None,
 ) -> tuple[voice_provider.T2AResult, str]:
@@ -368,14 +369,15 @@ async def synthesize_with_voice_resilience(
     elif resolved_row is not None:
         provider_voice_id = resolved_row.provider_voice_id
 
+    def _call_t2a(vid: str) -> voice_provider.T2AResult:
+        if emotion is not None:
+            return voice_provider.synthesize_detailed(
+                text, vid, language, speed, emotion=emotion
+            )
+        return voice_provider.synthesize_detailed(text, vid, language, speed)
+
     try:
-        result = await asyncio.to_thread(
-            voice_provider.synthesize_detailed,
-            text,
-            provider_voice_id,
-            language,
-            speed,
-        )
+        result = await asyncio.to_thread(_call_t2a, provider_voice_id)
         return result, provider_voice_id
     except voice_provider.VoiceError as exc:
         if (
@@ -423,13 +425,7 @@ async def synthesize_with_voice_resilience(
             old_provider_voice_id=old_voice_id,
             new_provider_voice_id=new_voice_id,
         )
-        retried = await asyncio.to_thread(
-            voice_provider.synthesize_detailed,
-            text,
-            new_voice_id,
-            language,
-            speed,
-        )
+        retried = await asyncio.to_thread(_call_t2a, new_voice_id)
         return retried, new_voice_id
 
 

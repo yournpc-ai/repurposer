@@ -137,8 +137,7 @@ async def deliver_video(db, turn, output_id, base):
         Message.turn_id == opening.id, Message.intent["output_refs"].contains([str(output_id)]),
     ).limit(1))
     if existing is None:
-        text = "正式成片已交付。" if (turn.project.language or "").startswith("zh") else "Your reviewed MP4 is ready."
-        message = await _create_message(db, turn.conversation_id, "assistant", text, turn_id=opening.id,
+        message = await _create_message(db, turn.conversation_id, "assistant", "", turn_id=opening.id,
             intent={"output_refs": [str(output_id)], "reviewed_version": base,
                     "reviewed_at": report["reviewed_at"], "video_sha256": report["video_sha256"]})
         await db.commit()
@@ -628,7 +627,7 @@ async def execute_generate_sfx(turn, args, composition, version):
                             track_id = f"trk_editor_effect_{idx}"
                             idx += 1
 
-                    gain_db = args.gain_db if args.gain_db is not None else -12.0
+                    gain_db = args.gain_db if args.gain_db is not None else -14.5
                     clip_id = f"clp_sfx_{identity.replace('-', '')[:16]}"
                     object_id = f"obj_sfx_{identity.replace('-', '')[:16]}"
                     ops = fixed_audio_ops(

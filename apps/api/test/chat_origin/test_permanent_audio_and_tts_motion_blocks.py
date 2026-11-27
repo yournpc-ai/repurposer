@@ -456,7 +456,7 @@ async def test_chat_origin_permanent_audio_flywheel_and_tts_motion_blocks(
 
         caps = caption_tracks[0].clips
         assert [len(c.object.text.splitlines()) for c in caps] == [2, 2, 1]
-        assert " ".join(c.object.text.splitlines()[0] for c in caps[:2]) == "Cut flagship product videos in seconds by chatting."
+        assert " ".join(c.object.text.splitlines()[0] for c in caps[:2]) == "Cut flagship product videos in seconds by chatting"
         for cap in caps:
             derivation = cap.object.caption
             assert isinstance(derivation, SourceCaptionDerivation) and derivation.state == "derived"
@@ -578,11 +578,15 @@ async def test_create_video_motion_block_pending_speech_and_voice_forbidden_guar
             "normalized_text": primary,
             "cues": [{"text": primary, "text_begin": 0, "text_end": len(primary), "time_begin": 100, "time_end": 4000}],
         }
+        from app.editing.caption_timing import format_caption_punctuation
+
         compiled = _compile_derived_caption(cap, content, {cap.object.caption.speech_object_id: prepared})
         assert len(compiled) == 2
         lines = [c["object"]["text"].split("\n") for c in compiled]
-        assert "".join(line[0] for line in lines) == primary
-        assert " ".join(line[1] for line in lines) == secondary
+        assert " ".join(line[0] for line in lines) == format_caption_punctuation(primary)
+        assert " ".join(line[1] for line in lines) == " ".join(
+            format_caption_punctuation(seg) for seg in secondary.split(", ")
+        )
         assert compiled[0]["start_frame"] == 3
         assert compiled[0]["end_frame"] == compiled[1]["start_frame"]
         assert compiled[1]["end_frame"] == 120

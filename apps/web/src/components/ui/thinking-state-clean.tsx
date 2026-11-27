@@ -131,7 +131,7 @@ export function ThinkingState({
         </span>
         {expandable && (
           <span
-            className="ui-thinkc__chevron opacity-0! transition-opacity duration-150 group-hover/head:opacity-90! group-focus-visible/head:opacity-90!"
+            className="ui-thinkc__chevron"
             aria-hidden="true"
           >
             <svg viewBox="0 0 16 16">
@@ -274,20 +274,26 @@ const css = /* css */ `
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
 }
 
-/* Header row: pixel mark + "Thinking 4s" / "Worked for 18s" + chevron – only as wide as its words, so only they take the hover */
+/* Header row: "Thinking 4s" / "Worked for 18s" + chevron – unified muted tone at rest, cohesive brighten on hover/expanded */
 .ui-thinkc__head {
   display: flex;
   width: fit-content;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
   max-width: 100%;
   height: 36px;
-  padding: 0 8px 0 0;
+  padding: 0 4px 0 0;
   border-radius: calc(var(--aui-radius, 7px) + 1px);
   text-align: left;
+  color: var(--ui-tkc-muted);
+  transition: color 160ms ease;
+}
+.ui-thinkc__head:is(:hover, :focus-visible),
+.ui-thinkc__head[aria-expanded="true"] {
+  color: var(--ui-tkc-ink);
 }
 .ui-thinkc__mark {
   display: grid;
@@ -309,43 +315,38 @@ const css = /* css */ `
 .ui-thinkc__title {
   display: inline-flex;
   min-width: 0;
-  gap: 8px;
+  gap: 6px;
   font-weight: 500;
   white-space: nowrap;
-  color: var(--ui-tkc-ink);
+  color: inherit;
   transition: color 160ms ease;
   animation: ui-thinkc-in 420ms var(--ui-tkc-ease) both;
 }
-.ui-thinkc[data-done] .ui-thinkc__title {
-  color: var(--ui-tkc-muted);
-}
-/* Hover / expanded: brighten muted settled title and reveal chevron */
-.ui-thinkc__head:is(:hover, :focus-visible) .ui-thinkc__title,
-.ui-thinkc__head[aria-expanded="true"] .ui-thinkc__title {
-  color: var(--ui-tkc-ink);
-}
 .ui-thinkc__title .ui-thinkc__shimmer {
-  color: var(--ui-tkc-muted);
+  color: inherit;
 }
 .ui-thinkc__time {
   font-weight: 400;
   font-variant-numeric: tabular-nums;
+  color: inherit;
+}
+.ui-thinkc__item .ui-thinkc__time {
   color: var(--aui-placeholder, var(--ui-tkc-faint));
 }
-/* Chevron appears only on hover/focus (visible on touch devices) */
+/* Chevron shares exact color with header title & elapsed time */
 .ui-thinkc__chevron {
   display: grid;
   place-items: center;
-  width: 16px;
-  height: 16px;
-  margin-left: -4px;
-  color: var(--ui-tkc-icon);
-  opacity: 0;
+  width: 15px;
+  height: 15px;
+  margin-left: -2px;
+  color: inherit;
+  opacity: 0.9;
   transition: opacity 160ms ease, color 160ms ease;
 }
-.ui-thinkc__head:is(:hover, :focus-visible) .ui-thinkc__chevron {
-  opacity: 0.9;
-  color: var(--ui-tkc-ink);
+.ui-thinkc__head:is(:hover, :focus-visible) .ui-thinkc__chevron,
+.ui-thinkc__head[aria-expanded="true"] .ui-thinkc__chevron {
+  opacity: 1;
 }
 @media (hover: none) {
   .ui-thinkc__chevron { opacity: 0.55; }

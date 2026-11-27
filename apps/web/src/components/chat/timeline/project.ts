@@ -80,12 +80,15 @@ function appendUnits(messages: OverlayMessage[], units: ConversationUnit[]) {
       const hasStructuredContent = Boolean(
         m.blocks?.length || m.qa || m.outputRefs?.length || m.candidates || m.suggestions?.length || m.meta,
       )
-      // Export completion already renders its status, credits, and clickable
-      // thumbnail on the tool-call row; suppress the redundant boilerplate
-      // "正式 MP4 已导出，待审片。" text row that otherwise duplicates the
-      // agent's own follow-up prose.
+      // Export execution status ("正在渲染 MP4。" / "正在上传成片。" / "正在校验成片。" /
+      // "正式 MP4 已导出，待审片。") belongs strictly on the live/folded tool-call
+      // activity row; emitting it as a standalone prose message shatters the active
+      // work fold mid-run and duplicates the agent's own narrative.
+      const isExportJob = job.role === "export" || job.operation === "export_video"
       const redundantExportReceiptText =
-        !hasStructuredContent && job.role === "export" && job.status === "available"
+        !hasStructuredContent &&
+        isExportJob &&
+        ["accepted", "queued", "active", "running", "available"].includes(job.status)
       if ((m.content && !redundantExportReceiptText) || hasStructuredContent) {
         units.push({ kind: "message", message: { ...m, jobReceipt: undefined, fromJobReceipt: true } })
       }

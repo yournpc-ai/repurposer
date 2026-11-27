@@ -29,11 +29,13 @@ def resolve_video_voice(persona_voice: dict | None) -> str:
     return DEFAULT_VIDEO_VOICE_ID
 
 
-def narration_synth_config() -> dict[str, Any]:
+def narration_synth_config(
+    *, speed: float = 1.0, emotion: str | None = None
+) -> dict[str, Any]:
     """Complete original-synthesis identity; changes invalidate old originals."""
     from app.providers import voice
 
-    return {
+    config: dict[str, Any] = {
         "provider": "minimax",
         "model": voice.tts_model(),
         "sample_rate": 32000,
@@ -46,6 +48,11 @@ def narration_synth_config() -> dict[str, Any]:
         "subtitle_type": "sentence",
         "alignment": NARRATION_ALIGNMENT,
     }
+    if abs(float(speed) - 1.0) > 1e-6:
+        config["speed"] = round(float(speed), 3)
+    if emotion:
+        config["emotion"] = emotion.strip().lower()
+    return config
 
 
 def narration_content_hash(
@@ -229,9 +236,23 @@ async def prepare_original_narration(
                 from app.pipeline.voices import synthesize_with_voice_resilience
 
                 if speech.voice_id in VERIFIED_VOICE_IDS:
-                    result = await asyncio.to_thread(
-                        synthesize_detailed, normalized, speech.voice_id, speech.language, 1.0
-                    )
+                    if speech.emotion is not None:
+                        result = await asyncio.to_thread(
+                            synthesize_detailed,
+                            normalized,
+                            speech.voice_id,
+                            speech.language,
+                            speech.speed,
+                            emotion=speech.emotion,
+                        )
+                    else:
+                        result = await asyncio.to_thread(
+                            synthesize_detailed,
+                            normalized,
+                            speech.voice_id,
+                            speech.language,
+                            speech.speed,
+                        )
                 else:
                     async with AsyncSessionLocal() as voice_db:
                         result, _ = await synthesize_with_voice_resilience(
@@ -239,7 +260,8 @@ async def prepare_original_narration(
                             text=normalized,
                             voice_ref=speech.voice_id,
                             language=speech.language,
-                            speed=1.0,
+                            speed=speech.speed,
+                            emotion=speech.emotion,
                             owner_id=user_id,
                         )
                 generated = True

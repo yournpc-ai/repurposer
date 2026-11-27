@@ -283,7 +283,7 @@ export function MessageActionBar({
         data-slot="message-action-bar"
         data-reveal-mode="hover"
         className={cn(
-          "mt-1.5 flex items-center gap-0.5 text-muted-foreground transition-opacity duration-150",
+          "my-4 flex items-center gap-0.5 text-muted-foreground transition-opacity duration-150",
           !stayVisible &&
             "opacity-0 group-hover/msg:opacity-100 group-has-[:focus-visible]/msg:opacity-100",
           className,
@@ -302,7 +302,7 @@ export function MessageActionBar({
       animate={{ opacity: 1, y: 0 }}
       transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
       className={cn(
-        "mt-1.5 flex items-center gap-0.5 text-muted-foreground",
+        "my-4 flex items-center gap-0.5 text-muted-foreground",
         className,
       )}
     >

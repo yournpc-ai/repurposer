@@ -45,7 +45,7 @@ def _session():
 
 
 def _identity(user_id: UUID, speech: SpeechObject) -> tuple[str, str, str]:
-    config = narration_synth_config()
+    config = narration_synth_config(speed=speech.speed, emotion=speech.emotion)
     content_hash, config_hash = narration_content_hash(
         text=speech.text,
         voice_id=speech.voice_id,

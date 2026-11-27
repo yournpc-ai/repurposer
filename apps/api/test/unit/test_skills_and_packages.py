@@ -223,10 +223,9 @@ def _source(path: str = "references/method.md", *, role: str = "reference") -> S
 
 
 def test_method_only_external_skill_is_selectable_without_runner_capabilities(monkeypatch):
-    from app.config import settings
     from app.skills.resolution import _external_option
 
-    monkeypatch.setattr(settings, "component_bake_enabled", False)
+    monkeypatch.setattr("app.tools.video.components.component_bake_supported", lambda: False)
     skill = SimpleNamespace(id=uuid4(), name="chart", description="Chart direction")
     for declared in ([], ["runtime:remotion-source"]):
         version = SimpleNamespace(id=uuid4(), version=1, capability_report={"supported": declared})

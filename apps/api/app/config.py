@@ -129,12 +129,6 @@ class Settings(BaseSettings):
     render_concurrency: int = 2
     render_timeout_seconds: int = 1800
 
-    # Upstream component bake stays fail-closed until the deployment provides
-    # real process/filesystem/egress/resource isolation. Source scanning is
-    # diagnostic only and is never the security boundary. This is a deployment
-    # guard shared by API and render, not a user-facing capability preference.
-    component_bake_enabled: bool = False
-
     # Freesound official API for CC0 SFX search/import. Empty = honest unavailable.
     freesound_api_key: str = ""
 

@@ -12,6 +12,81 @@ from typing_extensions import TypedDict
 _STRONG_PUNCT = frozenset(".!?。！？")
 _SOFT_PUNCT = frozenset(",;:—–，；：、")
 _CLOSING_WRAP = frozenset("\"'”’」』》）】)]")
+_PAUSE_TAG_RE = re.compile(r"<#\s*(\d+(?:\.\d+)?)\s*#>")
+
+
+def strip_pause_tags(text: str) -> str:
+    """Remove MiniMax inline pause tags (e.g. ``<#0.4#>``) for clean display/matching."""
+    if not text or "<#" not in text:
+        return text
+    cleaned = _PAUSE_TAG_RE.sub(" ", text)
+    return re.sub(r"\s{2,}", " ", cleaned).strip()
+
+
+# Broadcast subtitle punctuation cleanup:
+# - Chinese: omit 。，、；： (replace internal pause marks with single spaces, strip trailing),
+#   while preserving ？ ！ 《》 “” ‘’ …… —— · decimals, domains, and time ratios (10:30).
+# - English: strip trailing sentence/clause punctuation (. , ; :) without touching ellipses (...),
+#   decimals (£18.7m), domains (OxValue.AI), or single-letter abbreviations (U.S.).
+_ZH_OMIT_INTERNAL_RE = re.compile(r"[，、；：]|(?<!\d)[,;](?!\d)|(?<!\d):(?!\d|//)")
+_ZH_OMIT_PERIOD_RE = re.compile(r"。+")
+_EN_TRAILING_PUNCT_RE = re.compile(r"(?:[,;:]|(?<!\.)(?<!\b[A-Za-z])\.)+$")
+
+
+def _format_single_caption_line(line: str, language: str | None = None) -> str:
+    cleaned = " ".join(strip_pause_tags(line or "").split())
+    if not cleaned:
+        return ""
+    lang = detect_text_language(cleaned, hint=language)
+    if lang == "zh":
+        cleaned = _ZH_OMIT_PERIOD_RE.sub(" ", cleaned)
+        cleaned = _ZH_OMIT_INTERNAL_RE.sub(" ", cleaned)
+        cleaned = re.sub(r"\s+", " ", cleaned).strip()
+        # Avoid orphan spaces around preserved CJK wrapper/tone punctuation.
+        cleaned = re.sub(r"\s+([？！》”’）])", r"\1", cleaned)
+        cleaned = re.sub(r"([《“‘（])\s+", r"\1", cleaned)
+        return cleaned.strip()
+    cleaned = _EN_TRAILING_PUNCT_RE.sub("", cleaned).strip()
+    return cleaned
+
+
+def format_caption_punctuation(text: str, language: str | None = None) -> str:
+    """Format subtitle text to broadcast/short-video punctuation standards.
+
+    Processes bilingual multi-line captions independently per line so Chinese and
+    English lines each follow their own punctuation convention.
+    """
+    if not text or not text.strip():
+        return ""
+    lines = text.splitlines()
+    if len(lines) == 1:
+        return _format_single_caption_line(lines[0], language=language)
+    formatted = [_format_single_caption_line(line) for line in lines]
+    return "\n".join(line for line in formatted if line)
+
+
+def _segments_with_pauses(text: str) -> list[tuple[str, float]]:
+    """Split text on ``<#x.x#>`` pause tags, returning ``[(segment_text, trailing_pause_ms)]``."""
+    if not text:
+        return []
+    if "<#" not in text:
+        clean = " ".join(text.split())
+        return [(clean, 0.0)] if clean else []
+    segments: list[tuple[str, float]] = []
+    cursor = 0
+    for match in _PAUSE_TAG_RE.finditer(text):
+        part = " ".join(text[cursor:match.start()].split())
+        pause_ms = max(0.0, min(5000.0, float(match.group(1)) * 1000.0))
+        if part:
+            segments.append((part, pause_ms))
+        elif segments:
+            prev_text, prev_pause = segments[-1]
+            segments[-1] = (prev_text, prev_pause + pause_ms)
+        cursor = match.end()
+    tail = " ".join(text[cursor:].split())
+    if tail:
+        segments.append((tail, 0.0))
+    return segments
 
 # CJK tokenization: keep Latin/numeric runs (e.g. "Rookie Cut" words, "1080p", "3.5x", "85%") indivisible.
 _CJK_TOKEN_RE = re.compile(r"[A-Za-z0-9]+(?:[._%×xX+-][A-Za-z0-9]+)*|\s+|.")
@@ -216,16 +291,144 @@ def split_cue_into_timed_phrases(
 ) -> list[TimedPhrase]:
     """Split a single TTS cue into broadcast-grade timed single-line phrases.
 
-    Preserves 100% verbatim spoken text and distributes ``[time_begin_ms, time_end_ms]``
-    contiguously across the resulting phrases by spoken-weight length.
+    Preserves 100% verbatim spoken text (with inline ``<#x.x#>`` pause tags stripped)
+    and distributes ``[time_begin_ms, time_end_ms]`` across the resulting phrases
+    while respecting explicit pause durations when present.
     """
+    if not text or time_end_ms <= time_begin_ms:
+        return []
+    if "<#" in text:
+        segments = _segments_with_pauses(text)
+        if not segments:
+            return []
+        total_ms = float(time_end_ms) - float(time_begin_ms)
+        total_pause_ms = sum(pause for _, pause in segments)
+        # Keep explicit pauses bounded so spoken segments always retain real duration.
+        pause_scale = min(1.0, (total_ms * 0.45) / total_pause_ms) if total_pause_ms > 0 else 1.0
+        speech_budget_ms = max(1.0, total_ms - total_pause_ms * pause_scale)
+        weights = [_spoken_weight(seg, is_last=(idx == len(segments) - 1)) for idx, (seg, _) in enumerate(segments)]
+        total_weight = sum(weights) or float(len(segments))
+        out: list[TimedPhrase] = []
+        cursor = float(time_begin_ms)
+        for idx, ((seg, pause_ms), weight) in enumerate(zip(segments, weights, strict=True)):
+            seg_ms = speech_budget_ms * (weight / total_weight)
+            seg_end = float(time_end_ms) if idx == len(segments) - 1 and pause_ms == 0.0 else min(float(time_end_ms), cursor + seg_ms)
+            if seg_end > cursor:
+                out.extend(split_cue_into_timed_phrases(seg, cursor, seg_end, language=language))
+            cursor = min(float(time_end_ms), seg_end + pause_ms * pause_scale)
+        return out
     cleaned = " ".join((text or "").split())
-    if not cleaned or time_end_ms <= time_begin_ms:
+    if not cleaned:
         return []
     lang = detect_text_language(cleaned, hint=language)
     tokens = _text_tokens(cleaned, lang)
     pieces = ["".join(tokens[i:j]).strip() for i, j in _phrase_ranges(tokens, lang, 46, 8)]
     return _distribute_timing(pieces, float(time_begin_ms), float(time_end_ms))
+
+
+def _norm_match_text(text: str) -> str:
+    return re.sub(r"\s+", " ", strip_pause_tags(text or "")).strip().lower()
+
+
+def resolve_cue_phrase_window_s(
+    narration: str,
+    phrase: str,
+    *,
+    cues: list[dict[str, Any]] | None,
+    duration_s: float,
+    speech_lead_s: float = 0.15,
+    language: str | None = None,
+) -> tuple[float, float] | None:
+    """Resolve a spoken ``phrase`` inside ``narration`` into act-local ``(start_s, end_s)``.
+
+    Uses measured MiniMax sentence cues plus explicit ``<#x.x#>`` pause tags and
+    spoken-weight distribution inside each cue so motion-block reveals, callouts,
+    and cursor clicks align tightly to the moment the phrase is actually spoken.
+    """
+    needle = _norm_match_text(phrase)
+    clean_narration = _norm_match_text(narration)
+    if not needle or not clean_narration or duration_s <= 0:
+        return None
+
+    # Build ordered spoken spans [(clean_text, start_ms, end_ms)] across the act.
+    spans: list[tuple[str, float, float]] = []
+    if cues:
+        prev_end = 0.0
+        for cue in cues:
+            cue_text = str(cue.get("text") or "").strip()
+            if not cue_text:
+                continue
+            tb = max(prev_end, float(cue["time_begin"]))
+            te = float(cue["time_end"])
+            if te <= tb:
+                continue
+            for tp in split_cue_into_timed_phrases(cue_text, tb, te, language=language):
+                spans.append((tp.text, tp.time_begin_ms, tp.time_end_ms))
+                prev_end = tp.time_end_ms
+    if not spans:
+        for tp in split_cue_into_timed_phrases(narration, 0.0, duration_s * 1000.0, language=language):
+            spans.append((tp.text, tp.time_begin_ms, tp.time_end_ms))
+    if not spans:
+        return None
+
+    # Concatenate spans with single spaces while recording exact character offsets.
+    joined_parts: list[str] = []
+    span_ranges: list[tuple[int, int, str, float, float]] = []
+    cursor = 0
+    for text_part, tb_ms, te_ms in spans:
+        norm_part = _norm_match_text(text_part)
+        if not norm_part:
+            continue
+        if joined_parts:
+            joined_parts.append(" ")
+            cursor += 1
+        start_ch = cursor
+        joined_parts.append(norm_part)
+        cursor += len(norm_part)
+        span_ranges.append((start_ch, cursor, norm_part, tb_ms, te_ms))
+    haystack = "".join(joined_parts)
+
+    pos = haystack.find(needle)
+    match_len = len(needle)
+    if pos < 0:
+        # Fallback: strip punctuation on both sides for resilient numeric/symbol matching
+        compact_needle = re.sub(r"[^\w\u4e00-\u9fff]+", "", needle)
+        if not compact_needle:
+            return None
+        char_map: list[int] = []
+        compact_chars: list[str] = []
+        for idx, ch in enumerate(haystack):
+            if ch.isalnum() or is_cjk_char(ch):
+                compact_chars.append(ch)
+                char_map.append(idx)
+        c_haystack = "".join(compact_chars)
+        c_pos = c_haystack.find(compact_needle)
+        if c_pos < 0:
+            return None
+        pos = char_map[c_pos]
+        end_pos = char_map[min(len(char_map) - 1, c_pos + len(compact_needle) - 1)] + 1
+    else:
+        end_pos = pos + match_len
+
+    def _offset_to_ms(char_offset: int) -> float:
+        for s_ch, e_ch, norm_part, tb_ms, te_ms in span_ranges:
+            if char_offset <= e_ch:
+                local_idx = max(0, char_offset - s_ch)
+                if local_idx <= 0 or not norm_part:
+                    return tb_ms
+                if local_idx >= len(norm_part):
+                    return te_ms
+                prefix_w = _spoken_weight(norm_part[:local_idx], is_last=False)
+                full_w = _spoken_weight(norm_part, is_last=True)
+                ratio = max(0.0, min(1.0, prefix_w / max(full_w, 1.0)))
+                return tb_ms + (te_ms - tb_ms) * ratio
+        return span_ranges[-1][4]
+
+    start_ms = _offset_to_ms(pos)
+    end_ms = max(start_ms + 150.0, _offset_to_ms(end_pos))
+    start_s = round(max(0.0, min(duration_s - 0.1, speech_lead_s + start_ms / 1000.0)), 3)
+    end_s = round(max(start_s + 0.15, min(duration_s, speech_lead_s + end_ms / 1000.0)), 3)
+    return start_s, end_s
 
 
 def align_translations_to_phrases(
@@ -276,7 +479,7 @@ def build_motion_block_caption_phrases(
     - Bilingual translations (``caption_translations``, or second line / foreign-language
       ``caption_text``) align onto Line 2 across the exact same timed phrase windows.
     """
-    narr_lang = detect_text_language(narration, hint=language)
+    narr_lang = detect_text_language(strip_pause_tags(narration), hint=language)
     primary_phrases: list[TimedPhrase] = []
 
     if cues:
@@ -351,5 +554,8 @@ __all__ = [
     "align_translations_to_phrases",
     "build_motion_block_caption_phrases",
     "detect_text_language",
+    "format_caption_punctuation",
+    "resolve_cue_phrase_window_s",
     "split_cue_into_timed_phrases",
+    "strip_pause_tags",
 ]

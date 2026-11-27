@@ -570,11 +570,17 @@ def _infer_missing_brief_option_value(slot: Any, option: dict[str, Any]) -> str 
     label = str(option.get("label") or "").strip()
     combined = f"{raw_id} {label}".lower()
     if slot == "target_seconds":
-        match = re.search(r"\b(\d{1,3})\b|(\d{1,3})\s*(?:s|sec|秒)", combined)
+        # Parse from label first so ordinal option IDs ("1", "2", "3") never shadow "45 秒".
+        label_lower = label.lower()
+        match = (
+            re.search(r"(\d{1,3})\s*(?:秒|seconds?|sec\b|s\b)", label_lower)
+            or re.search(r"\b(\d{1,3})\b", label_lower)
+            or re.search(r"(\d{1,3})\s*(?:秒|seconds?|sec\b|s\b)", raw_id.lower())
+        )
         if match:
-            digits = match.group(1) or match.group(2)
-            if digits:
-                return int(digits)
+            return int(match.group(1))
+        if raw_id.isdigit() and int(raw_id) >= 5:
+            return int(raw_id)
     if slot == "subtitle_languages":
         langs: list[str] = []
         if any(tok in combined for tok in ("双语", "bilingual", "zh_en", "zh-en", "zh+en", "中英")):
@@ -588,7 +594,7 @@ def _infer_missing_brief_option_value(slot: Any, option: dict[str, Any]) -> str 
             return langs
         return [raw_id or label]
     if slot == "narration_language":
-        if any(tok in combined for tok in ("none", "无需", "无旁白")):
+        if any(tok in combined for tok in ("none", "无需", "不需要", "不要旁白", "不配音", "无旁白")):
             return "none"
         if any(tok in combined for tok in ("英文", "英语", "english")) or raw_id.lower() == "en":
             return "en"

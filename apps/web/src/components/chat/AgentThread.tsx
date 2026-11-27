@@ -416,6 +416,7 @@ export function AgentThread({
         : message
     )
   }, [])
+  const activeStepTitleRef = useRef<string | null>(null)
   // The reducer pair is the extracted PURE seam (activityReducer.ts, Phase
   // 3 Batch A) — same upsert/sweep semantics, contract-tested.
   const handleActivityFrame = useCallback((frame: ActivityFramePayload) => {
@@ -424,7 +425,14 @@ export function AgentThread({
       return
     }
     if (frame.kind === "steps") {
-      setLiveSteps(Array.isArray(frame.steps) && frame.steps.length > 0 ? frame.steps : null)
+      const nextSteps = Array.isArray(frame.steps) && frame.steps.length > 0 ? frame.steps : null
+      const nextActiveTitle =
+        nextSteps?.find((step) => step.status === "in_progress")?.title?.trim() || null
+      if (activeStepTitleRef.current !== null && nextActiveTitle !== activeStepTitleRef.current) {
+        setLiveFocus(null)
+      }
+      activeStepTitleRef.current = nextActiveTitle
+      setLiveSteps(nextSteps)
       return
     }
     setActivities((prev) => upsertActivityFrame(prev, frame))
@@ -472,6 +480,7 @@ export function AgentThread({
   // transient now-line list and the array rows embedded in `messages`.
   const settleActivities = useCallback(
     (status: "completed" | "failed" | "cancelled") => {
+      activeStepTitleRef.current = null
       setLiveFocus(null)
       if (status === "failed") {
         // Preserve StepsPlanCard on failure and stamp in-progress step red,

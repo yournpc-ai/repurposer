@@ -84,7 +84,7 @@ it("does not give an empty streaming speech row its own flex gap", () => {
   expect(items[0].textContent).toBe("Make a video")
   expect(items[1].textContent).toBe("Starting")
   expect(within(items[2] as HTMLElement).getByRole("button", { name: "chat.failed" })).toBeTruthy()
-  expect(items[3].textContent).toBe("chat.thinking")
+  expect(items[3].textContent).toMatch(/^chat\.thinking\d+s$/)
 })
 
 it("keeps thinking below a submitted questionnaire when the continuation reuses the turn id", () => {
@@ -892,4 +892,160 @@ it("Option A single-rail: keeps one opening stage_note above the fold and absorb
   ]
   const liveAfterQaUnits = foldActivityUnits(buildConversationUnits(afterQaSubmitRows), undefined, "u1")
   expect(liveAfterQaUnits.some((u) => u.kind === "message" && u.message.id === "summary-rail")).toBe(true)
+})
+
+it("suppresses running export boilerplate so active export never shatters the work fold, and hides legacy delivery stub copy", () => {
+  const runningExportRows: OverlayMessage[] = [
+    { id: "u1", role: "user", content: "制作宣传片", turnId: "u1" },
+    {
+      id: "a1",
+      role: "assistant",
+      content: "",
+      turnId: "u1",
+      runId: "run-1",
+      activity: {
+        activity_id: "c1",
+        call_id: "c1",
+        tool_name: "preview_range",
+        kind: "read",
+        status: "completed",
+        key: "chat.activity.previewRangeDone",
+      },
+    },
+    {
+      id: "a2",
+      role: "assistant",
+      content: "",
+      turnId: "u1",
+      runId: "run-1",
+      activity: {
+        activity_id: "c2",
+        call_id: "c2",
+        tool_name: "export_video",
+        kind: "read",
+        status: "active",
+        call_state: "running",
+        key: "chat.activity.exportVideo",
+      },
+    },
+    {
+      id: "job-export-running",
+      role: "assistant",
+      content: "正在渲染 MP4。",
+      turnId: "u1",
+      runId: "run-1",
+      jobReceipt: {
+        callId: "c2",
+        operation: "export_video",
+        status: "running",
+      },
+    },
+  ]
+  const units = foldActivityUnits(buildConversationUnits(runningExportRows), undefined, "u1")
+  // Running export receipt must NEVER appear as a standalone prose message or close the fold
+  expect(units.some((u) => u.kind === "message" && u.message.content.includes("正在渲染 MP4"))).toBe(false)
+  const folds = units.filter((u) => u.kind === "activityFold")
+  expect(folds).toHaveLength(1)
+  expect(folds[0].openTail).toBe(true)
+  expect(folds[0].liveActivity?.tool_name).toBe("export_video")
+
+  // Legacy delivery stub with outputRefs suppresses redundant "正式成片已交付。" text & action bar
+  const deliveredRows: OverlayMessage[] = [
+    { id: "u2", role: "user", content: "制作宣传片", turnId: "u2" },
+    {
+      id: "del-1",
+      serverMessageId: "del-1",
+      role: "assistant",
+      content: "正式成片已交付。",
+      turnId: "u2",
+      hydrated: true,
+      reviewedVersionId: "ver-1",
+      outputRefs: ["out-1"],
+    },
+    {
+      id: "final-1",
+      serverMessageId: "final-1",
+      role: "assistant",
+      content: "成片做好了，右侧可以直接看。",
+      turnId: "u2",
+      hydrated: true,
+      turnProse: true,
+    },
+  ]
+  const rendered = render(
+    <ChatConversation
+      conversationUnits={foldActivityUnits(buildConversationUnits(deliveredRows))}
+      chatOutputs={[
+        {
+          id: "out-1",
+          project_id: "p1",
+          type: "video",
+          render_status: "completed",
+          files: { video: "https://cdn.example.com/final.mp4" },
+          payload: { duration_seconds: 45 },
+          created_at: "2026-11-27T00:00:00Z",
+        } as never,
+      ]}
+      skillOptions={[]}
+      openOutputViewer={vi.fn()}
+      chatBusy={false}
+      onSuggestionClick={vi.fn()}
+      onStructureVisible={vi.fn()}
+      presentationRecovery={null}
+      currentActivityRowKeysRef={{ current: new Set() }}
+      liveWorkFoldKey={null}
+      nowRow={null}
+      bottomNowRow={null}
+      activeTurnId={null}
+      scrollerSendRef={{ current: null }}
+    />,
+  )
+  expect(rendered.queryByText("正式成片已交付。")).toBeNull()
+  expect(rendered.getByText("成片做好了，右侧可以直接看。")).toBeTruthy()
+})
+
+it("shows Thinking honestly during live_post_tool_thinking instead of snapping back to stale liveFocus", () => {
+  const rows: OverlayMessage[] = [
+    { id: "u1", role: "user", content: "制作宣传片", turnId: "u1" },
+    {
+      id: "act1",
+      role: "assistant",
+      content: "",
+      turnId: "u1",
+      activity: {
+        activity_id: "c1",
+        call_id: "c1",
+        tool_name: "capture_web",
+        kind: "read",
+        key: "chat.activity.captureWebDone",
+        status: "completed",
+        duration_ms: 4000,
+      },
+    },
+  ]
+  const units = foldActivityUnits(buildConversationUnits(rows), undefined, "u1")
+  const { container } = render(
+    <ChatConversation
+      conversationUnits={units}
+      chatOutputs={[]}
+      skillOptions={[]}
+      openOutputViewer={vi.fn()}
+      chatBusy
+      onSuggestionClick={vi.fn()}
+      onStructureVisible={vi.fn()}
+      presentationRecovery={null}
+      currentActivityRowKeysRef={{ current: new Set(["act1"]) }}
+      liveWorkFoldKey="act1"
+      liveMode="live_post_tool_thinking"
+      liveFocus="正在编排 45 秒分镜与字幕"
+      postToolThinkingStartedAtMs={Date.now() - 3000}
+      nowRow={{ activity_id: "__think__", kind: "think", status: "active", key: null }}
+      bottomNowRow={null}
+      activeTurnId="u1"
+      scrollerSendRef={{ current: null }}
+    />,
+  )
+  const title = container.querySelector(".ui-thinkc__title")?.textContent ?? ""
+  expect(title).toContain("chat.thinking")
+  expect(title).not.toContain("正在编排 45 秒分镜与字幕")
 })
