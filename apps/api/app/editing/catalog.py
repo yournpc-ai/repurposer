@@ -213,17 +213,17 @@ MOTION_BLOCK_CATALOG: dict[str, dict[str, Any]] = {
     "device_mockup": {
         "id": "device_mockup", "version": 1, "domain": "product", "category": "interfaces",
         "name": "Device Mockup",
-        "desc": "Order pinned images as primary then mobile. Choose dual, desktop, mobile, split_focus or hero_bleed. Split focus can show an unbranded material screen without a capture. Time the entrance with reveal_at_s.",
+        "desc": "Order pinned images as primary then mobile. Choose dual, desktop, mobile, split_focus or hero_bleed. Split focus can show an unbranded material screen without a capture. When narrated, pass cue_phrase (spoken words from this act's narration) instead of guessing reveal_at_s so entrance snaps to speech.",
         "use_for": ["Show the same product across form factors."],
         "avoid": ["Uncaptured interfaces or moving footage."],
         "supports_alpha": True, "suggested_duration_s": [4.0, 8.0],
         "required_slots": ["image_resource"],
-        "optional_slots": ["mobile_image_resource", "eyebrow", "headline", "caption", "layout", "reveal_at_s", "theme", "backdrop_style", "accent_color", "show_backdrop"],
+        "optional_slots": ["mobile_image_resource", "eyebrow", "headline", "caption", "layout", "cue_phrase", "reveal_at_s", "theme", "backdrop_style", "accent_color", "show_backdrop"],
     },
     "flow_diagram": {
         "id": "flow_diagram", "version": 1, "domain": "visuals", "category": "diagrams",
         "name": "Flow Diagram",
-        "desc": "3–5 connected nodes {title,detail?,step_label?,badge?,reveal_at_s?}.",
+        "desc": "3–5 connected nodes {title,detail?,step_label?,badge?,cue_phrase?,reveal_at_s?}. When narrated, pass cue_phrase on each node (exact spoken phrase from this act's narration) instead of guessing reveal_at_s so each node enters when spoken.",
         "use_for": ["Explain a mechanism, data flow or value chain."],
         "avoid": ["Unrelated feature lists."],
         "supports_alpha": True, "suggested_duration_s": [4.0, 8.0],
@@ -233,7 +233,7 @@ MOTION_BLOCK_CATALOG: dict[str, dict[str, Any]] = {
     "split_compare": {
         "id": "split_compare", "version": 1, "domain": "visuals", "category": "comparisons",
         "name": "Split Compare",
-        "desc": "Each heading has 2–4 items {text,reveal_at_s?}; dim_left strikes old points as their counterparts appear.",
+        "desc": "Each heading has 2–4 items {text,cue_phrase?,reveal_at_s?}; dim_left strikes old points as their counterparts appear. When narrated, prefer cue_phrase over guessing reveal_at_s.",
         "use_for": ["Contrast two approaches using comparable points."],
         "avoid": ["Unrelated categories or numeric time series."],
         "supports_alpha": True, "suggested_duration_s": [4.0, 8.0],
@@ -243,7 +243,7 @@ MOTION_BLOCK_CATALOG: dict[str, dict[str, Any]] = {
     "step_timeline": {
         "id": "step_timeline", "version": 1, "domain": "visuals", "category": "diagrams",
         "name": "Step Timeline",
-        "desc": "3–4 steps {number?,title,detail?,reveal_at_s?}; active_step selects a one-based focus.",
+        "desc": "3–4 steps {number?,title,detail?,cue_phrase?,reveal_at_s?}; active_step selects a one-based focus. When narrated, pass cue_phrase on each step (exact spoken word/phrase from this act's narration) instead of guessing reveal_at_s so steps unfold in sync with speech.",
         "use_for": ["Explain a sequence of implementation steps."],
         "avoid": ["Independent features without an order."],
         "supports_alpha": True, "suggested_duration_s": [4.0, 8.0],
@@ -253,7 +253,7 @@ MOTION_BLOCK_CATALOG: dict[str, dict[str, Any]] = {
     "bento_features": {
         "id": "bento_features", "version": 1, "domain": "visuals", "category": "features",
         "name": "Bento Features",
-        "desc": "3–4 cards {tag?,title,detail,reveal_at_s?}; highlight_index selects a zero-based card.",
+        "desc": "3–4 cards {tag?,title,detail,cue_phrase?,reveal_at_s?}; highlight_index selects a zero-based card. When narrated, prefer cue_phrase over guessing reveal_at_s.",
         "use_for": ["Introduce distinct qualitative product capabilities."],
         "avoid": ["Metrics without explanatory copy."],
         "supports_alpha": True, "suggested_duration_s": [4.0, 8.0],
@@ -263,7 +263,7 @@ MOTION_BLOCK_CATALOG: dict[str, dict[str, Any]] = {
     "data_chart": {
         "id": "data_chart", "version": 1, "domain": "visuals", "category": "charts_and_numbers",
         "name": "Data Chart",
-        "desc": "Bar or line chart with 3–8 points {label,value,display_value?,reveal_at_s?}, optional unit and zero-based highlight_index.",
+        "desc": "Bar or line chart with 3–8 points {label,value,display_value?,cue_phrase?,reveal_at_s?}, optional unit and zero-based highlight_index. When narrated, prefer cue_phrase over guessing reveal_at_s.",
         "use_for": ["Compare observed quantities or show a measured trend."],
         "avoid": ["Unsupported claims or mixed units."],
         "supports_alpha": True, "suggested_duration_s": [4.0, 8.0],
@@ -341,7 +341,7 @@ MOTION_BLOCK_CATALOG: dict[str, dict[str, Any]] = {
         "domain": "product",
         "category": "interfaces",
         "name": "Product Showcase",
-        "desc": "Precision light/dark studio frame presenting a captured web UI screenshot. camera_motion must be subtle_push|settle_tilt|drift_focus|static; camera_preset must be flat|tilt_left|tilt_right|dolly_zoom|scroll_reveal. Bind optional cursor {x,y,click_at_s} and up to 4 non-overlapping callout_steps [{start_s,end_s,label,x,y,width,height}] using normalized 0..1 coordinates (or element_id from capture).",
+        "desc": "Precision light/dark studio frame presenting a captured web UI screenshot. camera_motion must be subtle_push|settle_tilt|drift_focus|static; camera_preset must be flat|tilt_left|tilt_right|dolly_zoom|scroll_reveal. Bind optional cursor {x,y,cue_phrase?,click_at_s?} and up to 4 non-overlapping callout_steps [{cue_phrase?,start_s?,end_s?,label,x,y,width,height}] using normalized 0..1 coordinates (or element_id from capture). When narrated, pass cue_phrase (spoken words from this act's narration) so spotlights and clicks align to exact speech word timestamps.",
         "use_for": [
             "real website view reveal from capture_web",
             "zoomed UI workflow showcase with callout spotlight on a key feature region",
@@ -377,7 +377,7 @@ MOTION_BLOCK_CATALOG: dict[str, dict[str, Any]] = {
         "domain": "visuals",
         "category": "charts_and_numbers",
         "name": "Metric Grid",
-        "desc": "2-4 elevated institutional metric/capability cards with staggered spring settle, deterministic numeric count-up, top-edge specular sheen, and light/dark studio canvas. Each item supports reveal_at_s in act-local seconds and a short supporting detail. Each items[].value must include its unit or symbol (e.g. '3s', '85%', '4.2×', '$1.8M'), keeping items[].label strictly as the metric name.",
+        "desc": "2-4 elevated institutional metric/capability cards with staggered spring settle, deterministic numeric count-up, top-edge specular sheen, and light/dark studio canvas. When narrated, pass cue_phrase on each item (exact spoken words/numbers from this act's narration, e.g. '27 valuation algorithms' or '二十七个估值算法') instead of guessing reveal_at_s so each card enters right when spoken. Each items[].value must include its unit or symbol (e.g. '3s', '85%', '4.2×', '$1.8M'), keeping items[].label strictly as the metric name.",
         "use_for": [
             "quantified proof points, valuation metrics, or core platform pillars",
             "mid-promo credibility section breaking up UI showcases",

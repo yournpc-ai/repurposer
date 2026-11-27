@@ -297,6 +297,29 @@ def test_saved_playback_preserves_empty_time_and_transition_boundaries():
     with pytest.raises(ScrubTargetError, match="complete transition"):
         play(1, 2)
 
+    from app.tools.video.preview import snap_preview_range_to_transitions
+
+    # Case 1: Under 12s cap — expands outward to include complete transition + 1-frame rounding guard (0.8–1.2s + 1/30s = 1.2333s).
+    snapped, adjusted = snap_preview_range_to_transitions(
+        content, VideoRangeScrubTarget(start_seconds=0.0, end_seconds=1.0)
+    )
+    assert adjusted is True
+    assert snapped.start_seconds == pytest.approx(0.0)
+    assert snapped.end_seconds == pytest.approx(1.2 + 1 / 30)
+    assert play(snapped.start_seconds, snapped.end_seconds)["duration_frames"] == 37
+
+    # Case 2: At 12s cap ([0, 12] straddling a centered transition at 11.8–12.2s) — pulls inward to 11.8s instead of deadlocking.
+    left.range.end = 12 * 90000
+    right.range.start = 12 * 90000
+    right.range.end = 16 * 90000
+    snapped_cap, adjusted_cap = snap_preview_range_to_transitions(
+        content, VideoRangeScrubTarget(start_seconds=0.0, end_seconds=12.0)
+    )
+    assert adjusted_cap is True
+    assert snapped_cap.start_seconds == pytest.approx(0.0)
+    assert snapped_cap.end_seconds == pytest.approx(11.8)
+    assert play(snapped_cap.start_seconds, snapped_cap.end_seconds)["duration_frames"] == 354
+
 
 def test_source_geometry_distinguishes_borders_from_actual_source_clipping():
     content = valid_content()

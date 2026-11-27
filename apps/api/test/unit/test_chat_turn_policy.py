@@ -590,7 +590,9 @@ def test_create_rejection_stops_repeated_or_unproductive_attempts():
     assert video_rejection_stop(ToolRejected(kind="execute_guardrail", tool_name="split_clip", iteration=0, detail="bad", duration_ms=0), (first, other)) is False
     preview = ToolRejected(kind="execute_guardrail", tool_name="preview_range", iteration=0, detail="generator_preview_failed: registerRoot missing", duration_ms=0)
     assert video_rejection_stop(preview, ()) is False
-    assert video_rejection_stop(preview, (preview,)) is True
+    assert video_rejection_stop(preview, (preview,)) is False
+    assert video_rejection_stop(preview, (preview, preview)) is False
+    assert video_rejection_stop(preview, (preview, preview, preview)) is True
     pending = ToolRejected(kind="execute_guardrail", tool_name="preview_range", iteration=0,
                            detail="pending_media", duration_ms=0, candidate_digest="same-window")
     animated = ToolRejected(kind="execute_guardrail", tool_name="translate", iteration=1,
@@ -598,9 +600,12 @@ def test_create_rejection_stops_repeated_or_unproductive_attempts():
                             duration_ms=0, candidate_digest="same-transform")
     changed = ToolRejected(kind="execute_guardrail", tool_name="preview_range", iteration=2,
                            detail="pending_media", duration_ms=0, candidate_digest="another-window")
-    assert video_rejection_stop(pending, (pending, animated)) is True
+    # Write tools still stop on 2nd identical failure; read-only preview_range allows up to 3 identical retries (stops on 4th) or 6 total.
+    assert video_rejection_stop(pending, (pending, animated)) is False
+    assert video_rejection_stop(pending, (pending, pending, pending, animated)) is True
     assert video_rejection_stop(animated, (pending, animated, changed)) is True
     assert video_rejection_stop(changed, (pending, animated)) is False
+    assert video_rejection_stop(changed, (pending, changed, changed, changed, pending)) is True
 
 
 def test_saved_version_offers_materials_and_blocking_clarification():
@@ -688,6 +693,8 @@ async def test_failed_observations_stop_across_equivalent_arguments_and_other_re
         ToolCall(id="first", name="preview_range", arguments={"start_seconds": 0, "end_seconds": 2}),
         ToolCall(id="other", name="other_read", arguments={"start_seconds": 0, "end_seconds": 2}),
         ToolCall(id="second", name="preview_range", arguments={"kind": "range", "start_seconds": 0, "end_seconds": 2}),
+        ToolCall(id="third", name="preview_range", arguments={"start_seconds": 0, "end_seconds": 2}),
+        ToolCall(id="fourth", name="preview_range", arguments={"kind": "range", "start_seconds": 0, "end_seconds": 2}),
         ToolCall(id="unexpected", name="other_read", arguments={"start_seconds": 0, "end_seconds": 2}),
     ]
 
@@ -708,7 +715,7 @@ async def test_failed_observations_stop_across_equivalent_arguments_and_other_re
         ChatTool(name="preview_range", description="Preview", params_model=VideoRangeScrubTarget, terminal=False),
         ChatTool(name="other_read", description="Read", params_model=VideoRangeScrubTarget, terminal=False),
     ]
-    agent.max_iterations = 6
+    agent.max_iterations = 8
 
     async def execute(name, _params, _speech):
         from app.agents.tool_loop import ToolObservation
@@ -718,9 +725,9 @@ async def test_failed_observations_stop_across_equivalent_arguments_and_other_re
     result = await agent.call_loop(execute, should_stop_rejection=video_rejection_stop,
                                   message="Preview the saved work")
     assert result.no_progress_tool == "preview_range"
-    assert result.iterations == 3
-    assert agent.client.requests == 3
-    assert [event.tool_name for event in result.rejections] == ["preview_range", "preview_range"]
+    assert result.iterations == 5
+    assert agent.client.requests == 5
+    assert [event.tool_name for event in result.rejections] == ["preview_range"] * 4
 
 
 @pytest.mark.asyncio

@@ -248,6 +248,11 @@ def canonical_resource(snapshot: SourceSnapshot, *, target: Any = None) -> dict[
             "consumption": "web_object",
             "canonical_url": meta.get("canonical_url"),
             "capture_plan_digest": meta.get("capture_plan_digest"),
+            **(
+                {"css_facts": meta["css_facts"]}
+                if isinstance(meta.get("css_facts"), dict) and meta["css_facts"]
+                else {}
+            ),
             "citable_lines": [
                 {key: line.get(key) for key in ("line_id", "kind", "text") if line.get(key) is not None}
                 for line in frozen_source_lines(snapshot)
@@ -460,6 +465,8 @@ async def snapshot_web_asset(db: AsyncSession, asset: Asset, *, owner_id: UUID) 
     origin = source_meta.get("origin")
     if origin is not None:
         manifest["origin"] = origin
+    if isinstance(source_meta.get("css_facts"), dict) and source_meta["css_facts"]:
+        manifest["css_facts"] = source_meta["css_facts"]
     if isinstance(source_meta.get("capture_plan"), dict):
         manifest["capture_plan"] = source_meta["capture_plan"]
         manifest["capture_plan_digest"] = source_meta.get("capture_plan_digest")
@@ -841,8 +848,13 @@ async def snapshot_music_track(db: AsyncSession, track: Any, *, owner_id: UUID) 
         db,
         owner_id=owner_id,
         asset=None,
-        identity=uuid5(track.id, "music-beat-grid-v1:" + hashlib.sha256(
-            json.dumps(track_meta, sort_keys=True).encode()).hexdigest()),
+        identity=uuid5(
+            track.id,
+            "music-beat-grid-v2:"
+            + hashlib.sha256(
+                json.dumps(meta, sort_keys=True, ensure_ascii=False).encode()
+            ).hexdigest(),
+        ),
         kind="audio",
         storage_key=key,
         digest=digest,

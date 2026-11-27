@@ -1440,6 +1440,178 @@ class BrowserCapture:
     page: PageCapture | None
     element_images: dict[str, bytes]
     discovered: list[str]
+    css_facts: dict[str, Any] | None = None
+
+
+_JS_CSS_FACTS = r"""() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1;
+    canvas.height = 1;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    const parseColor = (raw) => {
+        if (!raw || raw === 'transparent' || raw === 'none') return null;
+        if (!ctx) return null;
+        try {
+            ctx.clearRect(0, 0, 1, 1);
+            ctx.fillStyle = 'rgba(0,0,0,0)';
+            ctx.fillStyle = raw;
+            ctx.fillRect(0, 0, 1, 1);
+            const [r, g, b, a] = ctx.getImageData(0, 0, 1, 1).data;
+            if (a < 180) return null;
+            const hex = '#' + [r, g, b].map(v => v.toString(16).toUpperCase().padStart(2, '0')).join('');
+            return { hex, r, g, b, sat: Math.max(r, g, b) - Math.min(r, g, b) };
+        } catch {
+            return null;
+        }
+    };
+    const relLum = ({ r, g, b }) => {
+        const ch = [r, g, b].map(v => {
+            const c = v / 255;
+            return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+        });
+        return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2];
+    };
+    const isVisible = (el) => {
+        if (!el) return false;
+        const st = getComputedStyle(el);
+        if (st.display === 'none' || st.visibility === 'hidden' || parseFloat(st.opacity) <= 0.05) return false;
+        const r = el.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
+    };
+    const primaryFamily = (stack) => {
+        if (!stack) return '';
+        const first = stack.split(',')[0].trim().replace(/^["']|["']$/g, '');
+        return first.slice(0, 80);
+    };
+
+    // 1. Canvas background (walk body -> html -> main -> top hero section)
+    const bgCandidates = [
+        document.body,
+        document.documentElement,
+        document.querySelector('main'),
+        document.querySelector('[role="main"]'),
+        document.querySelector('section'),
+    ];
+    let canvasBg = null;
+    for (const el of bgCandidates) {
+        if (!el) continue;
+        const c = parseColor(getComputedStyle(el).backgroundColor);
+        if (c) { canvasBg = c; break; }
+    }
+    if (!canvasBg) canvasBg = { hex: '#FFFFFF', r: 255, g: 255, b: 255, sat: 0 };
+
+    // 2. Card / surface background distinct from canvas_bg
+    const surfaceCounts = new Map();
+    for (const el of document.querySelectorAll('article, aside, [class*="card"], [class*="panel"], [class*="surface"], main section > div, header')) {
+        if (!isVisible(el)) continue;
+        const r = el.getBoundingClientRect();
+        if (r.width < 140 || r.height < 60) continue;
+        const c = parseColor(getComputedStyle(el).backgroundColor);
+        if (!c || c.hex === canvasBg.hex) continue;
+        surfaceCounts.set(c.hex, (surfaceCounts.get(c.hex) || 0) + 1);
+    }
+    let surfaceBg = null;
+    if (surfaceCounts.size > 0) {
+        surfaceBg = [...surfaceCounts.entries()].sort((a, b) => b[1] - a[1])[0][0];
+    }
+
+    // 3. Primary & secondary ink
+    const visibleH1 = [...document.querySelectorAll('h1, h2')].find(el => isVisible(el) && (el.innerText || '').trim().length > 1);
+    const bodySt = document.body ? getComputedStyle(document.body) : null;
+    const h1St = visibleH1 ? getComputedStyle(visibleH1) : bodySt;
+    const primaryInk = parseColor(h1St?.color)?.hex || parseColor(bodySt?.color)?.hex || null;
+    const visibleP = [...document.querySelectorAll('p, main span')].find(el => {
+        if (!isVisible(el) || (el.innerText || '').trim().length < 20) return false;
+        const c = parseColor(getComputedStyle(el).color);
+        return c && c.hex !== primaryInk;
+    });
+    const secondaryInk = parseColor(visibleP ? getComputedStyle(visibleP).color : null)?.hex || parseColor(bodySt?.color)?.hex || null;
+
+    // 4. Accent colors from visible CTAs/buttons/badges + :root CSS custom properties
+    const accentScores = new Map();
+    const bumpAccent = (c, weight) => {
+        if (!c || c.sat < 36) return;
+        if (c.hex === canvasBg.hex || c.hex === primaryInk) return;
+        accentScores.set(c.hex, (accentScores.get(c.hex) || 0) + weight);
+    };
+    for (const el of document.querySelectorAll('button, a, [role="button"], [class*="badge"], [class*="tag"], [class*="pill"]')) {
+        if (!isVisible(el)) continue;
+        const st = getComputedStyle(el);
+        bumpAccent(parseColor(st.backgroundColor), 3);
+        bumpAccent(parseColor(st.borderTopColor), 1);
+        bumpAccent(parseColor(st.color), 1);
+    }
+
+    const cssVariables = {};
+    const rootSt = getComputedStyle(document.documentElement);
+    const varNameRe = /primary|accent|brand|theme|highlight|secondary|surface|background|bg|ink|foreground|teal|cyan|blue|indigo|emerald|orange|coral|violet/i;
+    try {
+        for (const sheet of document.styleSheets) {
+            let rules;
+            try { rules = sheet.cssRules; } catch { continue; }
+            for (const rule of rules || []) {
+                if (rule.type !== 1 || !rule.selectorText || !/:root|html|body/i.test(rule.selectorText)) continue;
+                for (let i = 0; i < rule.style.length; i += 1) {
+                    const prop = rule.style[i];
+                    if (!prop.startsWith('--') || !varNameRe.test(prop)) continue;
+                    if (Object.keys(cssVariables).length >= 16) break;
+                    const resolved = rootSt.getPropertyValue(prop).trim();
+                    const parsed = parseColor(resolved);
+                    if (parsed) {
+                        cssVariables[prop] = parsed.hex;
+                        if (/primary|accent|brand|highlight/i.test(prop)) bumpAccent(parsed, 4);
+                    }
+                }
+            }
+        }
+    } catch {}
+
+    const accentColors = [...accentScores.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 6)
+        .map(([hex]) => hex);
+
+    // 5. Real computed typography + loaded web fonts
+    const loadedFonts = [];
+    try {
+        const seen = new Set();
+        for (const face of document.fonts || []) {
+            if (face.status === 'loaded' && face.family) {
+                const fam = face.family.trim().replace(/^["']|["']$/g, '').slice(0, 80);
+                if (fam && !seen.has(fam)) {
+                    seen.add(fam);
+                    loadedFonts.push(fam);
+                    if (loadedFonts.length >= 8) break;
+                }
+            }
+        }
+    } catch {}
+
+    return {
+        theme_polarity: relLum(canvasBg) < 0.35 ? 'dark' : 'light',
+        canvas_bg: canvasBg.hex,
+        surface_bg: surfaceBg,
+        primary_ink: primaryInk,
+        secondary_ink: secondaryInk,
+        accent_colors: accentColors,
+        css_variables: cssVariables,
+        typography: {
+            heading: h1St ? {
+                font_family: primaryFamily(h1St.fontFamily),
+                font_stack: (h1St.fontFamily || '').slice(0, 200),
+                font_weight: String(h1St.fontWeight || ''),
+                font_size: String(h1St.fontSize || ''),
+            } : null,
+            body: bodySt ? {
+                font_family: primaryFamily(bodySt.fontFamily),
+                font_stack: (bodySt.fontFamily || '').slice(0, 200),
+                font_weight: String(bodySt.fontWeight || ''),
+                font_size: String(bodySt.fontSize || ''),
+            } : null,
+            loaded_fonts: loadedFonts,
+        },
+    };
+}"""
 
 
 def _stamp_elements(
@@ -1689,6 +1861,11 @@ async def _capture_visuals_with_policy(
                 body_text = await page.evaluate(
                     "() => document.body ? document.body.innerText : ''"
                 )
+                css_facts: dict[str, Any] | None = None
+                with contextlib.suppress(Exception):
+                    raw_css = await page.evaluate(_JS_CSS_FACTS)
+                    if isinstance(raw_css, dict) and raw_css.get("canvas_bg"):
+                        css_facts = raw_css
                 research = extract_rendered_research(rendered_html, page.url, body_text)
                 page_capture: PageCapture | None = None
                 try:
@@ -1773,6 +1950,7 @@ async def _capture_visuals_with_policy(
                     page=page_capture,
                     element_images=element_images,
                     discovered=discovered,
+                    css_facts=css_facts,
                 )
             finally:
                 await browser.close()
@@ -2416,6 +2594,7 @@ class CaptureOutcome:
     capture_issues: list[dict[str, str]] = field(default_factory=list)
     capture_issue_count: int = 0
     capture_issues_truncated: bool = False
+    css_facts: dict[str, Any] | None = None
 
 
 async def capture_shots(plan: CapturePlan) -> CaptureOutcome:
@@ -2488,6 +2667,7 @@ async def capture_page(url: str) -> CaptureOutcome:
     warnings: list[str] = []
     page_capture: PageCapture | None = None
     element_images: dict[str, bytes] = {}
+    css_facts: dict[str, Any] | None = None
     chrome = resolve_chrome_path()
     if chrome is None:
         logger.warning("web_capture_chrome_missing", url=url)
@@ -2506,6 +2686,7 @@ async def capture_page(url: str) -> CaptureOutcome:
             discovered = browser_capture.discovered
             page_capture = browser_capture.page
             element_images = browser_capture.element_images
+            css_facts = browser_capture.css_facts
         except Exception as e:  # noqa: BLE001 — the visuals half degrades
             logger.warning("web_capture_screenshot_failed", url=url, error=str(e))
             shots, discovered = [], []
@@ -2523,6 +2704,7 @@ async def capture_page(url: str) -> CaptureOutcome:
         warnings=warnings,
         page=page_capture,
         element_images=element_images,
+        css_facts=css_facts,
     )
 
 

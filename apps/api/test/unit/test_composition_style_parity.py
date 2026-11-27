@@ -122,6 +122,10 @@ def test_python_and_ts_style_presets_and_contrast_algorithm_zero_drift():
         {"preset_id": "vox_editorial", "theme": "dark", "accent_color": "#2563EB"},
         {"preset_id": "institutional_dark", "theme": "light", "backdrop_style": "architectural_grid"},
         {"preset_id": "swiss_paper", "backdrop_style": "clean", "accent_color": "#0D9488"},
+        # Custom brand CSS canvas_bg overrides (light brand bg & dark brand bg)
+        {"preset_id": "swiss_paper", "canvas_bg": "#F8FAFC", "accent_color": "#0EA5A4"},
+        {"preset_id": "institutional_dark", "canvas_bg": "#F8FAFC", "accent_color": "#0EA5A4"},
+        {"preset_id": "swiss_paper", "canvas_bg": "#0B1220", "accent_color": "#38BDF8"},
     ]
 
     py_results = [

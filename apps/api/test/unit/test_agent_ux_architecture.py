@@ -732,3 +732,62 @@ def test_brief_question_target_seconds_infers_value_from_label_not_ordinal_id():
         ],
     })
     assert [opt.value for opt in item.options] == [45, 30, 60]
+
+
+def test_brand_profile_merges_playwright_css_facts_and_style_canvas_bg():
+    from types import SimpleNamespace
+
+    from app.editing.styles import CompositionStyle, contrast_ratio, resolve_style_tokens
+    from app.models.schemas import BrandSourceRef
+    from app.tools.video.brand import _merge_css_brand_facts, build_brand_profile
+    from app.tools.video.brand_agent import BrandProfileExtraction
+
+    snapshot = SimpleNamespace(
+        id=uuid4(),
+        digest="a" * 64,
+        meta={
+            "canonical_url": "https://agent.oxvalue.ai/",
+            "lines": [{"line_id": "line_0000", "kind": "h1", "text": "Value what others cannot see."}],
+            "css_facts": {
+                "theme_polarity": "light",
+                "canvas_bg": "#F8FAFC",
+                "surface_bg": "#FFFFFF",
+                "primary_ink": "#0F172A",
+                "accent_colors": ["#0EA5A4", "#F97316"],
+                "typography": {
+                    "heading": {"font_family": "Plus Jakarta Sans", "font_weight": "700"},
+                    "body": {"font_family": "Inter", "font_weight": "400"},
+                    "loaded_fonts": ["Plus Jakarta Sans", "Inter"],
+                },
+            },
+        },
+    )
+    extraction = BrandProfileExtraction(positioning="Governed valuation workspace")
+    profile = build_brand_profile(
+        extraction,
+        snapshots=[snapshot],
+        source_refs=[BrandSourceRef(snapshot_id=str(snapshot.id), digest=snapshot.digest)],
+    )
+    color_map = {c.value: (c.source, c.confidence) for c in profile.colors}
+    assert color_map["#F8FAFC"] == ("css", "confirmed")
+    assert color_map["#0EA5A4"] == ("css", "confirmed")
+    typo_map = {t.candidate: (t.source, t.confidence) for t in profile.typography}
+    assert typo_map["Plus Jakarta Sans"] == ("css", "confirmed")
+    assert typo_map["Inter"] == ("css", "confirmed")
+    assert all(not t.candidate.startswith("接近 ") for t in profile.typography)
+
+    suggestion = _merge_css_brand_facts(BrandProfileExtraction(), [snapshot])
+    assert suggestion is not None
+    assert suggestion["theme_polarity"] == "light"
+    assert suggestion["canvas_bg"] == "#F8FAFC"
+    assert suggestion["accent_color"] == "#0EA5A4"
+    assert "swiss_paper" in suggestion["recommended_presets"]
+
+    # CompositionStyle with custom light canvas_bg adapts theme, ink, surface, and WCAG contrast
+    tokens = resolve_style_tokens(
+        CompositionStyle(preset_id="institutional_dark", canvas_bg="#F8FAFC", accent_color="#0EA5A4")
+    )
+    assert tokens["theme"] == "light"
+    assert tokens["canvas_bg"] == "#F8FAFC"
+    assert tokens["ink"] == "#111820"
+    assert contrast_ratio(tokens["accent_text"], tokens["canvas_bg"]) >= 4.5

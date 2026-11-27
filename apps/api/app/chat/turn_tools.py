@@ -26,10 +26,21 @@ from app.models.schemas import (
     ShowVoiceCandidatesArgs,
 )
 
+_READ_OBSERVATION_TOOLS = frozenset({"preview_range", "inspect_timeline", "inspect_clip"})
+_READ_OBSERVATION_IDENTICAL_STOP = 4  # stop on 4th identical rejection
+_READ_OBSERVATION_TOTAL_STOP = 6      # stop on 6th unresolved rejection
+
+
 def video_rejection_stop(current: ToolRejected, previous: tuple[ToolRejected, ...]) -> bool:
     same = [event for event in previous
             if event.tool_name == current.tool_name and event.kind == current.kind
             and event.detail == current.detail and event.candidate_digest == current.candidate_digest]
+    if current.tool_name in _READ_OBSERVATION_TOOLS:
+        if len(same) >= _READ_OBSERVATION_IDENTICAL_STOP - 1 and (
+            current.candidate_digest is not None or (previous and previous[-1] is same[-1])
+        ):
+            return True
+        return sum(event.tool_name == current.tool_name for event in (*previous, current)) >= _READ_OBSERVATION_TOTAL_STOP
     if same and (current.candidate_digest is not None or previous[-1] is same[-1]):
         return True
     return current.tool_name == "create_video" and sum(

@@ -970,6 +970,7 @@ def set_composition_style_ops(
     *,
     preset_id: StylePresetId,
     accent_color: str | None = None,
+    canvas_bg: str | None = None,
     backdrop_style: BackdropStyle | None = None,
     theme: Literal["dark", "light"] | None = None,
     override_block_styles: bool = True,
@@ -988,6 +989,7 @@ def set_composition_style_ops(
     new_style = CompositionStyle(
         preset_id=preset_id,
         accent_color=accent_color,
+        canvas_bg=canvas_bg,
         backdrop_style=backdrop_style,
         theme=theme,
     )
@@ -1091,6 +1093,7 @@ def apply_composition_style(
     *,
     preset_id: StylePresetId,
     accent_color: str | None = None,
+    canvas_bg: str | None = None,
     backdrop_style: BackdropStyle | None = None,
     theme: Literal["dark", "light"] | None = None,
     override_block_styles: bool = True,
@@ -1102,6 +1105,7 @@ def apply_composition_style(
         content,
         preset_id=preset_id,
         accent_color=accent_color,
+        canvas_bg=canvas_bg,
         backdrop_style=backdrop_style,
         theme=theme,
         override_block_styles=override_block_styles,

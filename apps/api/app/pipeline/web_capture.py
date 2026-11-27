@@ -71,6 +71,8 @@ async def web_capture_processor(asset: Asset, _prior: Any) -> "Any":
         # from the capture's own text yield (期 1 前移 same law).
         "content_sha256": manifest_content_hash(outcome.text),
     }
+    if outcome.css_facts:
+        meta["css_facts"] = outcome.css_facts
     if plan is not None:
         meta["capture_plan"] = plan.model_dump(mode="json")
         meta["capture_plan_digest"] = capture_plan_digest(plan)

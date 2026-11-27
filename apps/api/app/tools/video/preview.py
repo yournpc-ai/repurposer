@@ -43,6 +43,86 @@ class ScrubTargetError(ValueError):
     """A model/client target that is not a bounded part of this version."""
 
 
+def snap_preview_range_to_transitions(
+    content: CompositionContent,
+    target: VideoRangeScrubTarget,
+    *,
+    max_window_seconds: float = 12.0,
+) -> tuple[VideoRangeScrubTarget, bool]:
+    """Resolve a preview_range edge that bisects a centered transition without violating the window cap.
+
+    Prefers expanding outward to include the full transition when doing so fits inside
+    ``max_window_seconds`` and composition bounds; otherwise pulls the straddled edge
+    inward to avoid the [0, 12] <-> [0, 12.4] deadlock.
+    """
+    owners = [(track, clip) for track in content.timeline.tracks for clip in track.clips]
+    if not owners or not content.timeline.transitions:
+        return target, False
+    rate = content.settings.timebase
+    timeline_end = max((c.range.end for _, c in owners), default=0)
+    start = round(target.start_seconds * rate)
+    end = round(target.end_seconds * rate)
+    if start < 0 or end > timeline_end or end <= start:
+        return target, False
+
+    by_id = {clip.clip_id: clip for _, clip in owners}
+    max_ticks = round(max_window_seconds * rate)
+    # 1 output frame in ticks so outward inclusion never misses transitions.py's round-half-up frame bounds.
+    frame_ticks = (rate * content.settings.fps.den + content.settings.fps.num - 1) // content.settings.fps.num
+    orig_start, orig_end = start, end
+
+    for _ in range(4):
+        changed = False
+        for transition in content.timeline.transitions:
+            outgoing = by_id.get(transition.from_clip_id)
+            if outgoing is None:
+                continue
+            cut = outgoing.range.end
+            before = transition.duration // 2
+            after = transition.duration - before
+            t_start, t_end = cut - before, cut + after
+            inc_start = max(0, t_start - frame_ticks)
+            inc_end = min(timeline_end, t_end + frame_ticks)
+            # Complete inclusion (with 1-frame rounding guard) or complete exclusion: already safe.
+            if (start <= inc_start and inc_end <= end) or end <= t_start or start >= t_end:
+                continue
+            # End edge straddles transition (or misses 1-frame guard): expand outward if within cap & bounds, else pull inward.
+            if start <= t_start and t_start < end < inc_end:
+                if inc_end <= timeline_end and (inc_end - start) <= max_ticks:
+                    end = inc_end
+                    changed = True
+                elif t_start > start:
+                    end = t_start
+                    changed = True
+            # Start edge straddles transition (or misses 1-frame guard): expand outward if within cap & bounds, else pull inward.
+            elif inc_start < start < t_end and t_end <= end:
+                if inc_start >= 0 and (end - inc_start) <= max_ticks:
+                    start = inc_start
+                    changed = True
+                elif end > t_end:
+                    start = t_end
+                    changed = True
+            # Window sits strictly inside a single transition.
+            elif t_start < start < end < t_end:
+                if 0 <= inc_start and inc_end <= timeline_end and (inc_end - inc_start) <= max_ticks:
+                    start, end = inc_start, inc_end
+                    changed = True
+        if not changed:
+            break
+
+    if (start, end) == (orig_start, orig_end) or not (0 <= start < end <= timeline_end):
+        return target, False
+    if (end - start) > max_ticks:
+        return target, False
+    return (
+        VideoRangeScrubTarget(
+            start_seconds=start / rate,
+            end_seconds=end / rate,
+        ),
+        True,
+    )
+
+
 def project_video_scrub(
     content: CompositionContent,
     target: VideoScrubTarget | VideoRangeScrubTarget,
@@ -149,7 +229,8 @@ def project_video_scrub(
             elif isinstance(target, VideoRangeScrubTarget) and window.start < cut + after and window.end > cut - before:
                 rate = content.settings.timebase
                 raise ScrubTargetError(
-                    f"Include the complete transition at {(cut - before) / rate:g}–{(cut + after) / rate:g} seconds."
+                    f"Include the complete transition at {(cut - before) / rate:g}–{(cut + after) / rate:g} seconds "
+                    f"(or end at ≤ {(cut - before) / rate:g}s / start at ≥ {(cut + after) / rate:g}s to stay within 12s)."
                 )
 
     scenes = []

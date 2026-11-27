@@ -99,6 +99,9 @@ class CompositionStyle(BaseModel):
     accent_color: str | None = Field(
         default=None, pattern=r"^#[0-9a-fA-F]{6}$", exclude_if=lambda v: v is None
     )
+    canvas_bg: str | None = Field(
+        default=None, pattern=r"^#[0-9a-fA-F]{6}$", exclude_if=lambda v: v is None
+    )
     backdrop_style: BackdropStyle | None = Field(
         default=None, exclude_if=lambda v: v is None
     )
@@ -370,6 +373,29 @@ def resolve_style_tokens(style: CompositionStyle) -> ResolvedStyleTokens:
             tokens["caption_style"] = copy_text_preset_token(TEXT_STYLE_PRESETS[fallback_id])
             tokens["caption_style"]["weight"] = preserved_weight
 
+    if style.canvas_bg is not None:
+        custom_bg = style.canvas_bg.upper()
+        custom_dark = relative_luminance(custom_bg) < 0.35
+        target_theme: Literal["dark", "light"] = "dark" if custom_dark else "light"
+        if target_theme != tokens["theme"]:
+            base = _THEME_BASES[target_theme]
+            tokens["theme"] = target_theme
+            tokens["ink"] = base["ink"]
+            tokens["secondary_ink"] = base["secondary_ink"]
+            if tokens["caption_style"]["background"] is None:
+                preserved_weight = tokens["caption_style"]["weight"]
+                fallback_id = "clean_broadcast" if target_theme == "dark" else "minimal_light"
+                tokens["caption_style"] = copy_text_preset_token(TEXT_STYLE_PRESETS[fallback_id])
+                tokens["caption_style"]["weight"] = preserved_weight
+            theme_changed = True
+        tokens["canvas_bg"] = custom_bg
+        if custom_dark:
+            tokens["surface_bg"] = mix_hex(custom_bg, "#FFFFFF", 0.06)
+            tokens["line_color"] = mix_hex(custom_bg, "#FFFFFF", 0.16)
+        else:
+            tokens["surface_bg"] = "#FFFFFF" if relative_luminance(custom_bg) < 0.96 else "#F1F5F9"
+            tokens["line_color"] = mix_hex(custom_bg, "#111820", 0.16)
+
     if style.backdrop_style is not None:
         tokens["backdrop_style"] = style.backdrop_style
 
@@ -385,7 +411,7 @@ def resolve_style_tokens(style: CompositionStyle) -> ResolvedStyleTokens:
             dark_surface=is_dark,
             min_ratio=4.5,
         )
-    elif theme_changed:
+    elif theme_changed or style.canvas_bg is not None:
         tokens["accent_text"] = ensure_contrast_text(
             tokens["accent"],
             tokens["canvas_bg"],

@@ -330,6 +330,90 @@ def _norm_match_text(text: str) -> str:
     return re.sub(r"\s+", " ", strip_pause_tags(text or "")).strip().lower()
 
 
+_ZH_DIGITS = "零一二三四五六七八九"
+_EN_ONES = [
+    "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
+    "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen",
+    "seventeen", "eighteen", "nineteen",
+]
+_EN_TENS = ["", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"]
+
+
+def _int_to_zh(n: int) -> str:
+    if n < 0 or n > 999:
+        return str(n)
+    if n < 10:
+        return _ZH_DIGITS[n]
+    if n < 20:
+        return "十" + ("" if n == 10 else _ZH_DIGITS[n % 10])
+    if n < 100:
+        t, o = divmod(n, 10)
+        return _ZH_DIGITS[t] + "十" + ("" if o == 0 else _ZH_DIGITS[o])
+    h, rem = divmod(n, 100)
+    if rem == 0:
+        return _ZH_DIGITS[h] + "百"
+    if rem < 10:
+        return _ZH_DIGITS[h] + "百零" + _ZH_DIGITS[rem]
+    if rem < 20:
+        return _ZH_DIGITS[h] + "百一十" + ("" if rem == 10 else _ZH_DIGITS[rem % 10])
+    return _ZH_DIGITS[h] + "百" + _int_to_zh(rem)
+
+
+def _int_to_en(n: int) -> list[str]:
+    if n < 0 or n > 999:
+        return [str(n)]
+    if n < 20:
+        return [_EN_ONES[n]]
+    if n < 100:
+        t, o = divmod(n, 10)
+        if o == 0:
+            return [_EN_TENS[t]]
+        return [f"{_EN_TENS[t]}-{_EN_ONES[o]}", f"{_EN_TENS[t]} {_EN_ONES[o]}"]
+    h, rem = divmod(n, 100)
+    if rem == 0:
+        return [f"{_EN_ONES[h]} hundred"]
+    return [f"{_EN_ONES[h]} hundred {sub}" for sub in _int_to_en(rem)]
+
+
+def _phrase_match_variants(phrase: str) -> list[str]:
+    """Generate exact + spoken-number variants so '27 个' matches '二十七个' and '27' matches 'twenty-seven'."""
+    base = _norm_match_text(phrase)
+    if not base:
+        return []
+    variants: list[str] = [base]
+
+    def _add(v: str) -> None:
+        v = _norm_match_text(v)
+        if v and v not in variants:
+            variants.append(v)
+
+    # Replace standalone integers (0..999) with Chinese & English spoken forms.
+    nums = list(re.finditer(r"(?<![\d.])(\d{1,3})(?![\d.])", base))
+    if nums:
+        zh_sub = base
+        en_hyphen = base
+        en_space = base
+        for m in reversed(nums):
+            val = int(m.group(1))
+            zh_word = _int_to_zh(val)
+            en_forms = _int_to_en(val)
+            zh_sub = zh_sub[: m.start()] + zh_word + zh_sub[m.end() :]
+            en_hyphen = en_hyphen[: m.start()] + en_forms[0] + en_hyphen[m.end() :]
+            en_space = en_space[: m.start()] + en_forms[-1] + en_space[m.end() :]
+        _add(zh_sub)
+        if "2" in base:
+            _add(zh_sub.replace("二", "两", 1))
+        _add(en_hyphen)
+        _add(en_space)
+        # Also bare spoken number itself when the phrase is a short metric value like "27 个" or "8%"
+        if len(nums) == 1 and len(base) <= 10:
+            val = int(nums[0].group(1))
+            _add(_int_to_zh(val))
+            for ef in _int_to_en(val):
+                _add(ef)
+    return variants
+
+
 def resolve_cue_phrase_window_s(
     narration: str,
     phrase: str,
@@ -338,23 +422,56 @@ def resolve_cue_phrase_window_s(
     duration_s: float,
     speech_lead_s: float = 0.15,
     language: str | None = None,
+    min_start_s: float = 0.0,
 ) -> tuple[float, float] | None:
     """Resolve a spoken ``phrase`` inside ``narration`` into act-local ``(start_s, end_s)``.
 
-    Uses measured MiniMax sentence cues plus explicit ``<#x.x#>`` pause tags and
-    spoken-weight distribution inside each cue so motion-block reveals, callouts,
-    and cursor clicks align tightly to the moment the phrase is actually spoken.
+    Prefers real millisecond word timestamps (``cue["words"]`` from MiniMax
+    ``subtitle_type="word"``) when available; otherwise falls back to sentence cues
+    plus explicit ``<#x.x#>`` pause tags and spoken-weight distribution.
+    Supports bilingual spoken-number normalization (e.g. ``27 个`` ↔ ``二十七个`` / ``twenty-seven``).
     """
-    needle = _norm_match_text(phrase)
+    variants = _phrase_match_variants(phrase)
     clean_narration = _norm_match_text(narration)
-    if not needle or not clean_narration or duration_s <= 0:
+    if not variants or not clean_narration or duration_s <= 0:
         return None
 
-    # Build ordered spoken spans [(clean_text, start_ms, end_ms)] across the act.
-    spans: list[tuple[str, float, float]] = []
+    # Build ordered acoustic spans [(text_chunk, start_ms, end_ms, join_direct)] across the act.
+    # When cue["words"] is present, join tokens directly inside the same cue so sub-word English
+    # tokens ("E"+"ight") reconstruct "eight" while keeping exact acoustic millisecond timestamps.
+    joined_parts: list[str] = []
+    span_ranges: list[tuple[int, int, str, float, float]] = []
+    cursor = 0
+
+    def _append_span(raw_text: str, tb_ms: float, te_ms: float, *, sep_before: bool) -> None:
+        nonlocal cursor
+        if sep_before and joined_parts and not joined_parts[-1].endswith(" ") and not raw_text.startswith(" "):
+            joined_parts.append(" ")
+            cursor += 1
+        norm_part = raw_text.lower()
+        if not norm_part:
+            return
+        start_ch = cursor
+        joined_parts.append(norm_part)
+        cursor += len(norm_part)
+        span_ranges.append((start_ch, cursor, norm_part, tb_ms, te_ms))
+
     if cues:
         prev_end = 0.0
         for cue in cues:
+            cue_words = cue.get("words")
+            if isinstance(cue_words, list) and cue_words:
+                first_in_cue = True
+                for w in cue_words:
+                    wt = strip_pause_tags(str(w.get("word") or ""))
+                    if not wt:
+                        continue
+                    wb = max(0.0, float(w["time_begin"]))
+                    we = max(wb, float(w["time_end"]))
+                    _append_span(wt, wb, we, sep_before=first_in_cue)
+                    first_in_cue = False
+                    prev_end = max(prev_end, we)
+                continue
             cue_text = str(cue.get("text") or "").strip()
             if not cue_text:
                 continue
@@ -363,52 +480,26 @@ def resolve_cue_phrase_window_s(
             if te <= tb:
                 continue
             for tp in split_cue_into_timed_phrases(cue_text, tb, te, language=language):
-                spans.append((tp.text, tp.time_begin_ms, tp.time_end_ms))
-                prev_end = tp.time_end_ms
-    if not spans:
+                norm_tp = _norm_match_text(tp.text)
+                if norm_tp:
+                    _append_span(norm_tp, tp.time_begin_ms, tp.time_end_ms, sep_before=True)
+                    prev_end = tp.time_end_ms
+    if not span_ranges:
         for tp in split_cue_into_timed_phrases(narration, 0.0, duration_s * 1000.0, language=language):
-            spans.append((tp.text, tp.time_begin_ms, tp.time_end_ms))
-    if not spans:
+            norm_tp = _norm_match_text(tp.text)
+            if norm_tp:
+                _append_span(norm_tp, tp.time_begin_ms, tp.time_end_ms, sep_before=True)
+    if not span_ranges:
         return None
 
-    # Concatenate spans with single spaces while recording exact character offsets.
-    joined_parts: list[str] = []
-    span_ranges: list[tuple[int, int, str, float, float]] = []
-    cursor = 0
-    for text_part, tb_ms, te_ms in spans:
-        norm_part = _norm_match_text(text_part)
-        if not norm_part:
-            continue
-        if joined_parts:
-            joined_parts.append(" ")
-            cursor += 1
-        start_ch = cursor
-        joined_parts.append(norm_part)
-        cursor += len(norm_part)
-        span_ranges.append((start_ch, cursor, norm_part, tb_ms, te_ms))
     haystack = "".join(joined_parts)
-
-    pos = haystack.find(needle)
-    match_len = len(needle)
-    if pos < 0:
-        # Fallback: strip punctuation on both sides for resilient numeric/symbol matching
-        compact_needle = re.sub(r"[^\w\u4e00-\u9fff]+", "", needle)
-        if not compact_needle:
-            return None
-        char_map: list[int] = []
-        compact_chars: list[str] = []
-        for idx, ch in enumerate(haystack):
-            if ch.isalnum() or is_cjk_char(ch):
-                compact_chars.append(ch)
-                char_map.append(idx)
-        c_haystack = "".join(compact_chars)
-        c_pos = c_haystack.find(compact_needle)
-        if c_pos < 0:
-            return None
-        pos = char_map[c_pos]
-        end_pos = char_map[min(len(char_map) - 1, c_pos + len(compact_needle) - 1)] + 1
-    else:
-        end_pos = pos + match_len
+    char_map: list[int] = []
+    compact_chars: list[str] = []
+    for idx, ch in enumerate(haystack):
+        if ch.isalnum() or is_cjk_char(ch):
+            compact_chars.append(ch)
+            char_map.append(idx)
+    c_haystack = "".join(compact_chars)
 
     def _offset_to_ms(char_offset: int) -> float:
         for s_ch, e_ch, norm_part, tb_ms, te_ms in span_ranges:
@@ -424,6 +515,40 @@ def resolve_cue_phrase_window_s(
                 return tb_ms + (te_ms - tb_ms) * ratio
         return span_ranges[-1][4]
 
+    min_ms = max(0.0, (min_start_s - speech_lead_s) * 1000.0)
+
+    def _find_after_min(needle: str) -> tuple[int, int] | None:
+        search_from = 0
+        while True:
+            pos = haystack.find(needle, search_from)
+            if pos < 0:
+                break
+            if _offset_to_ms(pos) >= min_ms - 50.0:
+                return pos, pos + len(needle)
+            search_from = pos + 1
+        compact_needle = re.sub(r"[^\w\u4e00-\u9fff]+", "", needle)
+        if not compact_needle:
+            return None
+        c_from = 0
+        while True:
+            c_pos = c_haystack.find(compact_needle, c_from)
+            if c_pos < 0:
+                return None
+            pos = char_map[c_pos]
+            end_pos = char_map[min(len(char_map) - 1, c_pos + len(compact_needle) - 1)] + 1
+            if _offset_to_ms(pos) >= min_ms - 50.0:
+                return pos, end_pos
+            c_from = c_pos + 1
+
+    match_span: tuple[int, int] | None = None
+    for needle in variants:
+        match_span = _find_after_min(needle)
+        if match_span is not None:
+            break
+    if match_span is None:
+        return None
+
+    pos, end_pos = match_span
     start_ms = _offset_to_ms(pos)
     end_ms = max(start_ms + 150.0, _offset_to_ms(end_pos))
     start_s = round(max(0.0, min(duration_s - 0.1, speech_lead_s + start_ms / 1000.0)), 3)

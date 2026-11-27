@@ -45,7 +45,7 @@ def narration_synth_config(
         "volume": 1,
         "pitch": 0,
         "speed_base": 1.0,
-        "subtitle_type": "sentence",
+        "subtitle_type": "word",
         "alignment": NARRATION_ALIGNMENT,
     }
     if abs(float(speed) - 1.0) > 1e-6:

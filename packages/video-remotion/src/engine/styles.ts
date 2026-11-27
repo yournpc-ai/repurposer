@@ -46,6 +46,7 @@ export type StyleTransitionKind =
 export interface CompositionStyleInput {
   preset_id: StylePresetId;
   accent_color?: string | null;
+  canvas_bg?: string | null;
   backdrop_style?: BackdropStyle | null;
   theme?: "dark" | "light" | null;
 }
@@ -285,6 +286,37 @@ export function resolveStyleTokens(style: CompositionStyleInput): ResolvedStyleT
     }
   }
 
+  let effectiveThemeChanged = themeChanged;
+  if (style.canvas_bg != null) {
+    const customBg = style.canvas_bg.toUpperCase();
+    const customDark = relativeLuminance(customBg) < 0.35;
+    const targetTheme: "dark" | "light" = customDark ? "dark" : "light";
+    if (targetTheme !== tokens.theme) {
+      const base = THEME_BASES[targetTheme];
+      tokens.theme = targetTheme;
+      tokens.ink = base.ink;
+      tokens.secondary_ink = base.secondary_ink;
+      if (tokens.caption_style.background === null) {
+        const preservedWeight = tokens.caption_style.weight;
+        tokens.caption_style = cloneTextStylePresetToken(
+          targetTheme === "dark"
+            ? TEXT_STYLE_PRESETS.clean_broadcast
+            : TEXT_STYLE_PRESETS.minimal_light,
+        );
+        tokens.caption_style.weight = preservedWeight;
+      }
+      effectiveThemeChanged = true;
+    }
+    tokens.canvas_bg = customBg;
+    if (customDark) {
+      tokens.surface_bg = mixHex(customBg, "#FFFFFF", 0.06);
+      tokens.line_color = mixHex(customBg, "#FFFFFF", 0.16);
+    } else {
+      tokens.surface_bg = relativeLuminance(customBg) < 0.96 ? "#FFFFFF" : "#F1F5F9";
+      tokens.line_color = mixHex(customBg, "#111820", 0.16);
+    }
+  }
+
   if (style.backdrop_style != null) {
     tokens.backdrop_style = style.backdrop_style;
   }
@@ -301,7 +333,7 @@ export function resolveStyleTokens(style: CompositionStyleInput): ResolvedStyleT
       isDark,
       4.5,
     );
-  } else if (themeChanged) {
+  } else if (effectiveThemeChanged || style.canvas_bg != null) {
     tokens.accent_text = ensureContrastText(
       tokens.accent,
       tokens.canvas_bg,

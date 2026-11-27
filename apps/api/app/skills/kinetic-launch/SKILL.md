@@ -9,7 +9,9 @@ metadata:
   tags: [product-launch, kinetic-typography, beat-led]
 ---
 
-以强鼓点为主时钟。先用 `search_music` 选择节奏清晰的纯器乐 BGM，在重拍、切分和乐句收束处落幕。默认零旁白、零字幕，仅在用户明确要求时编排配音。
+以强鼓点为主时钟。先读官网真实 CSS 品牌色（`css_facts` / `brand_profile` 中的 `canvas_bg`、`accent_color`、`theme_polarity`）并用 `search_music({})` 选择带明确 BPM 的纯器乐 BGM，在重拍、切分和乐句收束处落幕。默认零旁白、零字幕，仅在用户明确要求时编排配音。
+
+- **品牌底色与极性对切**：在 `create_video` 中继承官网真实 `canvas_bg` 与 `accent_color`（浅色官网优先 `swiss_paper` / `vox_editorial`，深色官网优先 `institutional_dark` / `kinetic_anime`），再在相邻强拍间大胆切换 `theme: light` 与 `theme: dark`，高潮可从白场硬切黑场。
 
 - 15–30 秒用 16–30 幕，45–60 秒用 30–48 幕。文字拍 0.4–1.6 秒，UI 闪切 0.35–2.0 秒。关键主张定格一拍，让观众读完。
 - 全屏单幕只放 2–5 个词。用 `kinetic_beat` 的 `inline_badge_split` 开场，`impact_cut` 落观点，`typewriter_swap` 退格换词，`slot_flip` 锁定前缀，`marquee_wall` 推进高潮。相邻幕大胆切换 `theme: light` 与 `theme: dark`，高潮可从白场硬切黑场。

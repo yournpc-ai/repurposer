@@ -286,6 +286,11 @@ class SetCompositionStyleArgs(BaseModel):
         pattern=r"^#[0-9a-fA-F]{6}$",
         description="Optional hex accent color override (contrast-checked automatically against canvas/surface).",
     )
+    canvas_bg: str | None = Field(
+        default=None,
+        pattern=r"^#[0-9a-fA-F]{6}$",
+        description="Optional hex brand canvas background color override (e.g. from website CSS css_facts.canvas_bg); light/dark theme and ink contrast adapt automatically.",
+    )
     backdrop_style: BackdropStyle | None = Field(
         default=None,
         description="Optional backdrop texture override (ambient_mesh, architectural_grid, editorial_paper, kinetic_diagonal, clean).",
@@ -1422,6 +1427,7 @@ async def edit_clip(
             content,
             preset_id=args.preset_id,
             accent_color=args.accent_color,
+            canvas_bg=args.canvas_bg,
             backdrop_style=args.backdrop_style,
             theme=args.theme,
             override_block_styles=args.override_block_styles,
@@ -1514,14 +1520,42 @@ async def edit_clip(
             raise ValueError("The target text already has these exact values.")
         extra["text_summary"] = summary
     elif isinstance(args, UpdateMotionBlockArgs):
+        from app.chat.editor_create import resolve_motion_block_cue_phrases
         from app.editing.revisions import coerce_motion_block_props
+        from app.models.tables import SourceSnapshot
 
         target = clips.get(args.clip_id)
         if target is None or not isinstance(target.object, MotionBlockObject):
             raise ValueError("Select an existing motion_block clip to update.")
+        merged_raw = {**target.object.props, **args.props_patch}
+        # Resolve any authoring-time cue_phrase patches against overlapping narration cues.
+        narration_text: str | None = None
+        narration_cues: list[dict[str, Any]] | None = None
+        narration_lead_s = 0.0
+        for trk in content.timeline.tracks:
+            if trk.kind != "audio" or trk.role != "dialogue":
+                continue
+            for ac in trk.clips:
+                if ac.range.start < target.range.end and target.range.start < ac.range.end and ac.source:
+                    snap = await db.get(SourceSnapshot, ac.source.snapshot_id)
+                    meta = (snap.meta or {}) if snap else {}
+                    narration_text = meta.get("text") or meta.get("transcript")
+                    narration_cues = meta.get("cues")
+                    narration_lead_s = max(0.0, (ac.range.start - target.range.start) / rate)
+                    break
+            if narration_text:
+                break
+        resolved_patch = resolve_motion_block_cue_phrases(
+            target.object.block_id,
+            merged_raw,
+            narration=narration_text,
+            cues=narration_cues,
+            duration_s=max(0.1, (target.range.end - target.range.start) / rate),
+            speech_lead_s=narration_lead_s,
+        )
         merged_props = coerce_motion_block_props(
             target.object.block_id,
-            {**target.object.props, **args.props_patch},
+            resolved_patch,
         )
         updated_obj = MotionBlockObject.model_validate({
             **target.object.model_dump(mode="json"),
@@ -2116,13 +2150,21 @@ async def execute_editor(turn, name, args):
             if name != "preview_range":
                 raise ValueError("Unknown editor operation.")
             from app.editing.service import storyboard_block, video_version_read
-            from app.tools.video.preview import prepare_saved_video_scrub, saved_preview_media, source_framing
+            from app.tools.video.preview import (
+                prepare_saved_video_scrub,
+                saved_preview_media,
+                snap_preview_range_to_transitions,
+                source_framing,
+            )
 
+            effective_target, boundary_adjusted = snap_preview_range_to_transitions(
+                content_of(version), args
+            )
             read = await video_version_read(
                 db, owner_id=turn.project.user_id, version_id=version.id
             )
             read = await prepare_saved_video_scrub(
-                db, read, owner_id=turn.project.user_id, target=args
+                db, read, owner_id=turn.project.user_id, target=effective_target
             )
             preview = read["video_preview"]
             if preview["status"] != "ready":
@@ -2133,6 +2175,12 @@ async def execute_editor(turn, name, args):
             # The renderer consumes the prepared immutable specification.
             await db.close()
             media, evidence = await saved_preview_media(preview, version.id)
+            if boundary_adjusted:
+                evidence["requested_range_seconds"] = {
+                    "start": args.start_seconds,
+                    "end": args.end_seconds,
+                }
+                evidence["transition_boundary_adjusted"] = True
             covered = set(preview["scope"]["clip_ids"])
             sources = {
                 (str(clip.source.snapshot_id), clip.source.snapshot_digest)

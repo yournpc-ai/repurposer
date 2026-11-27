@@ -24,6 +24,7 @@ from app.models.schemas import (
     BrandColor,
     BrandProfile,
     BrandSourceRef,
+    BrandTypography,
     Brief,
     canonical_json_hash,
 )
@@ -193,6 +194,85 @@ def _add_missing_accents(
         ))
 
 
+def _merge_css_brand_facts(
+    extraction: Any, snapshots: list[SourceSnapshot]
+) -> dict[str, Any] | None:
+    """Fold ground-truth Playwright computed CSS colors & typography into BrandProfile."""
+    css_facts: dict[str, Any] | None = None
+    for snapshot in snapshots:
+        raw = (snapshot.meta or {}).get("css_facts") or (snapshot.meta or {}).get("computed_styles")
+        if isinstance(raw, dict) and raw.get("canvas_bg"):
+            css_facts = raw
+            break
+    if not css_facts:
+        return None
+
+    def _upsert_color(hex_val: Any, role: str) -> None:
+        if not isinstance(hex_val, str) or not re.fullmatch(r"#[0-9A-Fa-f]{6}", hex_val.strip()):
+            return
+        norm = hex_val.strip().upper()
+        for existing in extraction.colors:
+            if existing.value.strip().upper() == norm:
+                existing.value = norm
+                existing.source = "css"
+                existing.confidence = "confirmed"
+                if not existing.role:
+                    existing.role = role
+                return
+        extraction.colors.insert(
+            0,
+            BrandColor(value=norm, role=role, source="css", confidence="confirmed"),
+        )
+
+    _upsert_color(css_facts.get("canvas_bg"), "background")
+    _upsert_color(css_facts.get("surface_bg"), "surface")
+    _upsert_color(css_facts.get("primary_ink"), "text")
+    for accent in (css_facts.get("accent_colors") or [])[:3]:
+        _upsert_color(accent, "accent")
+
+    typo = css_facts.get("typography") if isinstance(css_facts.get("typography"), dict) else {}
+    existing_fonts = {t.candidate.strip().lower() for t in extraction.typography if t.candidate}
+    for role_key in ("heading", "body"):
+        entry = typo.get(role_key)
+        if not isinstance(entry, dict):
+            continue
+        family = str(entry.get("font_family") or "").strip()
+        weight = str(entry.get("font_weight") or "").strip()
+        if not family:
+            continue
+        if family.lower() in existing_fonts:
+            for item in extraction.typography:
+                if item.candidate.strip().lower() == family.lower():
+                    item.source = "css"
+                    item.confidence = "confirmed"
+                    if weight and not item.weight:
+                        item.weight = weight
+        else:
+            extraction.typography.insert(
+                0,
+                BrandTypography(
+                    candidate=family,
+                    weight=weight,
+                    source="css",
+                    confidence="confirmed",
+                ),
+            )
+            existing_fonts.add(family.lower())
+
+    polarity = "dark" if css_facts.get("theme_polarity") == "dark" else "light"
+    accents = [c for c in (css_facts.get("accent_colors") or []) if isinstance(c, str) and re.fullmatch(r"#[0-9A-Fa-f]{6}", c)]
+    return {
+        "theme_polarity": polarity,
+        "canvas_bg": str(css_facts["canvas_bg"]).upper(),
+        "surface_bg": css_facts.get("surface_bg"),
+        "primary_ink": css_facts.get("primary_ink"),
+        "accent_color": accents[0].upper() if accents else None,
+        "heading_font": (typo.get("heading") or {}).get("font_family") if isinstance(typo.get("heading"), dict) else None,
+        "body_font": (typo.get("body") or {}).get("font_family") if isinstance(typo.get("body"), dict) else None,
+        "recommended_presets": ["institutional_dark", "kinetic_anime"] if polarity == "dark" else ["swiss_paper", "vox_editorial"],
+    }
+
+
 def build_brand_profile(
     extraction: Any,
     *,
@@ -241,6 +321,7 @@ def build_brand_profile(
                 if measured is not None:
                     color.value = measured
         _add_missing_accents(extraction, color_evidence)
+    _merge_css_brand_facts(extraction, snapshots)
     payload = {
         "schema_version": 1,
         "source_refs": [ref.model_dump(mode="json") for ref in source_refs],
@@ -323,8 +404,10 @@ async def analyze_brand(
         source_refs=source_refs,
         color_evidence=color_evidence,
     )
+    css_style = _merge_css_brand_facts(extraction.model_copy(deep=True), snapshots)
     return profile, {
         "brand_profile": profile.model_dump(mode="json"),
+        **({"css_style_suggestion": css_style} if css_style else {}),
         "media_files": len(images),
         "citable_line_count": sum(len(frozen_source_lines(snapshot)) for snapshot in snapshots),
         "source_snapshots_unchanged": True,

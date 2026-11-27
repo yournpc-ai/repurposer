@@ -35,7 +35,7 @@
 
 ## 3. 视听审美、多轨编排与自检闭环
 
-- **视觉风格、高阶视觉语法与遮罩/多屏层次**：风格包（`creative_catalog.style_presets`：`institutional_dark` / `swiss_paper` / `vox_editorial` / `kinetic_anime`）独立于叙事结构与素材内容。新建多幕作品时直接在 `create_video` 中声明 `motion_blocks` 一步成稿，绝不连续堆叠 3 幕纯静态文字卡：
+- **视觉风格、品牌真实 CSS 色彩与遮罩/多屏层次**：风格包（`creative_catalog.style_presets`：`institutional_dark` / `swiss_paper` / `vox_editorial` / `kinetic_anime`）独立于叙事结构与素材内容；务必结合官网实测 `css_facts` / `brand_profile` 决定底色极性与色彩（浅色官网优先 `swiss_paper` 或 `vox_editorial`，深色官网优先 `institutional_dark` 或 `kinetic_anime`，并直接向 `create_video` 传入实测 `canvas_bg` 与 `accent_color` 让品牌主色大面积贯穿成片）。新建多幕作品时直接在 `create_video` 中声明 `motion_blocks` 一步成稿，绝不连续堆叠 3 幕纯静态文字卡：
   - **丰富积木混搭（用透 20 种原生动效块）**：主动组合 `kinetic_beat`（`inline_badge_split` 开场揭示 / `impact_cut` 冲击断句 / `slot_flip` 滚轮切词 / `typewriter_swap` 退格换词 / `marquee_wall` 高潮跑马灯）、`browser_url_load`（真实地址栏键入加载官网）、`zoom_follows_click`（光标点击并推镜特写细节）、`cursor_magnetic_click`、`ui_montage`（`cascade_3d` 3D 纵深多屏巡航 / `fan_slide` / `rapid_cut`）、`device_mockup`（`dual` 桌面+移动双端画中画 / `split_focus` 分屏聚焦）、`product_showcase`（配 `callout_steps` 聚光遮罩框选 + `cursor` 点击轨迹 + `dolly_zoom` / `tilt_left` / `scroll_reveal` 运镜）、`chat_demo`、`split_compare`、`data_chart`、`metric_grid` 与 `closing_cta`。
   - **遮罩与转场编排（杜绝全片 0 转场硬切）**：在主要场景切换间主动交替声明 `transition_after`（`whip_pan` 甩镜、`zoom_through` 穿镜缩放、`wipe_reveal` 裁切遮罩擦除、`iris_focus` 圆形光圈遮罩），在 0.7–1.5 秒高频快切连拍间则保留干脆硬切。
   - **明暗极性反差与叠轨角标**：在高潮或关键主张处主动用单幕 `theme` 反转（浅色片跳切 1–2 幕深色冲击拍，或深色片跳切高对比亮拍）制造记忆点；必要时在界面幕上叠加轻量 `kinetic_title(pill_caption)` 悬浮角标丰富画中画层次。风格包已内置零积分棚拍底纹，不要仅为纯色/抽象背景调用付费 `generate_image`。

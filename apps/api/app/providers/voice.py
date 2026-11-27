@@ -299,7 +299,7 @@ def _synthesize_t2a(
         "subtitle_enable": subtitles,
     }
     if subtitles:
-        payload["subtitle_type"] = "sentence"
+        payload["subtitle_type"] = "word"
     try:
         with httpx.Client(timeout=180) as client:
             resp = client.post(
@@ -399,13 +399,39 @@ def _parse_subtitle_cues(payload: object, *, source_text: str) -> list[dict]:
                 previous_time_end = float(finish)
                 continue
             collected_clean.append(cue_text)
-        cues.append({
+        raw_words = entry.get("timestamped_words")
+        parsed_words: list[dict] = []
+        if isinstance(raw_words, list):
+            for w in raw_words:
+                if not isinstance(w, dict):
+                    continue
+                wt = str(w.get("word") or "")
+                wb, we = w.get("time_begin"), w.get("time_end")
+                if (
+                    wt
+                    and not isinstance(wb, bool)
+                    and not isinstance(we, bool)
+                    and isinstance(wb, (int, float))
+                    and isinstance(we, (int, float))
+                    and math.isfinite(wb)
+                    and math.isfinite(we)
+                    and we >= wb >= 0
+                ):
+                    parsed_words.append({
+                        "word": wt,
+                        "time_begin": float(wb),
+                        "time_end": float(we),
+                    })
+        cue_entry: dict = {
             "text": cue_text,
             "text_begin": begin,
             "text_end": end,
             "time_begin": float(start),
             "time_end": float(finish),
-        })
+        }
+        if parsed_words:
+            cue_entry["words"] = parsed_words
+        cues.append(cue_entry)
         previous_time_end = float(finish)
     if not has_pause_tags:
         if expected_begin != len(source_text):

@@ -123,6 +123,52 @@ async def resolve_motion_block_resources(
     return resolved_props, resolved_resources
 
 
+def _candidate_spoken_phrases(item: dict[str, Any]) -> list[str]:
+    """Extract ranked spoken-anchor candidates from a structured motion-block item."""
+    out: list[str] = []
+
+    def _push(raw: Any) -> None:
+        if raw is None:
+            return
+        txt = str(raw).strip()
+        if not txt:
+            return
+        if txt not in out:
+            out.append(txt)
+
+    # 1) Numeric/metric value first (e.g. "27 个", "£18.7m", "94%")
+    val = item.get("value")
+    if val is not None:
+        val_s = str(val).strip()
+        _push(val_s)
+        m = re.search(r"\d+(?:\.\d+)?", val_s)
+        if m:
+            _push(m.group(0))
+
+    # 2) Title / label / text / step_label / tag
+    for key in ("title", "label", "text", "step_label", "tag"):
+        raw = item.get(key)
+        if not isinstance(raw, str) or not raw.strip():
+            continue
+        cleaned = raw.strip()
+        _push(cleaned)
+        # Split bilingual or punctuated labels (e.g. "界定 Frame", "AI 估值算法", "Unified theory framework")
+        parts = [p.strip() for p in re.split(r"[\s·•|/—\-:：,，()（）]+", cleaned) if p.strip()]
+        for p in parts:
+            if len(p) >= 2:
+                _push(p)
+        # Short CJK tails (e.g. "专业行业数据库" -> "行业数据库", "数据库"; "VEST 理论框架" -> "理论框架")
+        cjk_chunks = re.findall(r"[\u4e00-\u9fff]{2,}", cleaned)
+        for chunk in cjk_chunks:
+            if len(chunk) >= 4:
+                _push(chunk[-4:])
+                _push(chunk[-3:])
+                _push(chunk[:2])
+            elif len(chunk) >= 2:
+                _push(chunk)
+    return out
+
+
 def resolve_motion_block_cue_phrases(
     block_id: MotionBlockId,
     props: dict[str, Any],
@@ -142,8 +188,9 @@ def resolve_motion_block_cue_phrases(
     if not isinstance(props, dict):
         return props
     result = dict(props)
+    visual_lead_s = 0.08  # start spring motion 80ms ahead of acoustic onset so peak lands on the word
 
-    def _window(phrase: Any) -> tuple[float, float] | None:
+    def _window(phrase: Any, *, min_start_s: float = 0.0) -> tuple[float, float] | None:
         if not narration or not isinstance(phrase, str) or not phrase.strip():
             return None
         return resolve_cue_phrase_window_s(
@@ -153,21 +200,31 @@ def resolve_motion_block_cue_phrases(
             duration_s=duration_s,
             speech_lead_s=speech_lead_s,
             language=language,
+            min_start_s=min_start_s,
         )
+
+    def _spoken_end_s() -> float:
+        if cues:
+            end_ms = max((float(c.get("time_end") or 0.0) for c in cues), default=0.0)
+            if end_ms > 0:
+                return min(duration_s, speech_lead_s + end_ms / 1000.0)
+        return max(0.0, duration_s - 0.45)
 
     if block_id == "statement_hook":
         raw_phrase = result.pop("cue_phrase", None)
-        if result.get("highlight_at_s") is None:
-            hit = _window(raw_phrase or result.get("highlight_phrase"))
-            if hit is not None:
-                result["highlight_at_s"] = hit[0]
+        hit = _window(raw_phrase)
+        if hit is not None:
+            result["highlight_at_s"] = round(max(0.0, hit[0] - visual_lead_s), 3)
+        elif result.get("highlight_at_s") is None:
+            fallback_hit = _window(result.get("highlight_phrase"))
+            if fallback_hit is not None:
+                result["highlight_at_s"] = round(max(0.0, fallback_hit[0] - visual_lead_s), 3)
 
     elif block_id == "device_mockup":
         raw_phrase = result.pop("cue_phrase", None)
-        if result.get("reveal_at_s") is None:
-            hit = _window(raw_phrase)
-            if hit is not None:
-                result["reveal_at_s"] = hit[0]
+        hit = _window(raw_phrase)
+        if hit is not None:
+            result["reveal_at_s"] = round(max(0.0, hit[0] - visual_lead_s), 3)
 
     elif block_id == "product_showcase":
         if isinstance(result.get("cursor"), dict):
@@ -182,6 +239,7 @@ def resolve_motion_block_cue_phrases(
         if isinstance(result.get("callout_steps"), list) and result["callout_steps"]:
             steps_out: list[dict[str, Any]] = []
             resolved_starts: list[tuple[float, float] | None] = []
+            prev_anchor_s = 0.0
             for raw_step in result["callout_steps"]:
                 if not isinstance(raw_step, dict):
                     steps_out.append(raw_step)
@@ -189,7 +247,14 @@ def resolve_motion_block_cue_phrases(
                     continue
                 step = dict(raw_step)
                 raw_phrase = step.pop("cue_phrase", None)
-                hit = _window(raw_phrase)
+                hit = _window(raw_phrase, min_start_s=prev_anchor_s)
+                if hit is None and narration and step.get("label"):
+                    for cand in _candidate_spoken_phrases({"label": step.get("label")}):
+                        hit = _window(cand, min_start_s=prev_anchor_s)
+                        if hit is not None:
+                            break
+                if hit is not None:
+                    prev_anchor_s = hit[0]
                 steps_out.append(step)
                 resolved_starts.append(hit)
             # Fill missing/anchored start_s and non-overlapping end_s in order.
@@ -199,7 +264,7 @@ def resolve_motion_block_cue_phrases(
                 if not isinstance(step, dict):
                     continue
                 if hit is not None:
-                    start_s = max(prev_end, hit[0])
+                    start_s = max(prev_end, max(0.0, hit[0] - visual_lead_s))
                     next_hit = next((h for h in resolved_starts[idx + 1 :] if h is not None), None)
                     natural_end = max(hit[1] + 0.55, start_s + 1.1)
                     max_end = (next_hit[0] - 0.05) if next_hit is not None else duration_s
@@ -226,33 +291,125 @@ def resolve_motion_block_cue_phrases(
         for list_key in ("messages", "work_steps"):
             if isinstance(result.get(list_key), list):
                 updated = []
+                prev_anchor_s = 0.0
                 for raw_item in result[list_key]:
                     if not isinstance(raw_item, dict):
                         updated.append(raw_item)
                         continue
                     item = dict(raw_item)
                     raw_phrase = item.pop("cue_phrase", None)
-                    hit = _window(raw_phrase)
-                    if hit is not None and item.get("at_s") is None:
-                        item["at_s"] = hit[0]
+                    hit = _window(raw_phrase, min_start_s=prev_anchor_s)
+                    if hit is not None:
+                        item["at_s"] = round(max(0.0, hit[0] - visual_lead_s), 3)
+                        prev_anchor_s = hit[0]
                     updated.append(item)
                 result[list_key] = updated
 
     else:
+        result.pop("cue_phrase", None)
+        spoken_end = _spoken_end_s()
+        spoken_span = max(0.0, spoken_end - speech_lead_s)
         for list_key in ("items", "nodes", "left_items", "right_items", "steps", "cards", "points"):
-            if isinstance(result.get(list_key), list):
-                updated = []
-                for raw_item in result[list_key]:
-                    if not isinstance(raw_item, dict):
-                        updated.append(raw_item)
-                        continue
-                    item = dict(raw_item)
-                    raw_phrase = item.pop("cue_phrase", None)
-                    hit = _window(raw_phrase)
-                    if hit is not None and item.get("reveal_at_s") is None:
-                        item["reveal_at_s"] = hit[0]
-                    updated.append(item)
-                result[list_key] = updated
+            if not isinstance(result.get(list_key), list) or not result[list_key]:
+                continue
+            updated: list[Any] = []
+            explicit_hits: list[float | None] = []
+            auto_hits: list[float | None] = []
+            prev_explicit_s = 0.0
+            prev_auto_s = 0.0
+            for raw_item in result[list_key]:
+                if not isinstance(raw_item, dict):
+                    updated.append(raw_item)
+                    explicit_hits.append(None)
+                    auto_hits.append(None)
+                    continue
+                item = dict(raw_item)
+                raw_phrase = item.pop("cue_phrase", None)
+                hit = _window(raw_phrase, min_start_s=prev_explicit_s)
+                if hit is not None:
+                    t_val = round(max(0.0, hit[0] - visual_lead_s), 3)
+                    item["reveal_at_s"] = t_val
+                    explicit_hits.append(t_val)
+                    auto_hits.append(t_val)
+                    prev_explicit_s = hit[0]
+                    prev_auto_s = hit[0]
+                else:
+                    explicit_hits.append(None)
+                    auto_t: float | None = None
+                    if narration:
+                        for cand in _candidate_spoken_phrases(item):
+                            cand_hit = _window(cand, min_start_s=prev_auto_s)
+                            if cand_hit is not None:
+                                auto_t = round(max(0.0, cand_hit[0] - visual_lead_s), 3)
+                                prev_auto_s = cand_hit[0]
+                                break
+                    auto_hits.append(auto_t)
+                updated.append(item)
+
+            dict_indices = [i for i, it in enumerate(updated) if isinstance(it, dict)]
+            n_items = len(dict_indices)
+            if narration and n_items >= 2:
+                matched_count = sum(1 for i in dict_indices if auto_hits[i] is not None)
+                explicit_count = sum(1 for i in dict_indices if explicit_hits[i] is not None)
+                if matched_count >= 2:
+                    # Anchor matched items directly to acoustic word onset, and interpolate any unmatched gaps.
+                    resolved_times: list[float | None] = [
+                        explicit_hits[i] if explicit_hits[i] is not None else auto_hits[i]
+                        for i in dict_indices
+                    ]
+                    first_t = max(0.0, round(speech_lead_s, 3))
+                    last_t = round(min(duration_s - 0.35, max(first_t + 0.3, speech_lead_s + spoken_span * 0.72)), 3)
+                    for pos_idx, t_val in enumerate(resolved_times):
+                        if t_val is not None:
+                            continue
+                        prev_known = next(((j, resolved_times[j]) for j in range(pos_idx - 1, -1, -1) if resolved_times[j] is not None), None)
+                        next_known = next(((j, resolved_times[j]) for j in range(pos_idx + 1, n_items) if resolved_times[j] is not None), None)
+                        if prev_known is not None and next_known is not None:
+                            j0, t0 = prev_known
+                            j1, t1 = next_known
+                            frac = (pos_idx - j0) / max(1, j1 - j0)
+                            resolved_times[pos_idx] = round(t0 + (t1 - t0) * frac, 3)
+                        elif prev_known is not None:
+                            j0, t0 = prev_known
+                            rem = max(1, n_items - 1 - j0)
+                            frac = (pos_idx - j0) / rem
+                            resolved_times[pos_idx] = round(t0 + max(0.3, last_t - t0) * frac, 3)
+                        elif next_known is not None:
+                            j1, t1 = next_known
+                            frac = pos_idx / max(1, j1)
+                            resolved_times[pos_idx] = round(first_t + max(0.0, t1 - first_t) * frac, 3)
+                    prev_t = -0.01
+                    for idx_in_list, t_val in zip(dict_indices, resolved_times, strict=True):
+                        if t_val is None:
+                            continue
+                        clamped = round(min(duration_s - 0.25, max(prev_t + 0.12 if prev_t >= 0 else 0.0, t_val)), 3)
+                        updated[idx_in_list]["reveal_at_s"] = clamped
+                        prev_t = clamped
+                elif explicit_count == 0 and spoken_span >= 2.5:
+                    # Guardrail against premature static freeze: if guessed reveals finish in <45% of spoken time,
+                    # pace them rhythmically across the spoken arc instead of finishing at 1.1s and freezing.
+                    raw_reveals: list[float] = []
+                    for i in dict_indices:
+                        rv = updated[i].get("reveal_at_s")
+                        if rv is not None:
+                            try:
+                                raw_reveals.append(float(rv))
+                            except (TypeError, ValueError):
+                                pass
+                    premature = (
+                        not raw_reveals
+                        or len(raw_reveals) < n_items
+                        or max(raw_reveals) < speech_lead_s + spoken_span * 0.45
+                    )
+                    if premature:
+                        start_arc = round(max(0.15, speech_lead_s), 3)
+                        end_arc = round(min(duration_s - 0.5, speech_lead_s + spoken_span * 0.72), 3)
+                        if end_arc > start_arc + 0.35:
+                            for k, idx_in_list in enumerate(dict_indices):
+                                frac = k / max(1, n_items - 1)
+                                updated[idx_in_list]["reveal_at_s"] = round(start_arc + (end_arc - start_arc) * frac, 3)
+
+            result[list_key] = updated
 
     return result
 
@@ -403,7 +560,13 @@ class CreateVideoArgs(BaseModel):
         default=None,
         pattern=r"^#[0-9A-Fa-f]{6}$",
         exclude_if=lambda v: v is None,
-        description="Optional hex accent override paired with style_preset.",
+        description="Optional hex accent override paired with style_preset (prefer real brand CSS accent_color).",
+    )
+    canvas_bg: str | None = Field(
+        default=None,
+        pattern=r"^#[0-9A-Fa-f]{6}$",
+        exclude_if=lambda v: v is None,
+        description="Optional hex brand canvas background override paired with style_preset (e.g. website css_facts.canvas_bg); ink & surface contrast adapt automatically.",
     )
     voice_id: str | None = Field(
         default=None,
@@ -679,7 +842,11 @@ async def create_video(db, turn, args: CreateVideoArgs):
             provenance["external_skill"] = skill.provenance
         width, height = {"16:9": (1920, 1080), "9:16": (1080, 1920), "1:1": (1080, 1080)}[args.aspect]
         comp_style = (
-            CompositionStyle(preset_id=args.style_preset, accent_color=args.accent_color)
+            CompositionStyle(
+                preset_id=args.style_preset,
+                accent_color=args.accent_color,
+                canvas_bg=args.canvas_bg,
+            )
             if args.style_preset is not None
             else None
         )
