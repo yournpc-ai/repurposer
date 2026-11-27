@@ -84,7 +84,11 @@ def _native_creation_tools(tools, *, facts):
                 if fixed_voice or voice_excluded:
                     hidden.update({"narration", "narration_voice_id", "narration_language"})
                 if fixed_voice:
-                    description += " 旁白音频已固定，先保存画面版本，再用 insert_audio 放入原音。"
+                    description += (
+                        " 旁白音频已固定：使用 motion_blocks 时请直接传入 voiceover_snapshot_id"
+                        "（用 start_cue_phrase / end_cue_phrase 与幕内 cue_phrase 贴词切镜，省略逐幕 narration）；"
+                        "若用 shots，则先保存画面版本再用 insert_audio 放入原音。"
+                    )
                 if not aligned_voice:
                     hidden.update({"narration_snapshot_id", "narration_alignment_id"})
                 if "FirstShot" in (parameters.get("$defs") or {}):

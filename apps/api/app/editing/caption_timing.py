@@ -14,13 +14,19 @@ _STRONG_PUNCT = frozenset(".!?。！？")
 _SOFT_PUNCT = frozenset(",;:—–，；：、")
 _CLOSING_WRAP = frozenset("\"'”’」』》）】)]")
 _PAUSE_TAG_RE = re.compile(r"<#\s*(\d+(?:\.\d+)?)\s*#>")
+_INTERJECTION_TAG_RE = re.compile(
+    r"\((?:laughs|chuckle|breath|inhale|exhale|gasps|pant|coughs|clear-throat|"
+    r"sniffs|sighs|groans|snorts|lip-smacking|burps|humming|hissing|emm|sneezes)\)",
+    re.IGNORECASE,
+)
 
 
 def strip_pause_tags(text: str) -> str:
-    """Remove MiniMax inline pause tags (e.g. ``<#0.4#>``) for clean display/matching."""
-    if not text or "<#" not in text:
+    """Remove MiniMax inline pause tags (``<#0.4#>``) and Speech 2.8 interjection tags (``(breath)``) for clean display/matching."""
+    if not text or ("<#" not in text and "(" not in text):
         return text
     cleaned = _PAUSE_TAG_RE.sub(" ", text)
+    cleaned = _INTERJECTION_TAG_RE.sub(" ", cleaned)
     return re.sub(r"\s{2,}", " ", cleaned).strip()
 
 

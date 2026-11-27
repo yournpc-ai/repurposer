@@ -21,7 +21,7 @@ from app.config import settings
 
 logger = structlog.get_logger()
 
-_TTS_MODEL = "speech-2.6-hd"
+_TTS_MODEL = "speech-2.8-hd"
 VOICE_EMOTIONS = frozenset({
     "happy",
     "sad",
@@ -364,8 +364,8 @@ def _parse_subtitle_cues(payload: object, *, source_text: str) -> list[dict]:
             entries = data if isinstance(data, list) else (data or {}).get("subtitles")
     if not isinstance(entries, list) or not entries:
         raise VoiceError("T2A subtitle file has no sentence entries")
-    has_pause_tags = "<#" in source_text
-    clean_source = strip_pause_tags(source_text) if has_pause_tags else source_text
+    clean_source = strip_pause_tags(source_text)
+    has_markup_tags = clean_source != source_text or "<#" in source_text
     cues: list[dict] = []
     expected_begin = 0
     previous_time_end = 0.0
@@ -384,7 +384,7 @@ def _parse_subtitle_cues(payload: object, *, source_text: str) -> list[dict]:
             raise VoiceError("T2A subtitle times must be finite millisecond numbers")
         if start < 0 or start < previous_time_end or finish <= start:
             raise VoiceError("T2A subtitle times are not ordered and non-overlapping")
-        if not has_pause_tags:
+        if not has_markup_tags:
             if begin != expected_begin or end <= begin or end > len(source_text):
                 raise VoiceError("T2A subtitles do not cover the exact narration text contiguously")
             original = source_text[begin:end]
@@ -405,7 +405,8 @@ def _parse_subtitle_cues(payload: object, *, source_text: str) -> list[dict]:
             for w in raw_words:
                 if not isinstance(w, dict):
                     continue
-                wt = str(w.get("word") or "")
+                raw_wt = str(w.get("word") or "")
+                wt = strip_pause_tags(raw_wt) if has_markup_tags else raw_wt
                 wb, we = w.get("time_begin"), w.get("time_end")
                 if (
                     wt
@@ -433,7 +434,7 @@ def _parse_subtitle_cues(payload: object, *, source_text: str) -> list[dict]:
             cue_entry["words"] = parsed_words
         cues.append(cue_entry)
         previous_time_end = float(finish)
-    if not has_pause_tags:
+    if not has_markup_tags:
         if expected_begin != len(source_text):
             raise VoiceError("T2A subtitles omit part of the reviewed narration")
     else:
