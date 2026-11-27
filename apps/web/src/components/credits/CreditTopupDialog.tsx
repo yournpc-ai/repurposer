@@ -7,8 +7,8 @@ import { formatCredits } from "@/components/credits/tx-row"
 import { Dialog } from "@/components/ui/dialog-clean"
 import type { CreditTopupRequest } from "@/lib/credits"
 
-/** A short purchase path opened at the spend point. Checkout return still
- * lands in Settings → Credits, where order confirmation and the ledger live. */
+/** A short purchase path opened at the spend point. Checkout returns to the
+ * originating route and confirms in place; Settings → Credits stays optional. */
 export function CreditTopupDialog({
   open,
   shortfall,
@@ -36,7 +36,7 @@ export function CreditTopupDialog({
         })
       }
     >
-      {open && <CreditPackagePicker onCancel={onClose} />}
+      {open && <CreditPackagePicker shortfall={shortfall} onCancel={onClose} />}
     </Dialog>
   )
 }

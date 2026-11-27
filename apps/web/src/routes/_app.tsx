@@ -1,13 +1,30 @@
 import "@/studio.css"
-import { useRef } from "react"
-import { Outlet, createFileRoute, useMatch } from "@tanstack/react-router"
+import { useEffect, useRef } from "react"
+import {
+  Outlet,
+  createFileRoute,
+  useLocation,
+  useMatch,
+  useNavigate,
+} from "@tanstack/react-router"
 import { createServerFn } from "@tanstack/react-start"
 
 import { AppSidebar, SIDEBAR_COOKIE_NAME } from "@/components/app-sidebar"
 import { StudioHeader } from "@/components/StudioHeader"
 import { StudioHeaderProvider } from "@/components/StudioHeaderContext"
+import {
+  useSettingsDialog,
+  type CheckoutReturn,
+  type CheckoutReturnSurface,
+} from "@/components/settings/settings-dialog-context"
 import { WorkbenchProvider } from "@/components/workbench/WorkbenchContext"
 import { WorkbenchPane } from "@/components/workbench/WorkbenchPane"
+
+interface AppCheckoutSearch {
+  checkout?: CheckoutReturn["outcome"]
+  order_id?: string
+  checkout_surface?: CheckoutReturnSurface
+}
 
 
 // Server-module imports are denied in the client bundle (same pattern as the
@@ -20,6 +37,19 @@ const readSidebarCookieOnServer = createServerFn({ method: "GET" }).handler(
 )
 
 export const Route = createFileRoute("/_app")({
+  validateSearch: (search: Record<string, unknown>): AppCheckoutSearch => {
+    const next: AppCheckoutSearch = {}
+    if (search.checkout === "success" || search.checkout === "cancelled") {
+      next.checkout = search.checkout
+    }
+    if (typeof search.order_id === "string" && search.order_id.trim()) {
+      next.order_id = search.order_id.trim()
+    }
+    if (search.checkout_surface === "settings") {
+      next.checkout_surface = "settings"
+    }
+    return next
+  },
   loader: async (): Promise<{ sidebarOpen: boolean }> => {
     if (typeof document === "undefined") {
       return { sidebarOpen: await readSidebarCookieOnServer() }
@@ -34,9 +64,35 @@ export const Route = createFileRoute("/_app")({
 
 function AppLayout() {
   const { sidebarOpen } = Route.useLoaderData()
+  const { checkout, order_id: orderId, checkout_surface: checkoutSurface } = Route.useSearch()
+  const location = useLocation()
+  const navigate = useNavigate()
+  const { handleCheckoutReturn } = useSettingsDialog()
   const projectMatch = useMatch({ from: "/_app/projects/$id", shouldThrow: false })
   const activeProjectId = projectMatch?.params.id ?? null
   const appRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!checkout || !orderId) return
+    // The legacy /settings callback shim handles its own redirect to /home.
+    if (location.pathname === "/settings") return
+    handleCheckoutReturn({
+      orderId,
+      outcome: checkout,
+      surface: checkoutSurface ?? "inline",
+    })
+    void navigate({
+      to: ".",
+      search: (prev) => {
+        const next = { ...(prev as Record<string, unknown>) }
+        delete next.checkout
+        delete next.order_id
+        delete next.checkout_surface
+        return next
+      },
+      replace: true,
+    })
+  }, [checkout, orderId, checkoutSurface, location.pathname, handleCheckoutReturn, navigate])
   const shell = (
     <div ref={appRef} className="ui-as-app">
       <AppSidebar defaultOpen={sidebarOpen} />

@@ -1,6 +1,8 @@
 "use client"
 
+import { useState } from "react"
 import { useTranslation } from "react-i18next"
+import { Check, Copy } from "@/components/ui/icons"
 
 import { cn } from "@/lib/utils"
 import { formatMoney } from "@/lib/payments"
@@ -146,6 +148,42 @@ function formatTransactionTime(iso: string, lang: string): string {
   }).format(new Date(iso))
 }
 
+function formatShortId(raw: string): string {
+  const parts = raw.split(":")
+  const tail = parts[parts.length - 1] ?? raw
+  const compact = tail.length > 10 ? tail.slice(0, 8) : tail
+  return `#${compact}`
+}
+
+function CopyableId({ value }: { value: string }) {
+  const { t } = useTranslation()
+  const [copied, setCopied] = useState(false)
+
+  const copy = () => {
+    void navigator.clipboard?.writeText(value).then(() => {
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1500)
+    })
+  }
+
+  return (
+    <button
+      type="button"
+      title={copied ? t("credits.txCopied") : `${value} (${t("credits.txCopy")})`}
+      aria-label={t("credits.txCopy")}
+      onClick={copy}
+      className="group inline-flex items-center gap-1.5 rounded px-1 -mx-1 py-0.5 font-mono text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+    >
+      <span>{formatShortId(value)}</span>
+      {copied ? (
+        <Check className="size-3 shrink-0 text-foreground" />
+      ) : (
+        <Copy className="size-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-70 group-focus-visible:opacity-70" />
+      )}
+    </button>
+  )
+}
+
 /** Spend row for Settings: absolute time and separate project/amount columns
  * make settled production charges easier to reconcile than a glance row. */
 export function SpendTableRow({ item }: { item: WalletTransaction }) {
@@ -158,7 +196,7 @@ export function SpendTableRow({ item }: { item: WalletTransaction }) {
   return (
     <tr className="border-b border-subtle transition-colors last:border-0 hover:bg-accent">
       <td className="px-4 py-3 align-middle text-xs whitespace-nowrap text-muted-foreground tabular-nums">
-        <p title={reference}>#{reference}</p>
+        <CopyableId value={reference} />
       </td>
       <td className="px-4 py-3 align-middle">
         <p className="text-sm leading-5 whitespace-nowrap text-foreground">{getTitle(item)}</p>
@@ -208,9 +246,7 @@ export function TopupTableRow({ item }: { item: WalletTransaction }) {
       </td>
       <td className="px-4 py-3 align-middle text-xs whitespace-nowrap text-muted-foreground tabular-nums">
         {item.payment_order_id ? (
-          <p title={item.payment_order_id}>
-            #{item.payment_order_id}
-          </p>
+          <CopyableId value={item.payment_order_id} />
         ) : (
           "—"
         )}

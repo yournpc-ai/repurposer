@@ -2,13 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { CircleCheck } from "@/components/ui/icons"
-import { toast } from "sonner"
+import { CircleCheck, X } from "@/components/ui/icons"
 
 import { Button } from "@/components/ui/button-clean"
-import { Dialog } from "@/components/ui/dialog-clean"
-import { apiFetch } from "@/lib/api"
-import { fetchPaymentOrder } from "@/lib/payments"
+import { Spinner } from "@/components/ui/spinner-clean"
+import { apiFetch, WALLET_REFRESH_EVENT } from "@/lib/api"
+import { formatMoney } from "@/lib/payments"
 import { useSettingsDialog } from "@/components/settings/settings-dialog-context"
 import {
   formatCredits,
@@ -17,9 +16,10 @@ import {
   type WalletTransaction,
 } from "@/components/credits/tx-row"
 
-/** Credits management seat: real balance, a top-up dialog entry, hosted-
- * Checkout return confirmation, and independently paginated semantic ledgers.
- * A browser return never announces a top-up; only a server-side paid order can. */
+/** Credits management seat: real balance, a top-up dialog entry, inline
+ * Checkout confirmation banners, and independently paginated semantic ledgers.
+ * Order polling itself runs globally in SettingsDialogProvider so closing
+ * Settings never drops a pending payment check. */
 
 interface WalletState {
   balance: number
@@ -43,9 +43,6 @@ interface TransactionPageState {
 }
 
 const PAGE_SIZE = 10
-const MAX_ORDER_POLLS = 15
-
-type ReturnNotice = "confirming" | "pending" | null
 
 function useTransactionPage(direction: TransactionDirection) {
   const request = useRef(0)
@@ -171,12 +168,13 @@ function TablePagination({
 
 export function CreditsSection() {
   const { t, i18n } = useTranslation()
-  const { checkoutReturn, clearCheckoutReturn, openCreditTopup } = useSettingsDialog()
+  const {
+    checkoutState,
+    retryCheckoutCheck,
+    dismissCheckoutState,
+    openCreditTopup,
+  } = useSettingsDialog()
   const [wallet, setWallet] = useState<WalletState | null>(null)
-  const [returnNotice, setReturnNotice] = useState<ReturnNotice>(null)
-  const [successCredits, setSuccessCredits] = useState<number | null>(null)
-  const [pollNonce, setPollNonce] = useState(0)
-  const transactionTable = useRef<HTMLElement>(null)
   const topupPage = useTransactionPage("in")
   const spendPage = useTransactionPage("out")
   const reloadTopups = topupPage.reload
@@ -192,87 +190,70 @@ export function CreditsSection() {
 
   useEffect(() => {
     void refresh()
-  }, [refresh])
-
-  useEffect(() => {
-    if (!checkoutReturn) {
-      setReturnNotice(null)
-      return
+    const onWalletRefresh = () => {
+      void refresh()
+      void reloadTopups()
     }
-    if (checkoutReturn.outcome === "cancelled") {
-      toast.info(t("credits.return.cancelled"))
-      clearCheckoutReturn()
-      return
-    }
+    window.addEventListener(WALLET_REFRESH_EVENT, onWalletRefresh)
+    return () => window.removeEventListener(WALLET_REFRESH_EVENT, onWalletRefresh)
+  }, [refresh, reloadTopups])
 
-    let stopped = false
-    let timer: number | undefined
-    let polls = 0
-    setReturnNotice("confirming")
-
-    const check = async () => {
-      const order = await fetchPaymentOrder(checkoutReturn.orderId).catch(() => null)
-      if (stopped) return
-      polls += 1
-      if (order?.status === "paid") {
-        setReturnNotice(null)
-        clearCheckoutReturn()
-        setSuccessCredits(order.credits)
-        await Promise.all([refresh(), reloadTopups()])
-        return
-      }
-      if (order?.status === "expired" || order?.status === "failed") {
-        toast.error(t("credits.return.failed"))
-        clearCheckoutReturn()
-        return
-      }
-      if (polls >= MAX_ORDER_POLLS) {
-        setReturnNotice("pending")
-        return
-      }
-      timer = window.setTimeout(check, 2000)
-    }
-
-    void check()
-    return () => {
-      stopped = true
-      if (timer !== undefined) window.clearTimeout(timer)
-    }
-  }, [checkoutReturn, clearCheckoutReturn, i18n.language, pollNonce, refresh, reloadTopups, t])
-
-  const viewTransactions = () => {
-    setSuccessCredits(null)
-    window.requestAnimationFrame(() => {
-      transactionTable.current?.scrollIntoView({ block: "start" })
-    })
-  }
+  const settingsBanner =
+    checkoutState?.surface === "settings" ? checkoutState : null
+  const orderSummary =
+    settingsBanner?.order != null
+      ? `${formatMoney(settingsBanner.order.amount_minor, settingsBanner.order.currency, i18n.language)} · +${t("credits.packageCredits", {
+          count: formatCredits(settingsBanner.order.credits, i18n.language),
+        })}`
+      : null
 
   return (
-    <>
-      <div className="min-w-0 space-y-6">
-        {returnNotice && (
-          <div
-            className="flex items-center gap-2 rounded-md bg-muted px-3 py-2"
-            role="status"
-          >
-            <p className="min-w-0 flex-1 text-xs leading-relaxed text-muted-foreground">
-              {t(`credits.return.${returnNotice}`)}
+    <div className="min-w-0 space-y-6">
+      {settingsBanner && (
+        <div
+          className="flex items-center gap-2.5 rounded-lg border border-subtle bg-muted px-3.5 py-2.5"
+          role="status"
+        >
+          {settingsBanner.phase === "confirming" && <Spinner size={14} />}
+          {settingsBanner.phase === "paid" && (
+            <CircleCheck className="size-4 shrink-0 text-foreground" strokeWidth={1.75} />
+          )}
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-medium leading-relaxed text-foreground">
+              {settingsBanner.phase === "paid"
+                ? t("credits.topupSuccess", {
+                    count: formatCredits(settingsBanner.order?.credits ?? 0, i18n.language),
+                  })
+                : t(`credits.return.${settingsBanner.phase}`)}
             </p>
-            {returnNotice === "pending" && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setReturnNotice("confirming")
-                  setPollNonce((value) => value + 1)
-                }}
-              >
-                {t("credits.checkAgain")}
-              </Button>
+            {settingsBanner.phase !== "paid" && orderSummary && (
+              <p className="text-xs text-muted-foreground tabular-nums">
+                {orderSummary}
+              </p>
             )}
           </div>
-        )}
+          {settingsBanner.phase === "pending" && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={retryCheckoutCheck}
+            >
+              {t("credits.checkAgain")}
+            </Button>
+          )}
+          {settingsBanner.phase === "paid" && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              aria-label={t("common.close")}
+              icon={<X size={14} />}
+              onClick={dismissCheckoutState}
+            />
+          )}
+        </div>
+      )}
 
         <section className="min-w-0">
           <div className="flex flex-wrap items-start justify-between gap-4">
@@ -302,10 +283,7 @@ export function CreditsSection() {
           )}
         </section>
 
-        <section
-          ref={transactionTable}
-          className="min-w-0 scroll-mt-4 border-t border-subtle pt-5"
-        >
+        <section className="min-w-0 scroll-mt-4 border-t border-subtle pt-5">
           <h4 className="text-sm font-semibold">{t("credits.topups")}</h4>
           <div
             role="region"
@@ -487,28 +465,5 @@ export function CreditsSection() {
           />
         </section>
       </div>
-
-      <Dialog
-        title={t("credits.paymentSuccess")} closeLabel={t("common.close")} open={successCredits !== null}
-        onOpenChange={(open) => {
-          if (!open) setSuccessCredits(null)
-        }}
-      >
-
-          <div className="flex flex-col items-center py-8 text-center">
-            <CircleCheck className="size-12 text-foreground" strokeWidth={1.5} />
-            <p className="mt-5 text-sm leading-relaxed">
-              {successCredits !== null
-                ? t("credits.topupSuccess", {
-                    count: formatCredits(successCredits, i18n.language),
-                  })
-                : ""}
-            </p>
-          </div>
-          <Button type="button" size="lg" className="w-full" onClick={viewTransactions}>
-            {t("common.done")}
-          </Button>
-      </Dialog>
-    </>
   )
 }

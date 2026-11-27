@@ -5,16 +5,21 @@ import { Info } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 
 import { Button } from "@/components/ui/button-clean"
+import { Spinner } from "@/components/ui/spinner-clean"
 import { TextField } from "@/components/ui/text-field-clean"
 import { Skeleton } from "@/components/ui/skeleton-clean"
 import { Tooltip } from "@/components/ui/tooltip-clean"
+import { useSettingsDialog } from "@/components/settings/settings-dialog-context"
+import type { CreditTopupRequest } from "@/lib/credits"
 import {
+  buildCheckoutReturnPath,
   createCheckoutSession,
   fetchCreditPackages,
   formatAmountInput,
   formatCurrencySymbol,
   formatMoney,
   parseAmountMinor,
+  pickInitialTopup,
   type CreditPackageCatalog,
 } from "@/lib/payments"
 import { cn } from "@/lib/utils"
@@ -22,8 +27,15 @@ import { formatCredits } from "@/components/credits/tx-row"
 
 /** The only amount-selection and Checkout-start component, hosted solely by
  * the top-up dialog. Presets fill the input; typing returns to custom amount. */
-export function CreditPackagePicker({ onCancel }: { onCancel?: () => void }) {
+export function CreditPackagePicker({
+  shortfall = null,
+  onCancel,
+}: {
+  shortfall?: CreditTopupRequest | null
+  onCancel?: () => void
+}) {
   const { t, i18n } = useTranslation()
+  const { settingsOpen } = useSettingsDialog()
   const [catalog, setCatalog] = useState<CreditPackageCatalog | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadFailed, setLoadFailed] = useState(false)
@@ -40,9 +52,9 @@ export function CreditPackagePicker({ onCancel }: { onCancel?: () => void }) {
       .then((next) => {
         if (cancelled) return
         setCatalog(next)
-        const initial = next.items[0] ?? null
-        setSelectedKey(initial?.key ?? null)
-        setAmountInput(initial ? formatAmountInput(initial.amount_minor) : "")
+        const initial = pickInitialTopup(next, shortfall)
+        setSelectedKey(initial.selectedKey)
+        setAmountInput(initial.amountInput)
       })
       .catch(() => {
         if (cancelled) return
@@ -56,7 +68,7 @@ export function CreditPackagePicker({ onCancel }: { onCancel?: () => void }) {
     return () => {
       cancelled = true
     }
-  }, [reloadKey])
+  }, [reloadKey, shortfall])
 
   const packages = catalog?.items ?? []
   const policy = catalog?.custom ?? null
@@ -81,7 +93,12 @@ export function CreditPackagePicker({ onCancel }: { onCancel?: () => void }) {
     if (amountMinor === null || !amountValid || purchasing) return
     setPurchasing(true)
     try {
-      const result = await createCheckoutSession({ amountMinor })
+      const returnPath = buildCheckoutReturnPath(
+        window.location.pathname,
+        window.location.search,
+        settingsOpen ? "settings" : "inline",
+      )
+      const result = await createCheckoutSession({ amountMinor, returnPath })
       if (result) {
         window.location.assign(result.checkout_url)
         return
@@ -202,6 +219,10 @@ export function CreditPackagePicker({ onCancel }: { onCancel?: () => void }) {
         </div>
       )}
 
+      <p className="text-xs leading-relaxed text-muted-foreground">
+        {t("credits.checkoutHint")}
+      </p>
+
       <div className="flex justify-end gap-2 border-t border-subtle pt-4">
         {onCancel && (
           <Button
@@ -217,6 +238,7 @@ export function CreditPackagePicker({ onCancel }: { onCancel?: () => void }) {
         <Button
           type="button"
           size="lg"
+          icon={purchasing ? <Spinner size={14} /> : undefined}
           disabled={!amountValid || purchasing}
           onClick={() => void buy()}
         >

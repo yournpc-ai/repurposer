@@ -8,6 +8,7 @@ remains the only writer of wallet movements.
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
+from urllib.parse import parse_qsl, urlencode, urlsplit
 from uuid import UUID
 
 import stripe
@@ -89,6 +90,61 @@ CUSTOM_TOPUP_POLICY = CustomTopupPolicy(
     credits_per_major=CUSTOM_TOPUP_CREDITS_PER_MINOR * 100,
 )
 
+DEFAULT_RETURN_PATH = "/home"
+_ALLOWED_RETURN_PREFIXES = (
+    "/home",
+    "/projects",
+    "/assets",
+    "/personas",
+    "/presets",
+    "/brand-template",
+    "/settings",
+)
+
+
+def _normalize_return_path(
+    return_path: str | None,
+) -> tuple[str, list[tuple[str, str]]]:
+    """Restrict Checkout return destinations to safe, app-internal relative routes."""
+    if not return_path:
+        return DEFAULT_RETURN_PATH, []
+    raw = return_path.strip()
+    if not raw or "\\" in raw or any(ord(ch) < 32 or ord(ch) == 127 for ch in raw):
+        return DEFAULT_RETURN_PATH, []
+    parsed = urlsplit(raw)
+    if (
+        parsed.scheme
+        or parsed.netloc
+        or not parsed.path.startswith("/")
+        or parsed.path.startswith("//")
+        or ".." in parsed.path.split("/")
+    ):
+        return DEFAULT_RETURN_PATH, []
+    path = parsed.path
+    if not any(
+        path == prefix or path.startswith(f"{prefix}/")
+        for prefix in _ALLOWED_RETURN_PREFIXES
+    ):
+        return DEFAULT_RETURN_PATH, []
+    query = [
+        (key, value)
+        for key, value in parse_qsl(parsed.query, keep_blank_values=False)
+        if key not in {"checkout", "order_id"}
+    ]
+    return path, query
+
+
+def _checkout_return_url(
+    base: str,
+    return_path: str | None,
+    *,
+    outcome: str,
+    order_id: UUID,
+) -> str:
+    path, query = _normalize_return_path(return_path)
+    full_query = [*query, ("checkout", outcome), ("order_id", str(order_id))]
+    return f"{base.rstrip('/')}{path}?{urlencode(full_query)}"
+
 
 def _custom_package(amount_minor: int) -> CreditPackage:
     policy = CUSTOM_TOPUP_POLICY
@@ -166,6 +222,7 @@ async def create_checkout_session(
     user: User,
     package_key: str | None = None,
     amount_minor: int | None = None,
+    return_path: str | None = None,
 ) -> tuple[PaymentOrder, str]:
     """Persist the order before exposing a payable Checkout Session."""
     if (package_key is None) == (amount_minor is None):
@@ -204,8 +261,12 @@ async def create_checkout_session(
             customer_email=user.email,
             metadata=metadata,
             payment_intent_data={"metadata": metadata},
-            success_url=f"{base}/settings?checkout=success&order_id={order.id}",
-            cancel_url=f"{base}/settings?checkout=cancelled&order_id={order.id}",
+            success_url=_checkout_return_url(
+                base, return_path, outcome="success", order_id=order.id
+            ),
+            cancel_url=_checkout_return_url(
+                base, return_path, outcome="cancelled", order_id=order.id
+            ),
             idempotency_key=f"checkout:{order.id}",
         )
         provider_session_id = session.id

@@ -17,9 +17,10 @@ interface SettingsSearch {
 }
 
 /** NOT a page — the shared SettingsDialog is the surface. This shim handles
- * channel OAuth and hosted Checkout returns, opens the matching section, and
- * bounces home. Checkout=success is only a browser return: CreditsSection must
- * still read the server's paid order before announcing a top-up. */
+ * channel OAuth callbacks and legacy /settings hosted-Checkout returns, opens
+ * the matching section, and bounces home. Checkout=success is only a browser
+ * return: the global handler still verifies the server's paid order before
+ * announcing a top-up. */
 export const Route = createFileRoute("/_app/settings")({
   validateSearch: (search: Record<string, unknown>): SettingsSearch => ({
     connected: typeof search.connected === "string" ? search.connected : undefined,
@@ -38,12 +39,12 @@ function SettingsCallbackReturn() {
   const navigate = useNavigate()
   const { connected, error, checkout, order_id: orderId } = Route.useSearch()
   const { refresh } = useChannels()
-  const { openSettings } = useSettingsDialog()
+  const { openSettings, handleCheckoutReturn } = useSettingsDialog()
 
   useEffect(() => {
     if (checkout && orderId) {
-      openSettings("credits", { orderId, outcome: checkout })
-      navigate({ to: "/home", replace: true })
+      handleCheckoutReturn({ orderId, outcome: checkout, surface: "settings" })
+      void navigate({ to: "/home", replace: true })
       return
     }
     if (connected) {
@@ -57,8 +58,8 @@ function SettingsCallbackReturn() {
       toast.error(t("channels.connectFailed", { platform: error }))
     }
     openSettings(connected || error ? "channels" : "personal")
-    navigate({ to: "/home", replace: true })
-  }, [checkout, orderId, connected, error, navigate, openSettings, refresh, t])
+    void navigate({ to: "/home", replace: true })
+  }, [checkout, orderId, connected, error, navigate, openSettings, handleCheckoutReturn, refresh, t])
 
   return null
 }

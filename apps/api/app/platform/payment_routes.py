@@ -43,6 +43,7 @@ class PaymentPackagesResponse(BaseModel):
 class CreateCheckoutSessionRequest(BaseModel):
     package_key: str | None = Field(default=None, min_length=1, max_length=40)
     amount_minor: int | None = Field(default=None, gt=0)
+    return_path: str | None = Field(default=None, max_length=512)
 
     @model_validator(mode="after")
     def exactly_one_amount_source(self) -> "CreateCheckoutSessionRequest":
@@ -118,6 +119,7 @@ async def create_checkout_session(
             user=user,
             package_key=data.package_key,
             amount_minor=data.amount_minor,
+            return_path=data.return_path,
         )
     except PaymentAmountInvalid as e:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=e.code) from e

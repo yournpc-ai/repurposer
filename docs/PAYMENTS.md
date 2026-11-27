@@ -168,7 +168,7 @@ ref = {
 | 方法与路径 | 认证 | 职责 |
 |---|---|---|
 | `GET /payments/packages` | 用户登录 | 返回当前 active 固定档位的 `items`，以及自定义金额的 `custom` policy（币种、上下限、每单位法币积分） |
-| `POST /payments/checkout-sessions` | 用户登录 | body 为 `{package_key}` 或 `{amount_minor}` 二选一；创建内部订单与 Checkout，返回 `{order_id, checkout_url}` |
+| `POST /payments/checkout-sessions` | 用户登录 | body 为 `{package_key}` 或 `{amount_minor}` 二选一，可选站内相对 `return_path`；创建内部订单与 Checkout，返回 `{order_id, checkout_url}` |
 | `GET /payments/orders/{order_id}` | 用户登录 + owner | 返回订单状态与展示快照；永不触发入账 |
 | `POST /payments/stripe/webhook` | Stripe 签名 | 处理支付确认与过期事件 |
 
@@ -178,7 +178,7 @@ Checkout 创建顺序：
 2. 创建并提交 `pending` 订单，确保 webhook 到达前订单已可查。
 3. 以内部 `order_id` 派生 Stripe API idempotency key，同一内部订单至多创建一个 Checkout Session。
 4. 所有订单统一使用 `mode=payment`、`allowed_payment_method_types=["card"]`、服务端生成的 `price_data`、`client_reference_id=user_id` 与 `metadata.order_id`；支付方式由 Dashboard 决定动态 eligible 集，再由服务端白名单过滤，不能传已退役的 `payment_method_types`。
-5. success/cancel URL 由 `WEB_PUBLIC_URL` 派生到 `/settings`，携带内部 `order_id` 与返回状态；保存 Session ID 后返回托管 URL。
+5. success/cancel URL 由 `WEB_PUBLIC_URL` 与经白名单校验的站内 `return_path`（仅允许应用内部相对路径，默认 `/home`）派生，保留原有业务查询参数（如 `?c=...`、`?checkout_surface=settings`）并附加 `checkout` 与 `order_id`；保存 Session ID 后返回托管 URL。
 6. Stripe 创建失败将订单标为 `failed` 并走统一 API 错误；未支付重复订单不代表重复收款，用户只有在不同 Session 分别付款才分别购买。
 
 ## 6. Webhook 与订单状态机
@@ -214,12 +214,12 @@ paid 永不被 expired / failed / 浏览器返回覆盖
 
 ## 7. 前端座位与返回行为
 
-- `components/credits/CreditPackagePicker.tsx` 是唯一金额选择与 Checkout 启动组件，只住在 `components/credits/CreditTopupDialog.tsx`：金额 input、到账积分、预设按钮、取消与 Checkout 跳转都在该轻量弹窗内完成。到账积分行旁的 Info tooltip 根据服务端 policy 说明购买换算与单次金额限制。输入内容会取消预设选中；点击预设回填 input 并显示选中态；无论预设或手动输入，前端都统一按整数 `amount_minor` 下单。预设与 custom policy 来自服务端 packages 读面，名称与动作文案走现有 i18n，不复制第二份价格表，不嵌银行卡表单。
-- `components/settings/CreditsSection.tsx` 承载余额/held、购买入口、支付返回确认与下方两张 Table：充值记录（类型、订单号、充值时间、支付渠道、支付金额、到账积分、状态）与消费记录（消费编号、制作、产物类型、项目、消费时间、消耗积分）。双表所有字段完整显示，不做文字截断；记录区以 `px-4` 在 Settings 内左右留白，表容器居中且宽度受限，超出时在各自表容器内部横向滚动，Settings 本身不横向滚动。充值记录与消费记录每页 10 条，分别使用 `direction=in|out` 的服务端分页与独立上一页游标历史，互不影响，并显示当前页/总页数；消费方向先按语义事件分页再完整折叠 Run，不会用内部台账行挤占每页名额；充值读投影批量关联 `payment_orders`，不从积分反推法币；赠送/正向调整留在充值侧并明确标为非购买，历史缺少订单关联的购买显示“—”。余额区唯一主行动为 Add credits。`components/credits/CreditsPill.tsx` 的 popover = 紧凑余额摘要 + 唯一 primary「购买积分 / Add credits」+ 最近三条语义记录 + 次级「查看全部」；购买打开轻量充值 Dialog，查看全部调用 `openSettings("credits")`。Settings 余额区购买按钮与 Chat 的 `credits.insufficient` 灰行也打开同一 Dialog，用户显式制作收到 422 后可主动打开。支付成功不自动重试 run 或发送 Chat 消息。
-- `lib/payments.ts` 统一 packages / checkout / order 的 wire types 与 `apiFetch`；金额用 `Intl.NumberFormat` 按 EUR 与当前语言格式化，积分沿用 `formatCredits`。
-- `routes/_app.settings.tsx` 复用为 Checkout return shim：接收 `checkout=success|cancelled&order_id=...`，打开积分 section 后回 `/home`；不新建支付设置页。
-- 返回 success 只显示“正在确认付款”，有界轮询订单（2 秒一次、至多 30 秒）。只有服务端 `paid` 才显示支付成功 Dialog 并刷新 wallet/transactions；完成按钮关闭 Dialog 并定位到充值记录，成功状态不是持久回执。超时仍 pending 显示稍后刷新，不重复下单。
-- cancelled 回到购买面且不入账，不显示伪造支付错误。所有新文案同步 `en.ts` / `zh.ts`。
+- `components/credits/CreditPackagePicker.tsx` 是唯一金额选择与 Checkout 启动组件，只住在 `components/credits/CreditTopupDialog.tsx`：金额 input、到账积分、预设按钮、取消与 Checkout 跳转都在该轻量弹窗内完成；从 422 余额不足打开时自动预选能覆盖缺口的最小档位（或对应自定义金额）。到账积分行旁的 Info tooltip 根据服务端 policy 说明购买换算与单次金额限制。输入内容会取消预设选中；点击预设回填 input 并显示选中态；无论预设或手动输入，前端都统一按整数 `amount_minor` 下单并附带当前站内 `return_path`（从 Settings 发起时标记 `checkout_surface=settings`）。预设与 custom policy 来自服务端 packages 读面，名称与动作文案走现有 i18n，不复制第二份价格表，不嵌银行卡表单。
+- `components/settings/CreditsSection.tsx` 承载余额/held、购买入口、Settings 内联支付确认横幅与下方两张 Table：充值记录（类型、订单号、充值时间、支付渠道、支付金额、到账积分、状态）与消费记录（消费编号、制作、产物类型、项目、消费时间、消耗积分）。订单号与消费编号以短码 + 完整 ID tooltip + 一键复制展示，避免挤出核心列；记录区在 Settings 内左右留白，表容器居中且宽度受限，超出时在各自表容器内部横向滚动，Settings 本身不横向滚动。充值记录与消费记录每页 10 条，分别使用 `direction=in|out` 的服务端分页与独立上一页游标历史，互不影响，并显示当前页/总页数；消费方向先按语义事件分页再完整折叠 Run，不会用内部台账行挤占每页名额；充值读投影批量关联 `payment_orders`，不从积分反推法币；赠送/正向调整留在充值侧并明确标为非购买，历史缺少订单关联的购买显示“—”。余额区唯一主行动为 Add credits。`components/credits/CreditsPill.tsx` 的 popover = 紧凑余额摘要 + 唯一 primary「购买积分 / Add credits」+ 最近三条语义记录 + 次级「查看全部」；购买打开轻量充值 Dialog，查看全部调用 `openSettings("credits")`。Settings 余额区购买按钮与 Chat 的 `credits.insufficient` 灰行也打开同一 Dialog，用户显式制作收到 422 后可主动打开。支付成功不自动重试 run 或发送 Chat 消息。
+- `lib/payments.ts` 统一 packages / checkout / order 的 wire types、`return_path` 构造、缺口预选与 `apiFetch`；金额用 `Intl.NumberFormat` 按 EUR 与当前语言格式化，积分沿用 `formatCredits`。
+- `routes/_app.tsx` 在原路由就地截获 `checkout=success|cancelled&order_id=...`（同时清除 URL 查询参数并保留原路径与业务参数如 `?c=...`），交给全局 `SettingsDialogProvider` 处理；`routes/_app.settings.tsx` 保留对旧 `/settings?checkout=...` 链接的兼容回退。
+- 订单轮询运行在全局 `SettingsDialogProvider`（2 秒一次、至多 30 秒，并监听 `visibilitychange` 切回即查）：从首页/项目页等原地入口返回 success 时，弹出轻量 `CheckoutReturnDialog`（确认中带 Spinner 与订单摘要 → 服务端 `paid` 后展示到账积分与最新余额，主按钮“完成”留在原页，次级入口“查看充值记录”可按需打开 Settings）；从 Settings 返回时在 `CreditsSection` 顶部以内联横幅呈现确认/成功态，不套娃弹窗。关闭确认弹窗或 Settings 不中断轮询，转由后台 loading toast 继续确认。确认 `paid` 后立即派发 `WALLET_REFRESH_EVENT`，实时同步顶部 `CreditsPill` 与 Settings 余额/充值表。超时仍 pending 提示稍后刷新，不重复下单。
+- cancelled 留在原页面且不入账（仅轻弹 info toast，不强行打开 Settings；仅从 Settings 发起的取消回到 Settings 积分页），不显示伪造支付错误。所有新文案同步 `en.ts` / `zh.ts`。
 - Landing 的 Pro / Institution 订阅卡在订阅批之前不接一次性 Checkout，AccountConsole 也不显示订阅或升级入口，避免把不同商品混为同一承诺。
 
 ## 8. 后续商业语义与公开收款前置

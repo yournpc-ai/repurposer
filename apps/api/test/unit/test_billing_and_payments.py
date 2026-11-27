@@ -246,6 +246,7 @@ from app.platform.payments import (
     PaymentAmountInvalid,
     PaymentConfigurationError,
     _checkout_line_items,
+    _checkout_return_url,
     _configured_livemode,
     _custom_package,
     list_credit_packages,
@@ -430,4 +431,55 @@ def test_rejected_deliveries_share_an_hourly_audit_key() -> None:
 )
 def test_only_actionable_receipts_request_alerts(status, reason, expected) -> None:
     assert should_alert(status, reason) is expected
+
+
+def test_checkout_return_url_preserves_safe_app_routes_and_query() -> None:
+    order_id = uuid4()
+    url = _checkout_return_url(
+        "https://app.example.com/",
+        "/projects/p-123?c=conv-1&checkout=cancelled&order_id=stale",
+        outcome="success",
+        order_id=order_id,
+    )
+    assert (
+        url
+        == f"https://app.example.com/projects/p-123?c=conv-1&checkout=success&order_id={order_id}"
+    )
+
+    settings_url = _checkout_return_url(
+        "https://app.example.com",
+        "/projects/p-123?checkout_surface=settings",
+        outcome="cancelled",
+        order_id=order_id,
+    )
+    assert (
+        settings_url
+        == f"https://app.example.com/projects/p-123?checkout_surface=settings&checkout=cancelled&order_id={order_id}"
+    )
+
+
+@pytest.mark.parametrize(
+    "unsafe",
+    [
+        None,
+        "",
+        "   ",
+        "https://evil.example/home",
+        "//evil.example/home",
+        "/\\evil.example",
+        "/home/../evil",
+        "/api/v1/payments/orders/123",
+        "/home\r\nX-Injected: 1",
+    ],
+)
+def test_checkout_return_url_falls_back_to_home_for_unsafe_paths(unsafe) -> None:
+    order_id = uuid4()
+    url = _checkout_return_url(
+        "https://app.example.com",
+        unsafe,
+        outcome="success",
+        order_id=order_id,
+    )
+    assert url == f"https://app.example.com/home?checkout=success&order_id={order_id}"
+
 

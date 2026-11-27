@@ -1,4 +1,5 @@
 import { apiFetch } from "@/lib/api"
+import type { CreditTopupRequest } from "@/lib/credits"
 
 export interface CreditPackage {
   key: string
@@ -39,14 +40,21 @@ export async function fetchCreditPackages(): Promise<CreditPackageCatalog> {
 
 export interface CheckoutRequest {
   amountMinor: number
+  returnPath?: string
 }
 
 export async function createCheckoutSession(
   request: CheckoutRequest,
 ): Promise<{ order_id: string; checkout_url: string } | null> {
+  const body: { amount_minor: number; return_path?: string } = {
+    amount_minor: request.amountMinor,
+  }
+  if (request.returnPath) {
+    body.return_path = request.returnPath
+  }
   const res = await apiFetch("/api/v1/payments/checkout-sessions", {
     method: "POST",
-    body: { amount_minor: request.amountMinor },
+    body,
   })
   if (!res.ok) return null
   return (await res.json()) as { order_id: string; checkout_url: string }
@@ -89,4 +97,61 @@ export function parseAmountMinor(value: string): number | null {
   const amountMinor =
     Number(whole) * 100 + Number((fraction + "00").slice(0, 2))
   return Number.isSafeInteger(amountMinor) ? amountMinor : null
+}
+
+/** Build a clean in-app return path preserving current route & query (e.g. ?c=convId),
+ * stripping any stale checkout query parameters. */
+export function buildCheckoutReturnPath(
+  pathname: string,
+  search: string,
+  surface: "inline" | "settings",
+): string {
+  const params = new URLSearchParams(search)
+  params.delete("checkout")
+  params.delete("order_id")
+  params.delete("checkout_surface")
+  if (surface === "settings") {
+    params.set("checkout_surface", "settings")
+  }
+  const cleanPath = pathname.startsWith("/") ? pathname : "/home"
+  const qs = params.toString()
+  return qs ? `${cleanPath}?${qs}` : cleanPath
+}
+
+/** Pick the initial selection for the top-up dialog: defaults to the first preset,
+ * or covers a spend-point shortfall with the smallest sufficient preset (or custom amount). */
+export function pickInitialTopup(
+  catalog: CreditPackageCatalog,
+  shortfall: CreditTopupRequest | null,
+): { selectedKey: string | null; amountInput: string } {
+  const defaultPkg = catalog.items[0] ?? null
+  const fallback = {
+    selectedKey: defaultPkg?.key ?? null,
+    amountInput: defaultPkg ? formatAmountInput(defaultPkg.amount_minor) : "",
+  }
+  if (!shortfall) return fallback
+  const deficit = Math.max(0, shortfall.required - shortfall.balance)
+  if (deficit <= 0) return fallback
+
+  const coveringPreset = [...catalog.items]
+    .sort((a, b) => a.credits - b.credits)
+    .find((pkg) => pkg.credits >= deficit)
+  if (coveringPreset) {
+    return {
+      selectedKey: coveringPreset.key,
+      amountInput: formatAmountInput(coveringPreset.amount_minor),
+    }
+  }
+
+  const { custom } = catalog
+  if (!custom || custom.credits_per_major <= 0) return fallback
+  const neededMinor = Math.ceil((deficit * 100) / custom.credits_per_major)
+  const clamped = Math.min(
+    custom.max_amount_minor,
+    Math.max(custom.min_amount_minor, neededMinor),
+  )
+  return {
+    selectedKey: null,
+    amountInput: formatAmountInput(clamped),
+  }
 }
