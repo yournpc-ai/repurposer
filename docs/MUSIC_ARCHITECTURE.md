@@ -37,27 +37,13 @@ ReactBits Sound Lab 仅作交互、分类与分层参数设计参考。其 MIT +
 
 ## 策展曲库与启动对账
 
-`CURATED_MUSIC_CATALOG` 收录五首 Shotcraft BGM 和四首 Drumprints 鼓组器乐。平台不再自动补入 Calm Academic、Inspiring Vision、Corporate Drive；启动时会删除未被历史 Output 引用的旧平台行及其对象，仍被引用的行转为私有以保留历史而不进入候选库。用户自己生成的音乐不受影响。
+`CURATED_MUSIC_CATALOG`（`MUSIC3_CURATED_CATALOG`）面向四大片种（`vlog` / `visual_craft` / `product_promo` / `explainer`）规划 **16 首 MiniMax Music 3.0 纯器乐旗舰曲库**（12 首 ~90 秒四段式结构化母曲 `arc_90s` + 4 首 15–22 秒高能成套短曲 `short_hook`），并在 Studio `/presets` 预设库页与 `WorkbenchPane` 直接提供波形试听、分段点击跳转（`Intro / Groove / Drop / Outro` 或 `Hook / Peak / Sting`）及一键引用创作。旧版 Mixkit/Shotcraft 与 Drumprints 共 10 首历史 BGM 已全面淘汰：启动对账 `_retire_deprecated_platform_music` 自动删除未被引用的历史平台曲目及对象，已被旧 `Output` 引用的行自动归档隐藏（`status="archived", is_public=False`）以保护历史成片回放。
 
-- `app/pipeline/music.py:seed_default_music` 在应用启动时 reconcile：按 mood 查缺，对象存在而记录缺失时补记录。
-- 启动 reconcile **不调用 MiniMax、不生成音频、不花配额**；对象不存在时保持缺失并诚实跳过。
-- 原有五首来自 Shotcraft 的 `assets/audio/bgm`。除 Tech House 外的四首有逐曲作者和 URL；`bgm-tech-house.mp3` 的原曲名、作者与逐曲 URL 无法反查，库中明确标记“商用前复核”。代码与音乐的许可分别记录，不把 Shotcraft 的 Apache-2.0 当成音乐许可。
-- 策展字节由 `apps/api/scripts/import_library_music.py <Shotcraft/assets/audio/bgm>` 显式导入。默认读取五首 Shotcraft MP3，解码探测真实时长、计算 SHA-256 并上传缺失对象；已有对象仅字节完全相同才复用，绝不覆盖。它不写 DB、不调用模型。
-- 在 `apps/api` 运行 `uv run python scripts/import_library_music.py assets/music --mood pocket-proof relay-glass open-window contact-sheet-101-a` 可独立导入四首新曲。商用成片须保留曲库 attribution 的鼓组来源、改编说明与 CC BY 4.0 链接。参考速度用于搜索，自动 BeatGrid 单独保存在元数据。
+- `app/pipeline/music.py:seed_default_music` 在应用启动时 reconcile：按 `mood` 核对对象存储中的新曲，自动解码时长、计算 SHA-256、门控响度 LUFS、48 段 `waveform_peaks`、BeatGrid 与按实测时长展开的 `sections` 段落时间窗。
+- 启动 reconcile **不调用 MiniMax、不生成音频、不花配额**；尚未导入音频字节的曲目保持等待态并记录明确日志。
+- 16 首 Music 3.0 生成提示词位于 `apps/api/assets/music/README.md` 与 `music3_prompts.json`（可经 `uv run python scripts/import_library_music.py --export-prompts assets/music` 随时重新导出）；音频就绪后执行 `uv run python scripts/import_library_music.py assets/music --reconcile` 即可一键校验、上传并入库（若有已开通 Music API 的付费 Key，亦可传 `--generate` 直接调用 `music-3.0` 生成）。
 - 常驻实录 Foley 共 36 条。双语动作标签、作者和许可位于 `apps/api/assets/sfx/manifest.json`。用 `scripts/seed_sfx_library.py --dry-run` 测量，再在目标环境显式导入。
-- 启动 reconcile 保存来源、许可、作者、风格、参考 BPM 和实际时长/digest，并尽力补齐 BeatGrid；参考 BPM 不冒充新分析结果，BeatGrid 缺失时保持为空。
 - reset_db 保留 `music/` 对象前缀，清库后重启只重建可对应记录。
-
-### Drumprints 剪辑入点
-
-时间从曲库 MP3 首个解码样本起算，单位为秒。原始音轨编号对应 Spencer Tweedy 在芝加哥 The Pocket 录制的 *Drumprints vol. 1*。前三首加入 Rookie Cut 编配，第四首保留整段独奏。作者列出了 Slingerland 鼓组和 Zildjian K Constantinople 镲片。[演奏与录音说明](https://spencertweedy.com/drumprints) · [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)
-
-| 入库曲 | 原录音与改编 | 参考 / 估测 BPM | MP3 剪辑段与收拍 |
-| --- | --- | --- | --- |
-| Pocket Proof · Funk | 04 Longform 101，从 0.000 起取十二小节，加入切分贝斯和电钢音色 | 101 / 135.1 | 0.000 第一拍入，28.515 最后齐奏，留尾到 29.635。适合磁吸 CTA 和键入切镜。 |
-| Relay Glass · Electro | 01 Contact Sheet 128，从 0.000 起取十六小节，叠电子低音和左右钟音 | 128 / 129.5 | 7.500 第五小节第一拍入，30.000 收击，31.120 出。适合工作台从局部推进到全景。 |
-| Open Window · Upbeat Indie | 06 Longform 158，从原录音 6.076 起取十六小节，叠加拨弦和贝斯 | 158 / 62.9 | 0.000 第一拍入，12.152 加入高声部，24.304 收和弦，25.424 出。 |
-| DP2301 Contact Sheet 101 A · Minimal Percussion | 07 原版独奏，调整电平、转为 MP3 | 101 / 135.4 | 47.525 第二十一小节第一拍入，末拍 56.436 起淡出，57.030 出。最后三个小节给界面动作留空。 |
 
 ## 向共享曲库上传音乐（待实施）
 

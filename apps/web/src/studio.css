@@ -206,8 +206,10 @@
   font-weight: 500;
   color: var(--muted-foreground);
   white-space: nowrap;
-  text-align: left;
   overflow-wrap: normal;
+}
+.ui-th-table--middle .ui-th-table__td {
+  vertical-align: middle;
 }
 .ui-th-table__body .ui-th-table__row {
   border-bottom: 1px solid var(--border);

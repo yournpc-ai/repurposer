@@ -66,8 +66,14 @@ class InsertAudioArgs(BaseModel):
         return self
 
     start_seconds: float = Field(ge=0, allow_inf_nan=False, description="Start on the composition timeline.")
+    source_start_seconds: float = Field(
+        default=0.0,
+        ge=0,
+        allow_inf_nan=False,
+        description="Offset inside the audio recording (seconds) to start playback from (e.g. jump directly to a BGM track's recommended groove/highlight section).",
+    )
     duration_seconds: float | None = Field(default=None, gt=0, allow_inf_nan=False,
-                                           description="Use the full recording when omitted. Music loops to cover a longer requested duration.")
+                                           description="Use the remaining recording from source_start_seconds when omitted. Music loops to cover a longer requested duration.")
     gain_db: float = Field(default=0, ge=-60, le=12, description="Clip gain in decibels.")
     fade_in_seconds: float | None = Field(default=None, ge=0, le=10, description="Music entrance fade.")
     fade_out_seconds: float | None = Field(default=None, ge=0, le=10, description="Music ending fade.")
@@ -93,7 +99,15 @@ class GenerateImageArgs(BaseModel):
 
 class GenerateVoiceArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-    text: str = Field(min_length=1, max_length=9000)
+    text: str = Field(
+        min_length=1,
+        max_length=9000,
+        description=(
+            "Complete, natural, well-structured spoken script with full sentences and smooth transitions between ideas. "
+            "Must read smoothly aloud on its own without visuals—never write telegraphic noun lists, comma-separated UI "
+            "labels, or literal translations. Supports MiniMax pause tags like '<#0.3#>' and restrained '(breath)' tags."
+        ),
+    )
     speed: float = Field(default=1.0, ge=0.5, le=2.0, exclude_if=lambda v: v == 1.0)
     emotion: VoiceEmotion | None = Field(default=None, exclude_if=lambda v: v is None)
     language: Literal["en", "zh", "fr", "de", "es", "it"]
@@ -1170,9 +1184,21 @@ async def edit_clip(
                 or snapshot.kind != "audio" or not snapshot.duration_ticks):
             raise ValueError("Select a fixed audio source from the current project.")
         start = _ticks(args.start_seconds, rate)
-        source_end = (snapshot.duration_ticks if args.duration_seconds is None else
-                      output_ticks_to_source_ticks(_ticks(args.duration_seconds, rate), rate))
-        end = start + source_ticks_to_output_ticks(source_end, rate)
+        source_start = (
+            output_ticks_to_source_ticks(_ticks(args.source_start_seconds, rate), rate)
+            if args.source_start_seconds > 0
+            else 0
+        )
+        if source_start >= snapshot.duration_ticks:
+            raise ValueError("source_start_seconds must be within the audio recording duration.")
+        remaining_source_ticks = snapshot.duration_ticks - source_start
+        requested_source_ticks = (
+            remaining_source_ticks
+            if args.duration_seconds is None
+            else output_ticks_to_source_ticks(_ticks(args.duration_seconds, rate), rate)
+        )
+        source_end = source_start + requested_source_ticks
+        end = start + source_ticks_to_output_ticks(requested_source_ticks, rate)
         limit = max([c.range.end for _, c in entries] + [scene.range.end for scene in content.scenes] + [0])
         if not start < end <= limit:
             raise ValueError("The audio must fit the source and the current composition duration.")
@@ -1216,6 +1242,7 @@ async def edit_clip(
                 settings=content.settings, start=start, end=end, source_id=snapshot.id, digest=snapshot.digest,
                 source_ticks=snapshot.duration_ticks, id_stem=identity.hex, gain_db=args.gain_db,
                 fade_in_seconds=args.fade_in_seconds, fade_out_seconds=args.fade_out_seconds,
+                source_start_ticks=source_start,
             )
             if snapshot.id not in {source.snapshot_id for source in content.sources}:
                 ops.append(BindSource(op="bind_source", snapshot_id=snapshot.id))
@@ -1229,7 +1256,7 @@ async def edit_clip(
             ops = fixed_audio_ops(content, source_id=snapshot.id, source_digest=snapshot.digest,
                                   track_id=track_id, role=role, clip_id=f"clp_{identity.hex}",
                                   object_id=f"obj_{identity.hex}", scene_id=None, start=start, end=end,
-                                  source_start=0, source_end=source_end, gain_db=args.gain_db)
+                                  source_start=source_start, source_end=source_end, gain_db=args.gain_db)
     elif isinstance(args, EditAudioClipArgs):
         from app.editing.revisions import build_audio_gain_animation
         from app.editing.timing import source_ticks_to_output_ticks

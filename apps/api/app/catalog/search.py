@@ -181,6 +181,7 @@ async def audio_details(db, owner_id, kind, ids):
             Music.lufs,
             Music.duration_seconds,
             Music.compatible_styles,
+            Music.meta,
         ).where(
             Music.status.in_(("ready", "curated")),
             Music.id.in_(parsed),
@@ -203,5 +204,29 @@ async def audio_details(db, owner_id, kind, ids):
             Voice.compatible_styles,
             Voice.provider_voice_id,
         ).where(visible(Voice, owner_id), Voice.id.in_(parsed))
-    rows = {row["id"]: {**row, "id": str(row["id"])} for row in (await db.execute(stmt)).mappings()}
+    rows = {}
+    for row in (await db.execute(stmt)).mappings():
+        item = {**row, "id": str(row["id"])}
+        if kind == "music":
+            meta = item.pop("meta", None) or {}
+            if isinstance(meta, dict):
+                if meta.get("title_zh"):
+                    item["name_zh"] = meta["title_zh"]
+                if meta.get("category"):
+                    item["category"] = meta["category"]
+                if meta.get("format_kind"):
+                    item["format_kind"] = meta["format_kind"]
+                if meta.get("sections"):
+                    item["sections"] = meta["sections"]
+                    rec = next(
+                        (
+                            s
+                            for s in meta["sections"]
+                            if isinstance(s, dict) and s.get("recommended") and s.get("start_seconds") is not None
+                        ),
+                        None,
+                    )
+                    if rec is not None:
+                        item["recommended_start_seconds"] = rec["start_seconds"]
+        rows[row["id"]] = item
     return {"items": [rows[key] for key in dict.fromkeys(parsed) if key in rows]}

@@ -166,7 +166,7 @@ export default function VisualPresetGalleryPanel({
     <div className={hideToolbar ? "min-h-0 flex-1" : "min-h-0 flex-1 overflow-y-auto px-3 pb-3 thin-scroll"}>
       {state === "ready" && filtered.length > 0 && view === "list" ? (
         <div className="ui-th-table-frame !w-full">
-          <table className="ui-th-table">
+          <table className="ui-th-table ui-th-table--middle">
             <thead className="ui-th-table__head">
               <tr>
                 <th className="ui-th-table__th w-40">{t("presetsPage.colPreview")}</th>
@@ -230,7 +230,7 @@ export default function VisualPresetGalleryPanel({
                     <td className="ui-th-table__td text-xs text-muted-foreground">
                       {sounds?.length ? sounds.join(zh ? "、" : ", ") : "—"}
                     </td>
-                    <td className="ui-th-table__td text-right">
+                    <td className="ui-th-table__td whitespace-nowrap text-right">
                       <div className="inline-flex items-center justify-end gap-1.5">
                         {!workbench ? (
                           <Button

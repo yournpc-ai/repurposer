@@ -500,12 +500,36 @@ async def search_music(db: AsyncSession, project: Project, params: SearchMusicPa
     )
     lines = [header + (", top 10:" if len(matches) > 10 else ":")]
     for m in shown:
+        meta = m.meta if isinstance(m.meta, dict) else {}
         duration = f"{m.duration_seconds}s" if m.duration_seconds else "?s"
+        bpm_str = f" · {m.bpm} BPM" if m.bpm else ""
+        fmt_str = f" · {meta['format_kind']}" if meta.get("format_kind") else ""
+        cat_str = f" · category={meta['category']}" if meta.get("category") else ""
         tag_str = f" · tags={','.join(m.tags)}" if m.tags else ""
         style_str = f" · styles={','.join(m.compatible_styles)}" if m.compatible_styles else ""
         lufs_str = f" · {m.lufs:.1f} LUFS" if m.lufs is not None else ""
+        sections = meta.get("sections") if isinstance(meta.get("sections"), list) else []
+        rec_start = next(
+            (
+                s.get("start_seconds")
+                for s in sections
+                if isinstance(s, dict) and s.get("recommended") and s.get("start_seconds") is not None
+            ),
+            None,
+        )
+        rec_str = f" · recommended_start={rec_start:g}s" if rec_start is not None else ""
+        sec_str = (
+            " · sections="
+            + ",".join(
+                f"{'*' if s.get('recommended') else ''}{s.get('name')}({s.get('start_seconds'):g}-{s.get('end_seconds'):g}s)"
+                for s in sections
+                if isinstance(s, dict) and s.get("name") is not None
+            )
+            if sections
+            else ""
+        )
         lines.append(
-            f"- {m.title} — mood: {m.mood} · {duration}{tag_str}{style_str}{lufs_str} · uses={int(m.use_count or 0)} · music_id={m.id} (Music library, not Asset)"
+            f"- {m.title} — mood: {m.mood} · {duration}{bpm_str}{fmt_str}{cat_str}{tag_str}{style_str}{lufs_str}{rec_str}{sec_str} · uses={int(m.use_count or 0)} · music_id={m.id} (Music library, not Asset)"
         )
     return "\n".join(lines)
 
@@ -543,24 +567,23 @@ async def search_voices(db: AsyncSession, project: Project, params: SearchVoices
             )
     else:
         lines.append("Permanent voice library — 0 saved custom/curated matches for these filters.")
-
-    lang_norm = (language or "").lower()
-    stock_matches = [
-        item
-        for item in VOICE_CATALOG
-        if (not lang_norm or lang_norm in item["languages"])
-        and (
-            not query
-            or query.lower() in f"{item['voice_id']} {item['style']} {' '.join(item['languages'])}".lower()
-        )
-        and (not tone or tone.lower() in item["style"].lower())
-    ]
-    if stock_matches:
-        lines.append("Verified stock voices (fallback when no saved voiceprint matches):")
-        for item in stock_matches[:6]:
-            lines.append(
-                f"- {item['voice_id']} — langs={','.join(item['languages'])} · {item['style']}"
+        lang_norm = (language or "").lower()
+        stock_matches = [
+            item
+            for item in VOICE_CATALOG
+            if (not lang_norm or lang_norm in item["languages"])
+            and (
+                not query
+                or query.lower() in f"{item['voice_id']} {item['style']} {' '.join(item['languages'])}".lower()
             )
+            and (not tone or tone.lower() in item["style"].lower())
+        ]
+        if stock_matches:
+            lines.append("Verified stock voices (fallback when no saved voiceprint matches):")
+            for item in stock_matches[:6]:
+                lines.append(
+                    f"- {item['voice_id']} — langs={','.join(item['languages'])} · {item['style']}"
+                )
     lines.append("Tip: Reuse an existing voice_id first; call design_voice only when no existing voice fits the brand timbre.")
     return "\n".join(lines)
 

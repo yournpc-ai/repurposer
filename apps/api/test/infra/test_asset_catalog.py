@@ -153,18 +153,95 @@ async def test_ensure_builtin_catalog_backfills_sounds_when_visual_catalog_exist
         assert sounds["dsp_tension_radar"] == "video"
 
 
+def _write_test_mp3(path: Path, seconds: int = 3) -> bytes:
+    """Encode a deterministic short stereo MP3 via PyAV for catalog import tests."""
+    import av
+    import numpy as np
+
+    sample_rate = 44100
+    t = np.linspace(0, seconds, sample_rate * seconds, endpoint=False, dtype=np.float32)
+    # Rhythmic pulse so BeatGrid and waveform peaks are non-trivial.
+    envelope = (0.35 + 0.65 * (np.sin(2 * np.pi * 2.0 * t) > 0).astype(np.float32))
+    wave = (0.3 * envelope * np.sin(2 * np.pi * 220.0 * t)).astype(np.float32)
+    stereo = np.stack([wave, wave], axis=0)
+    with av.open(str(path), mode="w", format="mp3") as container:
+        stream = container.add_stream("mp3", rate=sample_rate, layout="stereo")
+        frame = av.AudioFrame.from_ndarray(stereo, format="fltp", layout="stereo")
+        frame.sample_rate = sample_rate
+        for packet in stream.encode(frame):
+            container.mux(packet)
+        for packet in stream.encode():
+            container.mux(packet)
+    return path.read_bytes()
+
+
 async def test_selective_music_import_reconciles_searchable_recording(database, monkeypatch, tmp_path):
     from app.pipeline.music import search_music_library, seed_default_music
     from scripts.import_library_music import _main
 
-    monkeypatch.setattr(settings, "s3_endpoint_url", f"local://{tmp_path}")
-    music_dir = Path(__file__).resolve().parents[2] / "assets/music"
-    assert await _main(music_dir, ["pocket-proof"]) == 0
-    assert await _main(music_dir, ["pocket-proof"]) == 0
+    monkeypatch.setattr(settings, "s3_endpoint_url", f"local://{tmp_path / 'storage'}")
+    music_dir = tmp_path / "music_src"
+    music_dir.mkdir()
+    sample_bytes = _write_test_mp3(music_dir / "vlog-nagoya-citypop.mp3", seconds=12)
+    assert await _main(music_dir, ["vlog-nagoya-citypop"]) == 0
+    assert await _main(music_dir, ["vlog-nagoya-citypop"]) == 0
     async with database() as db:
         created = await seed_default_music(db)
-        assert [row.mood for row in created] == ["pocket-proof"]
-        track, = await search_music_library(db, genre="funk", bpm=101, query="Pocket Proof")
+        assert [row.mood for row in created] == ["vlog-nagoya-citypop"]
+        track, = await search_music_library(db, genre="city pop", bpm=116, query="Sojourn")
         assert track.id == created[0].id
-        assert (tmp_path / track.file_path).read_bytes() == (music_dir / "pocket-proof.mp3").read_bytes()
+        assert (tmp_path / "storage" / track.file_path).read_bytes() == sample_bytes
+        assert track.meta["category"] == "vlog"
+        assert track.meta["format_kind"] == "arc_90s"
+        assert len(track.meta["sections"]) == 4
+        assert len(track.meta["waveform_peaks"]) == 72
         assert track.meta["origin"] == "estimated" and track.meta["beats"]
+
+
+async def test_music_clips_for_window_source_start_offset_and_wrap():
+    from uuid import uuid4
+
+    from app.editing.schemas import VersionSettings
+    from app.editing.timing import SOURCE_TIMEBASE
+    from app.skills.blueprint import music_clips_for_window
+
+    settings_obj = VersionSettings(width=1920, height=1080, timebase=3000)
+    src_id = uuid4()
+    digest = "a" * 64
+    # 120s source, start at 30s for a 45s video -> single clip [30s, 75s] without looping
+    clips = music_clips_for_window(
+        settings=settings_obj,
+        start=0,
+        end=45 * 3000,
+        source_id=src_id,
+        digest=digest,
+        source_ticks=120 * SOURCE_TIMEBASE,
+        id_stem="promo_mid",
+        gain_db=-16.0,
+        fade_in_seconds=0.8,
+        fade_out_seconds=1.5,
+        source_start_ticks=30 * SOURCE_TIMEBASE,
+    )
+    assert len(clips) == 1
+    assert clips[0].source.source_range.start == 30 * SOURCE_TIMEBASE
+    assert clips[0].source.source_range.end == 75 * SOURCE_TIMEBASE
+
+    # 120s source, start at 100s for a 45s video -> [100s, 120s] then wraps to [0s, 25s]
+    wrapped = music_clips_for_window(
+        settings=settings_obj,
+        start=0,
+        end=45 * 3000,
+        source_id=src_id,
+        digest=digest,
+        source_ticks=120 * SOURCE_TIMEBASE,
+        id_stem="promo_wrap",
+        gain_db=-16.0,
+        fade_in_seconds=0.5,
+        fade_out_seconds=1.0,
+        source_start_ticks=100 * SOURCE_TIMEBASE,
+    )
+    assert len(wrapped) == 2
+    assert wrapped[0].source.source_range.start == 100 * SOURCE_TIMEBASE
+    assert wrapped[0].source.source_range.end == 120 * SOURCE_TIMEBASE
+    assert wrapped[1].source.source_range.start == 0
+    assert wrapped[1].source.source_range.end == 25 * SOURCE_TIMEBASE

@@ -2823,6 +2823,23 @@ class ProjectResultsResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+class MusicSection(BaseModel):
+    """Named structural segment inside a BGM track (e.g. intro/groove/drop/outro)."""
+
+    model_config = ConfigDict(extra="allow")
+
+    name: str
+    label: str | None = None
+    label_zh: str | None = None
+    start_seconds: float
+    end_seconds: float
+    energy: str = "medium"
+    voice_friendly: bool = False
+    recommended: bool = False
+    note: str | None = None
+    note_zh: str | None = None
+
+
 class MusicResponse(BaseModel):
     """A music library piece (metadata + stream URL; no audio bytes)."""
 
@@ -2831,6 +2848,17 @@ class MusicResponse(BaseModel):
     id: UUID
     mood: str
     title: str
+    title_zh: str | None = None
+    category: str | None = None
+    genre: str | None = None
+    energy: str = "medium"
+    bpm: int | None = None
+    format_kind: str | None = None
+    summary: str | None = None
+    use_for: list[str] = Field(default_factory=list)
+    avoid: list[str] = Field(default_factory=list)
+    sections: list[MusicSection] = Field(default_factory=list)
+    waveform_peaks: list[float] = Field(default_factory=list)
     ext: str
     url: str
     size_bytes: int

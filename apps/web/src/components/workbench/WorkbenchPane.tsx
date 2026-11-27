@@ -65,6 +65,8 @@ const LazySlotPreviewContent = lazy(() =>
 )
 
 const VisualPresetGalleryPanel = lazy(() => import("./VisualPresetGalleryPanel"))
+const MusicLibraryPanel = lazy(() => import("./MusicLibraryPanel"))
+const VoiceLibraryPanel = lazy(() => import("./VoiceLibraryPanel"))
 const SoundLabPanel = lazy(() => import("./SoundLabPanel"))
 
 const WIDTH_STORAGE_KEY = "repurposer-workbench-width"
@@ -1442,6 +1444,8 @@ function PresetsArtifactView({
           options={[
             { value: "block", label: t("visualGallery.blocks") },
             { value: "text_preset", label: t("visualGallery.text") },
+            { value: "music", label: t("visualGallery.music") },
+            { value: "voices", label: t("visualGallery.voices") },
             { value: "sounds", label: t("visualGallery.sounds") },
           ]}
         />
@@ -1455,6 +1459,14 @@ function PresetsArtifactView({
       >
         {kind === "sounds" ? (
           <SoundLabPanel />
+        ) : kind === "music" ? (
+          <div className="min-h-0 flex-1 overflow-y-auto p-3">
+            <MusicLibraryPanel view="grid" />
+          </div>
+        ) : kind === "voices" ? (
+          <div className="min-h-0 flex-1 overflow-y-auto p-3">
+            <VoiceLibraryPanel view="grid" />
+          </div>
         ) : (
           <VisualPresetGalleryPanel key={kind} kind={kind} />
         )}

@@ -25,7 +25,7 @@ export type WorkbenchTab =
   | "presets"
   | "sounds"
 
-export type WorkbenchPresetKind = "block" | "text_preset" | "sounds"
+export type WorkbenchPresetKind = "block" | "text_preset" | "music" | "voices" | "sounds"
 
 export type WorkbenchArtifact =
   | {

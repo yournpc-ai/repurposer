@@ -8,7 +8,7 @@ import { Select } from "@/components/ui/select-clean"
 import { SegmentedControl } from "@/components/ui/segmented-control-clean"
 import { TextField } from "@/components/ui/text-field-clean"
 import { startSoundPreview } from "@/lib/sound-preview"
-import { apiFetch } from "@/lib/api"
+import { API_URL, apiFetch } from "@/lib/api"
 import { useOptionalWorkbench } from "./WorkbenchContext"
 
 interface SoundRow {
@@ -93,7 +93,10 @@ export default function SoundLabPanel({
     try {
       if (row.engine_kind === "sample") {
         if (!row.audio_url) throw Error("sample URL")
-        const audio = new Audio(row.audio_url)
+        const src = row.audio_url.startsWith("/api/") && API_URL
+          ? `${API_URL}${row.audio_url}`
+          : row.audio_url
+        const audio = new Audio(src)
         stop.current = () => audio.pause()
         await audio.play()
       } else {
@@ -184,9 +187,37 @@ export default function SoundLabPanel({
         </label>
       })}
       </div>
-      <div className="mt-3 flex items-center justify-end gap-2">
-        <Button size="sm" variant="secondary" icon={<Play size={13} />} onClick={() => void preview(active, tune)}>{t("soundLab.preview")}</Button>
-        <Button size="sm" icon={workbench ? <MessageSquarePlus size={13} /> : <Copy size={13} />} onClick={() => cite(active)}>
+      <div className="mt-3 flex items-center justify-end gap-1.5">
+        <Button size="sm" variant="ghost" icon={<Play size={13} />} onClick={() => void preview(active, tune)}>{t("soundLab.preview")}</Button>
+        {!workbench && onUsePreset ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={<Copy size={13} />}
+            onClick={() => {
+              const changes = Object.fromEntries(
+                axes
+                  .filter(key => tune[key] !== undefined && tune[key] !== TUNE_SCHEMA[key].default)
+                  .map(key => [key, tune[key]]),
+              )
+              const settings = {
+                sfx_id: active.id,
+                ...(active.recipe_id ? { recipe_id: active.recipe_id } : { sfx_slug: active.id }),
+                ...(Object.keys(changes).length ? { tune: changes } : {}),
+              }
+              const instruction = t("soundLab.instruction", {
+                name: label(active),
+                settings: JSON.stringify(settings),
+              })
+              void navigator.clipboard?.writeText(instruction).then(() => {
+                toast.success(t("common.copied"))
+              })
+            }}
+          >
+            {t("common.copy")}
+          </Button>
+        ) : null}
+        <Button size="sm" variant="secondary" icon={workbench ? <MessageSquarePlus size={13} /> : <Copy size={13} />} onClick={() => cite(active)}>
           {workbench ? t("soundLab.cite") : onUsePreset ? t("presetsPage.usePreset") : t("common.copy")}
         </Button>
       </div>

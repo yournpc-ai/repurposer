@@ -83,7 +83,10 @@ PRICING = {
     "image-01": {
         "image_per_piece": 0.0035,
     },
-    # music-2.6-free SKU in use: $0 (music-2.6 list price is $0.15/track).
+    # music-3.0 (MiniMax Music 3.0) & legacy music-2.6-free SKU.
+    "music-3.0": {
+        "music_per_piece": 0.0,
+    },
     "music-2.6-free": {
         "music_per_piece": 0.0,
     },
@@ -1030,8 +1033,9 @@ class MiniMaxClient:
         self,
         prompt: str,
         *,
-        model: str = "music-2.6-free",
+        model: str = "music-3.0",
         is_instrumental: bool = True,
+        lyrics: str | None = None,
         output_format: str = "url",
         audio_format: str = "mp3",
     ) -> MusicGenerationResult:
@@ -1042,7 +1046,7 @@ class MiniMaxClient:
         short-lived (~24h) URL the caller must download immediately; ``"hex"``
         returns the audio bytes inline. Defaults to ``url`` so bytes stay out
         of the JSON response, then ``services/music_generation`` downloads and
-        persists them under ``assets/music/``.
+        persists them under ``music/``.
         """
         if not self.api_key:
             raise LLMError("MINIMAX_API_KEY not configured")
@@ -1052,8 +1056,10 @@ class MiniMaxClient:
             "prompt": prompt,
             "is_instrumental": is_instrumental,
             "output_format": output_format,
-            "audio_setting": {"format": audio_format},
+            "audio_setting": {"format": audio_format, "sample_rate": 44100, "bitrate": 256000},
         }
+        if lyrics and not is_instrumental:
+            payload["lyrics"] = lyrics
 
         async with _pooled_client() as client:
             response = await client.post(

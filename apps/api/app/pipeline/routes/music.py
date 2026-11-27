@@ -36,10 +36,24 @@ router = APIRouter()
 
 def _to_response(music: Music) -> MusicResponse:
     """Build a MusicResponse with the stream URL (not stored on the ORM row)."""
+    meta = music.meta if isinstance(music.meta, dict) else {}
+    raw_sections = meta.get("sections") if isinstance(meta.get("sections"), list) else []
+    raw_peaks = meta.get("waveform_peaks") if isinstance(meta.get("waveform_peaks"), list) else []
     return MusicResponse(
         id=music.id,
         mood=music.mood,
         title=music.title,
+        title_zh=meta.get("title_zh") if isinstance(meta.get("title_zh"), str) else None,
+        category=meta.get("category") if isinstance(meta.get("category"), str) else None,
+        genre=music.genre,
+        energy=music.energy or "medium",
+        bpm=music.bpm,
+        format_kind=meta.get("format_kind") if isinstance(meta.get("format_kind"), str) else None,
+        summary=music.summary,
+        use_for=list(music.use_for or []),
+        avoid=list(music.avoid or []),
+        sections=raw_sections,
+        waveform_peaks=[float(v) for v in raw_peaks if isinstance(v, (int, float))],
         ext=music.ext,
         url=f"/api/v1/music/{music.id}/stream",
         size_bytes=music.size_bytes,

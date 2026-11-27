@@ -289,22 +289,45 @@ def music_clips_for_window(
     *, settings: VersionSettings, start: int, end: int, source_id: UUID, digest: str,
     source_ticks: int, id_stem: str, gain_db: float,
     fade_in_seconds: float | None, fade_out_seconds: float | None,
+    source_start_ticks: int = 0,
 ) -> list[Clip]:
     rate = settings.timebase
-    loop_ticks = source_ticks_to_output_ticks(source_ticks, rate)
     frame_clock = (rate, settings.fps.num, settings.fps.den)
     frame_ticks = frames_to_ticks(1, *frame_clock)
+    if source_start_ticks < 0 or source_start_ticks >= source_ticks:
+        raise ValueError("source_start_seconds must be within the music recording duration.")
+    loop_ticks = source_ticks_to_output_ticks(source_ticks, rate)
     if loop_ticks < max(1, frame_ticks):
         raise ValueError("Music duration must span at least one output frame.")
-    cuts = [*range(start, end, loop_ticks), end]
+    first_source_ticks = source_ticks - source_start_ticks
+    first_out_ticks = source_ticks_to_output_ticks(first_source_ticks, rate)
+    if first_out_ticks < max(1, frame_ticks):
+        raise ValueError("Remaining music duration after source_start_seconds must span at least one output frame.")
+
+    # Build slice boundaries: first slice starts at source_start_ticks; any wrapped tail restarts at 0.
+    cuts: list[int] = [start]
+    cursor = start + first_out_ticks
+    while cursor < end:
+        cuts.append(cursor)
+        cursor += loop_ticks
+    cuts.append(end)
     # Leave the tail a visible frame if an almost-exact multiple collapses its last cut.
     if len(cuts) > 2 and ticks_to_frames(cuts[-2], *frame_clock) == ticks_to_frames(end, *frame_clock):
-        cuts[-2] = max(end - loop_ticks, cuts[-2] - frame_ticks)
+        min_prev = cuts[-3] + frame_ticks if len(cuts) >= 3 else start + frame_ticks
+        cuts[-2] = max(min_prev, cuts[-2] - frame_ticks)
+
     clips = []
     for index, (left, right) in enumerate(zip(cuts, cuts[1:])):
         if ticks_to_frames(left, *frame_clock) >= ticks_to_frames(right, *frame_clock):
             raise ValueError("Each music slice must span an output frame.")
-        used_src = source_ticks if right - left == loop_ticks else output_ticks_to_source_ticks(right - left, rate)
+        slice_src_start = source_start_ticks if index == 0 else 0
+        slice_cap = first_source_ticks if index == 0 else source_ticks
+        slice_out_cap = first_out_ticks if index == 0 else loop_ticks
+        used_src = (
+            slice_cap
+            if right - left == slice_out_cap
+            else min(slice_cap, output_ticks_to_source_ticks(right - left, rate))
+        )
         stem = id_stem if index == 0 else f"{id_stem}_{index + 1}"
         gain = build_audio_gain_animation(
             object_id=f"obj_{stem}", clip_start_ticks=left, clip_end_ticks=right,
@@ -314,8 +337,11 @@ def music_clips_for_window(
         )
         clips.append(Clip(
             clip_id=f"clp_{stem}", range=TimeRange(start=left, end=right),
-            source=ClipSource(snapshot_id=source_id, snapshot_digest=digest,
-                              source_range=TimeRange(start=0, end=used_src)),
+            source=ClipSource(
+                snapshot_id=source_id,
+                snapshot_digest=digest,
+                source_range=TimeRange(start=slice_src_start, end=slice_src_start + used_src),
+            ),
             object=AudioObject(kind="audio", object_id=f"obj_{stem}", gain_db=gain_db),
             animations=[Animation.model_validate(gain)] if gain else [],
         ))
@@ -848,6 +874,12 @@ class InstantiateSkillBlueprintArgs(BaseModel):
         default=None,
         description="Optional fixed music snapshot; looped or trimmed to the adapted total duration with blueprint fade-in/out.",
     )
+    bgm_source_start_seconds: float = Field(
+        default=0.0,
+        ge=0.0,
+        allow_inf_nan=False,
+        description="Optional offset inside the BGM recording (seconds) to enter directly at a groove/highlight section.",
+    )
     bgm_gain_db: float | None = Field(default=None, ge=-60.0, le=0.0, allow_inf_nan=False)
     breathing_seconds: float | None = Field(
         default=None, ge=0.2, le=1.5, allow_inf_nan=False,
@@ -1280,6 +1312,14 @@ async def instantiate_skill_blueprint(
         audio_order += 1
 
     if bgm_info is not None:
+        bgm_source_start_ticks = (
+            output_ticks_to_source_ticks(
+                round(args.bgm_source_start_seconds * settings_obj.timebase),
+                settings_obj.timebase,
+            )
+            if args.bgm_source_start_seconds > 0
+            else 0
+        )
         music = music_clips_for_window(
             settings=settings_obj, start=0, end=total_ticks,
             source_id=bgm_info["snapshot_id"], digest=bgm_info["digest"],
@@ -1287,6 +1327,7 @@ async def instantiate_skill_blueprint(
             gain_db=args.bgm_gain_db if args.bgm_gain_db is not None else bp.audio_profile.bgm_gain_db,
             fade_in_seconds=bp.audio_profile.bgm_fade_in_s,
             fade_out_seconds=bp.audio_profile.bgm_fade_out_s,
+            source_start_ticks=bgm_source_start_ticks,
         )
         tracks.append(Track(track_id="trk_editor_music", kind="audio", role="music", order=audio_order, clips=music))
         audio_order += 1

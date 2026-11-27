@@ -437,8 +437,14 @@ def resolve_motion_block_cue_phrases(
                     label = " ".join(str(item[k]) for k in ("value", "label", "title", "text") if k in item)
                     detail = {"list": list_key, "item_index": i, "label": label}
                     if auto_hits[i] is None:
-                        diagnostics.append({"kind": "orphan_item", **detail,
-                                            "message": "Remove this item or mention it in narration."})
+                        diagnostics.append({
+                            "kind": "orphan_item",
+                            **detail,
+                            "message": (
+                                "Remove this extra item or bind its cue_phrase to a natural phrase already spoken "
+                                "in this act (never rewrite smooth prose into a noun list)."
+                            ),
+                        })
                     for raw, value in spoken_numbers(str(item.get("value", ""))):
                         if any(number == value for _, number in numbers):
                             continue
@@ -673,9 +679,10 @@ class FirstMotionBlock(SelectedMotionBlock):
         min_length=1,
         max_length=2000,
         description=(
-            "Optional spoken voiceover script for this act. Omit on 0.6-1.6s visual punch-cut / beat acts so cutting "
-            "stays kinetic; keep narrated acts vivid and concise (8-20 EN words or 14-34 ZH chars). Supports inline "
-            "MiniMax pause tags like '<#0.3#>' for natural breaths (automatically stripped from subtitles)."
+            "Optional per-act spoken voiceover script (omit when using voiceover_snapshot_id, which is preferred for "
+            "single-narrator promos so sentences flow seamlessly across visual cuts). When writing per-act narration, "
+            "write natural complete sentences with smooth cross-act continuity—never telegraphic noun lists or UI-label "
+            "recitation. Omit on 0.6-1.6s visual punch-cut acts. Supports '<#0.3#>' pause tags and restrained '(breath)'."
         ),
     )
     voice_speed: float = Field(
@@ -687,7 +694,7 @@ class FirstMotionBlock(SelectedMotionBlock):
     )
     voice_emotion: VoiceEmotion | None = Field(
         default=None,
-        description="Optional per-act MiniMax speech-2.6-hd emotion tone ('calm', 'fluent', 'happy', 'surprised', 'sad', 'angry', 'fearful', 'disgusted').",
+        description="Optional per-act MiniMax speech-2.8-hd emotion tone ('calm', 'fluent', 'happy', 'surprised', 'sad', 'angry', 'fearful', 'disgusted').",
     )
     caption_translations: list[str] | None = Field(
         default=None,
@@ -717,8 +724,14 @@ class CreateVideoArgs(BaseModel):
         max_length=64,
         description="Ordered media/title shots. Optional when declaring native motion_blocks directly.",
     )
-    voiceover_snapshot_id: UUID | None = Field(default=None, exclude_if=lambda v: v is None,
-        description="Fixed project narration from generate_voice. Its word timeline drives all motion blocks.")
+    voiceover_snapshot_id: UUID | None = Field(
+        default=None,
+        exclude_if=lambda v: v is None,
+        description=(
+            "Preferred for single-narrator promos: fixed full-script narration from generate_voice. "
+            "Its measured word timeline drives mid-sentence cuts (start_cue_phrase / end_cue_phrase) and in-act cue_phrase anchors."
+        ),
+    )
     motion_blocks: list[FirstMotionBlock] = Field(
         default_factory=list,
         max_length=48,
@@ -764,6 +777,12 @@ class CreateVideoArgs(BaseModel):
         default=None,
         exclude_if=lambda v: v is None,
         description="Optional permanent music library ID (from search_music/generate_music) attached as full-length BGM with smooth fades and voiceover ducking.",
+    )
+    bgm_source_start_seconds: float = Field(
+        default=0.0,
+        ge=0.0,
+        allow_inf_nan=False,
+        description="Optional offset inside the BGM recording (seconds) to start from a recommended groove/highlight section instead of 0s (check recommended_start/sections from search_music).",
     )
     bgm_gain_db: float = Field(
         default=-21.0,
@@ -1567,6 +1586,14 @@ async def create_video(db, turn, args: CreateVideoArgs):
                     if "bgm_gain_db" in args.model_fields_set
                     else (-22.0 if has_dialogue else -14.0)
                 )
+                bgm_source_start_ticks = (
+                    output_ticks_to_source_ticks(
+                        round(args.bgm_source_start_seconds * comp_content.settings.timebase),
+                        comp_content.settings.timebase,
+                    )
+                    if args.bgm_source_start_seconds > 0
+                    else 0
+                )
                 bgm_clips = music_clips_for_window(
                     settings=comp_content.settings,
                     start=0,
@@ -1578,6 +1605,7 @@ async def create_video(db, turn, args: CreateVideoArgs):
                     gain_db=eff_bgm_gain,
                     fade_in_seconds=0.8,
                     fade_out_seconds=1.5,
+                    source_start_ticks=bgm_source_start_ticks,
                 )
                 bgm_ops: list[Any] = []
                 bound_digests_bgm = {

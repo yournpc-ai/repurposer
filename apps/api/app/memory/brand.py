@@ -6,22 +6,38 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.tables import Music
-from app.pipeline.music import get_music, get_music_by_mood
+from app.pipeline.music import CURATED_MUSIC_CATALOG, get_music, get_music_by_mood
 
 PERSONA_CRAFT_KEYS = ("aspect", "fillMode", "captionEnabled")
 
-_LIBRARY_MOODS = {
-    "mixkit-tech-house", "mixkit-cat-walk", "mixkit-g-eazy-nba-type",
-    "mixkit-house-vibez", "mixkit-tonight-hiphop",
-}
+_LIBRARY_MOODS = {entry["mood"] for entry in CURATED_MUSIC_CATALOG}
 _MOOD_SYNONYMS = {
-    "tech house": "mixkit-tech-house", "tech-house": "mixkit-tech-house",
-    "electronic": "mixkit-tech-house", "energetic": "mixkit-tech-house",
-    "corporate": "mixkit-tech-house", "professional": "mixkit-tech-house",
-    "business": "mixkit-tech-house", "cat walk": "mixkit-cat-walk",
-    "g eazy nba type": "mixkit-g-eazy-nba-type", "house": "mixkit-house-vibez",
-    "house vibez": "mixkit-house-vibez", "hip hop": "mixkit-tonight-hiphop",
-    "hip-hop": "mixkit-tonight-hiphop", "tonight": "mixkit-tonight-hiphop",
+    "city-pop": "vlog-nagoya-citypop",
+    "city pop": "vlog-nagoya-citypop",
+    "travel": "vlog-nagoya-citypop",
+    "vlog": "vlog-nagoya-citypop",
+    "lofi": "vlog-cafe-acoustic",
+    "lo-fi": "vlog-cafe-acoustic",
+    "acoustic": "vlog-cafe-acoustic",
+    "cafe": "vlog-cafe-acoustic",
+    "ambient": "vlog-night-rail",
+    "night": "vlog-night-rail",
+    "cinematic": "vlog-golden-cinema",
+    "funk": "craft-swiss-funk",
+    "swiss": "craft-swiss-funk",
+    "electronic": "craft-tech-arpeggio",
+    "tech house": "craft-tech-arpeggio",
+    "tech-house": "craft-tech-arpeggio",
+    "showreel": "hook-showreel-15s",
+    "dark": "craft-dark-impact",
+    "energetic": "promo-keynote-percussion",
+    "corporate": "promo-keynote-percussion",
+    "professional": "promo-keynote-percussion",
+    "business": "promo-keynote-percussion",
+    "saas": "promo-editorial-truth",
+    "manifesto": "promo-editorial-truth",
+    "editorial": "explainer-vox-pluck",
+    "calm": "explainer-minimal-rhodes",
 }
 
 
