@@ -473,7 +473,6 @@ async def execute_generate_sfx(turn, args, composition, version):
                 json.dumps(payload),
                 ok=payload.get("status") == "available",
                 version_saved=True,
-                valid_for_key=f"composition:{payload['version_id']}:{payload['content_digest']}",
             )
         return ToolObservation(json.dumps(payload), ok=payload.get("status") == "available")
 

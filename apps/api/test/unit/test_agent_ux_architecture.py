@@ -337,3 +337,130 @@ async def test_tool_loop_clears_active_rejections_after_tool_succeeds_and_redire
     assert seen_feedback, "expected actionable redirect telling model to use edit tools instead of create_video"
     # Full forensic log still records all 3 rejections
     assert len(result.rejections) == 3
+
+
+@pytest.mark.asyncio
+async def test_write_receipts_survive_version_bumps_and_stale_preview_keeps_compact_receipt():
+    """Live E2E 0db96fa1 regression:
+    1) Write tool receipts (create_video, generate_sfx, update_motion_block) must NOT vanish from
+       observation_tail when a later write bumps the composition version; otherwise the model
+       forgets it created v1 or placed SFX and duplicates work.
+    2) preview_range (valid_for_key + images + project_text) must strip stale base64 images when a
+       newer version is saved while keeping its compact project_text window receipt.
+    """
+    from app.agents.tool_loop import (
+        AGENTS,
+        ChatTool,
+        ContextSnapshot,
+        RoundAssembly,
+        ToolLoopAgent,
+        ToolObservation,
+    )
+    from app.models.schemas import MediaInput, MediaInputType
+    from app.providers.llm.base import ProviderCapabilities, ToolCall, ToolGeneration
+    from pydantic import BaseModel
+
+    class EmptyArgs(BaseModel):
+        pass
+
+    class AnswerArgs(BaseModel):
+        text: str = "done"
+
+    sfx_tool = ChatTool(name="generate_sfx", description="sfx", params_model=EmptyArgs, terminal=False)
+    preview_tool = ChatTool(name="preview_range", description="preview", params_model=EmptyArgs, terminal=False)
+    edit_tool = ChatTool(name="update_motion_block", description="edit", params_model=EmptyArgs, terminal=False)
+    answer_tool = ChatTool(name="answer", description="done", params_model=AnswerArgs, terminal=True)
+
+    observed_requests: list[list[dict]] = []
+
+    class FakeClient:
+        capabilities = ProviderCapabilities(supports_native_tools=True)
+
+        def __init__(self):
+            self.step = 0
+
+        async def generate_with_tools(self, *, messages, **_kw):
+            observed_requests.append(messages)
+            self.step += 1
+            if self.step == 1:
+                return ToolGeneration(content="", tool_calls=[ToolCall(id="c1", name="generate_sfx", arguments={})])
+            if self.step == 2:
+                return ToolGeneration(content="", tool_calls=[ToolCall(id="c2", name="preview_range", arguments={})])
+            if self.step == 3:
+                return ToolGeneration(content="", tool_calls=[ToolCall(id="c3", name="update_motion_block", arguments={})])
+            return ToolGeneration(content="ok", tool_calls=[ToolCall(id="c4", name="answer", arguments={"text": "ok"})])
+
+    current_version = ["composition:v1:d1"]
+
+    async def refresh_context():
+        return ContextSnapshot(text="ctx", keys=frozenset(current_version))
+
+    async def execute(name, _params, _prose):
+        if name == "generate_sfx":
+            current_version[0] = "composition:v2:d2"
+            return ToolObservation('{"placed": true, "recipe_id": "deep_hit", "at": 0.15}', ok=True, version_saved=True)
+        if name == "preview_range":
+            img = MediaInput(
+                type=MediaInputType.IMAGE,
+                mime="image/png",
+                data_url="data:image/png;base64,ZmFrZS1wbmctYnl0ZXM=",
+            )
+            return ToolObservation(
+                '{"window_seconds": [0, 12], "full": true}',
+                ok=True,
+                images=(img,),
+                valid_for_key="composition:v2:d2",
+                project_text='{"window_seconds": [0, 12], "frames_omitted_after_newer_version": true}',
+            )
+        if name == "update_motion_block":
+            current_version[0] = "composition:v3:d3"
+            return ToolObservation('{"edited": "clp_mg_14"}', ok=True, version_saved=True)
+        return None
+
+    agent_name = "test_write_receipts_and_preview_compact"
+    AGENTS.pop(agent_name, None)
+    loop = ToolLoopAgent(
+        name=agent_name,
+        system="chat/system.j2",
+        prompt="chat/user.j2",
+        assemble=lambda **_kw: ({}, None),
+        tools=[sfx_tool, preview_tool, edit_tool, answer_tool],
+        max_iterations=6,
+        client=FakeClient(),
+    )
+
+    try:
+        result = await loop.call_loop(
+            execute,
+            refresh_context=refresh_context,
+            round_assembler=lambda **_kw: RoundAssembly(
+                tools=[sfx_tool, preview_tool, edit_tool, answer_tool],
+                system="sys",
+            ),
+        )
+    finally:
+        AGENTS.pop(agent_name, None)
+
+    assert result.tool_name == "answer"
+    # On step 4 (after v3 saved), inspect what the model saw in tool messages:
+    final_msgs = observed_requests[-1]
+    tool_msgs = {m["tool_call_id"]: m for m in final_msgs if m.get("role") == "tool"}
+    # 1) generate_sfx write receipt survived v2 -> v3 version bump!
+    assert "c1" in tool_msgs
+    assert "deep_hit" in str(tool_msgs["c1"]["content"])
+    # 2) preview_range survived as compact text receipt with NO stale image bytes!
+    assert "c2" in tool_msgs
+    c2_content = tool_msgs["c2"]["content"]
+    assert isinstance(c2_content, str), f"expected image-free string receipt, got {type(c2_content)}"
+    assert "frames_omitted_after_newer_version" in c2_content
+    assert "ZmFrZS1wbmctYnl0ZXM=" not in c2_content
+    # 3) update_motion_block write receipt is present too
+    assert "c3" in tool_msgs
+
+
+def test_search_voices_uses_voices_activity_key():
+    from app.chat.perception import perception_chat_tools
+
+    tools = {t.name: t for t in perception_chat_tools("search_voices", "search_music")}
+    assert tools["search_voices"].presentation.active_key == "chat.inspecting.voices"
+    assert tools["search_music"].presentation.active_key == "chat.inspecting.music"

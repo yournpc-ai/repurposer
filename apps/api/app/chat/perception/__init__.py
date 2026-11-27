@@ -103,7 +103,7 @@ PERCEPTION_TOOLS: dict[str, PerceptionTool] = {
             ),
             params_model=SearchVoicesParams,
             execute=executes.search_voices,
-            activity_key="chat.inspecting.music",
+            activity_key="chat.inspecting.voices",
         ),
         PerceptionTool(
             name="search_transcript",

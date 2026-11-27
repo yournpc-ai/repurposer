@@ -1771,7 +1771,6 @@ async def execute_editor(turn, name, args):
             return ToolObservation(
                 json.dumps(result),
                 version_saved=True,
-                valid_for_key=f"composition:{result['version_id']}:{result['content_digest']}",
             )
         except ValueError as exc:
             return ToolObservation(str(exc), ok=False, user_error=str(exc))
@@ -1835,7 +1834,7 @@ async def execute_editor(turn, name, args):
         async with AsyncSessionLocal() as db:
             try:
                 result = await create_video(db, turn, args)
-                return ToolObservation(json.dumps(result), version_saved=True, valid_for_key=f"composition:{result['version_id']}:{result['content_digest']}")
+                return ToolObservation(json.dumps(result), version_saved=True)
             except ValueError as exc:
                 return ToolObservation(str(exc), ok=False, user_error=str(exc))
     if not base and turn.project is not None and name == "generate_sfx":
@@ -1997,10 +1996,7 @@ async def execute_editor(turn, name, args):
                 if getattr(turn, "_editor_output_pin", None):
                     turn._editor_output_pin["version_id"] = result["version_id"]
                 turn._video_presentation_pending = None
-                return ToolObservation(
-                    json.dumps(result), version_saved=True,
-                    valid_for_key=f"composition:{result['version_id']}:{result['content_digest']}",
-                )
+                return ToolObservation(json.dumps(result), version_saved=True)
             composition, version = await get_video_version(
                 db,
                 owner_id=turn.project.user_id,
@@ -2198,7 +2194,20 @@ async def execute_editor(turn, name, args):
             evidence["coverage"] = (
                 "Exact requested window of this version, across all tracks. Reuse for this window until the work changes."
             )
-            return ToolObservation(json.dumps(evidence), images=media, valid_for_key=version_key)
+            return ToolObservation(
+                json.dumps(evidence),
+                images=media,
+                valid_for_key=version_key,
+                project_text=json.dumps(
+                    {
+                        "window_seconds": window,
+                        "observed_on_version": str(version.id),
+                        "frames_omitted_after_newer_version": True,
+                        "note": "Preview frames omitted after a newer version was saved; only re-preview this window if clips inside it changed.",
+                    },
+                    ensure_ascii=False,
+                ),
+            )
         except StaleBase:
             return ToolObservation(
                 f"Version conflict. This call checked base {base['composition_version_id']}, "

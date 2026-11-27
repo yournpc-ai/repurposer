@@ -946,7 +946,10 @@ class ToolLoopAgent:
                     replace(observation, text=observation.project_text, images=())
                 )
                 for call_id, observation in project_image_observations.items()
-                if call_id in omitted and observation.context_lifetime == "project"
+                if call_id in omitted and (
+                    observation.context_lifetime == "project"
+                    or call_id in observed_keys
+                )
             }
             # Retain a receipt once for a sibling superseded by a later write;
             # never send stale pixels or silently erase a successful native call.
