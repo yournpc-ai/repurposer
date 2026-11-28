@@ -146,3 +146,70 @@ def test_resumed_turn_summary_keeps_prior_attempt_and_latest_outcome(tmp_path, m
     summary = (tmp_path / "turns" / str(conversation) / f"{turn}.summary.md").read_text()
     assert "outcome: answer" in summary and "total_iterations: 5" in summary
     assert summary.index("End: KeyError") < summary.index("End: answer")
+
+
+async def test_dynamic_project_context_trails_dialogue_and_observations_for_prompt_cache(monkeypatch):
+    seen_messages: list[list[dict]] = []
+    seen_sections: list[dict] = []
+
+    class Provider:
+        capabilities = ProviderCapabilities(supports_native_tools=True)
+
+        async def generate_with_tools(self, *, messages, tools, **kwargs):
+            seen_messages.append(messages)
+            seen_sections.append(current_model_prompt()["message_sections"])
+            iteration = current_model_prompt()["iteration"]
+            if iteration == 0:
+                return ToolGeneration("", [ToolCall(id="c1", name="edit_step", arguments={})])
+            return ToolGeneration("done", [ToolCall(id="c2", name="answer", arguments={})])
+
+    monkeypatch.setattr(intent_router, "client", Provider())
+    version = 1
+
+    async def refresh():
+        return ContextSnapshot("", resources=(
+            ("project:p", {"kind": "project", "resource_counts": {"composition": 1}}),
+            (f"composition:v{version}", {"kind": "composition", "composition_id": "work",
+             "version_id": f"v{version}", "version": version, "base_ref": {"composition_version_id": f"v{version}"}}),
+        ))
+
+    def assemble(**facts):
+        from app.agents.tool_loop import RoundAssembly
+        return RoundAssembly(
+            system="You are an editor.",
+            tools=facts["tools"],
+            context=json.dumps({"selected_version": version}),
+            include_project_context=False,
+            opening_text="polish the video",
+        )
+
+    async def execute(name, params, speech):
+        nonlocal version
+        if name == "edit_step":
+            version = 2
+            return ToolObservation('{"version": 2}', version_saved=True)
+        return None
+
+    await intent_router.call_loop(
+        execute,
+        message="polish the video",
+        dialogue=[{"role": "user", "content": "polish the video"}],
+        refresh_context=refresh,
+        round_assembler=assemble,
+        tools=[
+            ChatTool(name="edit_step", description="Edit", params_model=None, terminal=False),
+            ChatTool(name="answer", description="Answer", params_model=None, terminal=True),
+        ],
+    )
+
+    assert len(seen_messages) == 2
+    # Both iterations place dynamic project_context AFTER dialogue and observations.
+    for sections in seen_sections:
+        assert sections["project_context"][0] >= sections["dialogue"][-1] + 1
+        if sections["observations"]:
+            assert sections["project_context"][0] >= sections["observations"][-1] + 1
+    # The stable prefix (system + dialogue) before dynamic project_context stays identical across writes.
+    assert seen_messages[0][:2] == seen_messages[1][:2]
+    assert seen_messages[0][-1]["name"] == "project_evidence"
+    assert seen_messages[1][-1]["name"] == "project_evidence"
+    assert seen_messages[0][-1]["content"] != seen_messages[1][-1]["content"]

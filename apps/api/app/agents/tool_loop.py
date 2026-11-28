@@ -1204,15 +1204,16 @@ class ToolLoopAgent:
                 project_start = feedback_start + len(feedback)
             else:
                 # The transcript includes the current input, even when it was a dock pick.
-                # Keep server evidence apart from speech and preserve live tool protocol pairs.
+                # Keep dynamic server evidence after the stable history/dialogue/observation
+                # prefix so per-iteration version & receipt refreshes preserve prompt cache.
                 if assembled.opening_text is not None:
                     opening = []
-                project_start = opening_index + len(opening)
-                dialogue_start = project_start + len(shared)
+                dialogue_start = opening_index + len(opening)
                 observation_start = dialogue_start + len(round_dialogue)
                 feedback_start = observation_start + len(tail)
-                messages = [base_messages[0], *history_messages, *opening, *shared,
-                            *round_dialogue, *tail, *feedback]
+                project_start = feedback_start + len(feedback)
+                messages = [base_messages[0], *history_messages, *opening,
+                            *round_dialogue, *tail, *feedback, *shared]
             assembly = {
                 "agent": self.name, "iteration": iteration, "max_iterations": self.max_iterations,
                 "system_sources": [
