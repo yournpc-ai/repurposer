@@ -1735,7 +1735,7 @@ async def create_video(db, turn, args: CreateVideoArgs):
     duration_meta: dict[str, Any] = {}
     if args.motion_blocks and required.get("target_seconds") is not None:
         target_s = float(required["target_seconds"])
-        tolerance_s = max(4.0, target_s * 0.25)
+        tolerance_s = max(6.0, target_s * 0.35)
         delta_s = total_duration_seconds - target_s
         duration_meta["target_seconds"] = target_s
         if abs(delta_s) <= tolerance_s:

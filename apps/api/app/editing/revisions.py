@@ -500,6 +500,8 @@ _MOTION_FLOAT_KEYS = frozenset({
     "reveal_at_s",
     "click_at_s",
     "highlight_at_s",
+    "type_at_s",
+    "load_at_s",
     "x",
     "y",
     "width",

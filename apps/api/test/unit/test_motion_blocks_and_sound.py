@@ -1354,6 +1354,16 @@ def test_coerce_motion_block_props_normalizes_details_alias_and_long_eyebrow():
     validated = validate_motion_block_props("bento_features", coerced)
     assert len(validated.cards) == 3
 
+    url_coerced = coerce_motion_block_props(
+        "browser_url_load",
+        {"url_text": "agent.oxvalue.ai", "type_at_s": "0.4", "load_at_s": "1.5"},
+    )
+    assert url_coerced["type_at_s"] == 0.4
+    assert url_coerced["load_at_s"] == 1.5
+    url_validated = validate_motion_block_props("browser_url_load", url_coerced)
+    assert url_validated.type_at_s == 0.4
+    assert url_validated.load_at_s == 1.5
+
 
 def test_voiceover_block_ranges_tolerates_shared_boundary_phrase():
     from app.chat.editor_create import FirstMotionBlock, _voiceover_block_ranges
