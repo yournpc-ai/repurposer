@@ -528,18 +528,57 @@ _MOTION_INT_KEYS = frozenset({
     "rows",
 })
 _MOTION_STR_KEYS = frozenset({"step_label", "badge", "tag", "number"})
+_SHORT_LABEL_MAX_LEN: dict[str, int] = {
+    "eyebrow": 32,
+    "badge": 32,
+    "tag": 32,
+    "step_label": 32,
+    "badge_text": 20,
+}
+_ITEM_KEY_ALIASES: dict[str, str] = {
+    "details": "detail",
+    "sub_title": "subtitle",
+}
+
+
+def _clamp_short_label(value: str, limit: int) -> str:
+    text = value.strip()
+    if len(text) <= limit:
+        return value
+    cut = text[:limit].rstrip()
+    if " " in cut and len(cut) < len(text) and text[limit] != " ":
+        head = cut.rsplit(" ", 1)[0].rstrip(" ,;:-—–/|")
+        if len(head) >= limit // 2:
+            return head
+    return cut
+
+
+def _normalize_motion_dict(block_id: str, obj: dict[str, Any]) -> dict[str, Any]:
+    normalized: dict[str, Any] = {}
+    for k, v in obj.items():
+        target_key = _ITEM_KEY_ALIASES.get(k, k)
+        if target_key != k and target_key in obj:
+            continue
+        normalized[target_key] = _coerce_motion_value(block_id, target_key, v)
+    return normalized
 
 
 def _coerce_motion_value(block_id: str, key: str, value: Any) -> Any:
     if isinstance(value, dict):
-        return {k: _coerce_motion_value(block_id, k, v) for k, v in value.items()}
+        return _normalize_motion_dict(block_id, value)
     if isinstance(value, list):
         return [
-            {k: _coerce_motion_value(block_id, k, v) for k, v in item.items()}
+            _normalize_motion_dict(block_id, item)
             if isinstance(item, dict)
             else item
             for item in value
         ]
+    if key in _SHORT_LABEL_MAX_LEN and isinstance(value, str):
+        limit = 60 if (key == "eyebrow" and block_id in {"statement_hook", "kinetic_title", "metric_grid"}) else (
+            48 if (key == "badge" and block_id == "product_showcase") else _SHORT_LABEL_MAX_LEN[key]
+        )
+        if len(value) > limit:
+            return _clamp_short_label(value, limit)
     if key in _MOTION_FLOAT_KEYS and isinstance(value, str):
         try:
             num = float(value.strip())
@@ -576,7 +615,7 @@ def coerce_motion_block_props(block_id: str, props: dict[str, Any]) -> dict[str,
     """Coerce benign LLM JSON-typing artifacts (e.g. '1.5' -> 1.5, step_label=1 -> '1') inside untyped props dicts."""
     if not isinstance(props, dict):
         return props
-    return {k: _coerce_motion_value(block_id, k, v) for k, v in props.items()}
+    return _normalize_motion_dict(block_id, props)
 
 
 def motion_block_ops(

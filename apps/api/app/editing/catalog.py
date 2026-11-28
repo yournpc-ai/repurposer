@@ -629,9 +629,9 @@ def editor_catalog_guidance() -> dict[str, Any]:
         "directing_guidelines": {
             "audio_reuse_first": "Call search_voices and search_music before design_voice or generate_music so saved voiceprints and BGM tracks compound across projects.",
             "commercial_pacing_60s": (
-                "Write one cohesive, natural, human-sounding script first (never telegraphic UI-label lists), "
-                "record it once with generate_voice, and pass voiceover_snapshot_id to create_video so motion_blocks "
-                "enrich the speech at exact word cues (use per-act narration only for voice or tonal shifts)."
+                "Write one cohesive, natural, human-sounding script first (full sentences, smooth transitions, never "
+                "telegraphic UI-label lists), then distribute it across 8-10 well-paced motion_blocks directly in "
+                "create_video with voice_id and music_id so word timestamps drive every visual cue."
             ),
             "anti_ppt_motion": "Never stack 3+ static text-card blocks consecutively without dynamic visual motion (product_showcase with zoom_scale 1.15-1.28, chat_demo, metric_grid count-up, data_chart) and alternate energetic transitions (whip_pan, zoom_through, wipe_reveal).",
         },

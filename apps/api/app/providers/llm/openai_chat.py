@@ -101,12 +101,67 @@ def _retryable_provider_error(exc: BaseException) -> bool:
     return exc.user_key != "provider_quota_exhausted"
 
 
+def _strip_trailing_commas(raw: str) -> str:
+    """Remove trailing commas before '}' or ']' outside JSON string literals."""
+    out: list[str] = []
+    in_str = False
+    escaped = False
+    i = 0
+    n = len(raw)
+    while i < n:
+        ch = raw[i]
+        if in_str:
+            out.append(ch)
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_str = False
+            i += 1
+            continue
+        if ch == '"':
+            in_str = True
+            out.append(ch)
+            i += 1
+            continue
+        if ch == ",":
+            j = i + 1
+            while j < n and raw[j] in " \t\r\n":
+                j += 1
+            if j < n and raw[j] in "}]":
+                i += 1
+                continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
+
+
+def _loads_with_comma_repair(raw: str) -> object:
+    """Parse JSON; repair up to 8 benign missing/trailing commas without masking truncation."""
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError as first_exc:
+        candidate = _strip_trailing_commas(raw)
+        for _ in range(8):
+            try:
+                return json.loads(candidate)
+            except json.JSONDecodeError as exc:
+                if exc.msg != "Expecting ',' delimiter" or not (0 < exc.pos < len(candidate)):
+                    raise first_exc from None
+                ch = candidate[exc.pos]
+                if ch not in {'"', "{", "[", "-", "t", "f", "n"} and not ch.isdigit():
+                    raise first_exc from None
+                candidate = candidate[:exc.pos] + "," + candidate[exc.pos:]
+        raise first_exc from None
+
+
 def _parse_tool_arguments(name: str, raw: str, finish_reason: str | None) -> dict:
     """Parse complete argument text; malformed/truncated calls are schema errors."""
     if not raw:
         return {}
     try:
-        arguments = json.loads(raw)
+        arguments = _loads_with_comma_repair(raw)
     except json.JSONDecodeError as exc:
         raise LLMSchemaError(
             f"tool call {name!r} arguments did not parse "

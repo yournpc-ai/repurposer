@@ -374,8 +374,10 @@ async def _voice(job, project, token):
             db, project, text=speech.text, original=original
         )
         await db.commit()
+    from app.editing.caption_timing import strip_pause_tags
+    clean_align_text = strip_pause_tags(speech.text) or speech.text
     alignment = await request_alignment(
-        owner_id=project.user_id, audio_snapshot_id=snapshot.id, text=speech.text
+        owner_id=project.user_id, audio_snapshot_id=snapshot.id, text=clean_align_text
     )
     generated = original.get("synthesis_execution_id") == str(job.id)
     return {

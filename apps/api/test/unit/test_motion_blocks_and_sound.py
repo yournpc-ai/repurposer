@@ -1333,3 +1333,75 @@ def test_interactive_catalog_and_blueprint_replacement(block_id, sfx):
         if slot.slot_key in copy:
             assert slot.code in obj["props"][slot.slot_key]
     assert len(obj["resources"]) == len(resources)
+
+
+def test_coerce_motion_block_props_normalizes_details_alias_and_long_eyebrow():
+    from app.editing.revisions import coerce_motion_block_props
+    from app.editing.schemas import validate_motion_block_props
+
+    raw = {
+        "eyebrow": "GOVERNED EVIDENCE ARCHITECTURE OVERVIEW",
+        "title": "Why OxValue",
+        "cards": [
+            {"tag": "01", "title": "VEST Theory", "details": "Original valuation theory."},
+            {"tag": "02", "title": "8 Databases", "details": "Sector market anchors."},
+            {"tag": "03", "title": "27 Algorithms", "details": "Defensible AI models."},
+        ],
+    }
+    coerced = coerce_motion_block_props("bento_features", raw)
+    assert len(coerced["eyebrow"]) <= 32
+    assert all("detail" in c and "details" not in c for c in coerced["cards"])
+    validated = validate_motion_block_props("bento_features", coerced)
+    assert len(validated.cards) == 3
+
+
+def test_voiceover_block_ranges_tolerates_shared_boundary_phrase():
+    from app.chat.editor_create import FirstMotionBlock, _voiceover_block_ranges
+
+    text = "OxValue was built for that gap: a governed intelligence layer for patents."
+    cues = [{
+        "text": text,
+        "time_begin": 0,
+        "time_end": 4000,
+        "words": [
+            {"word": "OxValue ", "time_begin": 0, "time_end": 500},
+            {"word": "was ", "time_begin": 500, "time_end": 800},
+            {"word": "built ", "time_begin": 800, "time_end": 1200},
+            {"word": "for ", "time_begin": 1200, "time_end": 1400},
+            {"word": "that ", "time_begin": 1400, "time_end": 1700},
+            {"word": "gap: ", "time_begin": 1700, "time_end": 2000},
+            {"word": "a ", "time_begin": 2100, "time_end": 2250},
+            {"word": "governed ", "time_begin": 2250, "time_end": 2800},
+            {"word": "intelligence ", "time_begin": 2800, "time_end": 3400},
+            {"word": "layer ", "time_begin": 3400, "time_end": 3700},
+            {"word": "for ", "time_begin": 3700, "time_end": 3850},
+            {"word": "patents.", "time_begin": 3850, "time_end": 4000},
+        ],
+    }]
+    blocks = [
+        FirstMotionBlock(
+            block_id="statement_hook", props={"headline": "A"}, duration_seconds=2.0,
+            start_cue_phrase="OxValue was built", end_cue_phrase="a governed intelligence layer",
+        ),
+        FirstMotionBlock(
+            block_id="statement_hook", props={"headline": "B"}, duration_seconds=2.0,
+            start_cue_phrase="a governed intelligence layer",
+        ),
+    ]
+    ranges = _voiceover_block_ranges(blocks, text, cues, 4.0, 0, 1000)
+    assert ranges[0][1] == ranges[1][0] == 2250  # 0.15s lead + 2.1s onset
+
+
+def test_parse_tool_arguments_repairs_comma_slips_but_rejects_truncation():
+    from app.providers.llm.base import LLMSchemaError
+    from app.providers.llm.openai_chat import _parse_tool_arguments
+
+    repaired = _parse_tool_arguments(
+        "create_video",
+        '{"name":"OxValue" "fps":30,"items":[{"a":1 "b":"x, }"},],}',
+        "tool_calls",
+    )
+    assert repaired == {"name": "OxValue", "fps": 30, "items": [{"a": 1, "b": "x, }"}]}
+
+    with pytest.raises(LLMSchemaError):
+        _parse_tool_arguments("create_video", '{"name":"truncated', "tool_calls")

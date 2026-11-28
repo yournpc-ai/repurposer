@@ -679,10 +679,10 @@ class FirstMotionBlock(SelectedMotionBlock):
         min_length=1,
         max_length=2000,
         description=(
-            "Optional per-act spoken voiceover script (omit when using voiceover_snapshot_id, which is preferred for "
-            "single-narrator promos so sentences flow seamlessly across visual cuts). When writing per-act narration, "
-            "write natural complete sentences with smooth cross-act continuity—never telegraphic noun lists or UI-label "
-            "recitation. Omit on 0.6-1.6s visual punch-cut acts. Supports '<#0.3#>' pause tags and restrained '(breath)'."
+            "Spoken voiceover for this act (default primary path; omit only on silent punch-cut beats or when using "
+            "voiceover_snapshot_id). Write natural complete sentences that read aloud as one cohesive, elegant essay "
+            "across acts—never telegraphic noun lists or literal UI-label recitation. Supports '<#0.3#>' pause tags "
+            "and restrained '(breath)'."
         ),
     )
     voice_speed: float = Field(
@@ -728,8 +728,8 @@ class CreateVideoArgs(BaseModel):
         default=None,
         exclude_if=lambda v: v is None,
         description=(
-            "Preferred for single-narrator promos: fixed full-script narration from generate_voice. "
-            "Its measured word timeline drives mid-sentence cuts (start_cue_phrase / end_cue_phrase) and in-act cue_phrase anchors."
+            "Optional fixed continuous narration from generate_voice (use only when mid-sentence cross-act cuts with "
+            "zero inter-act pauses are explicitly needed). Its word timeline drives start_cue_phrase / end_cue_phrase."
         ),
     )
     motion_blocks: list[FirstMotionBlock] = Field(
@@ -838,10 +838,14 @@ def _voiceover_block_ranges(
         if i == 0 and block.start_cue_phrase:
             cursor = edge(block.start_cue_phrase, i, cursor, 0)
         end = None
-        if block.end_cue_phrase:
+        next_start_phrase = blocks[i + 1].start_cue_phrase if i + 1 < len(blocks) else None
+        if block.end_cue_phrase and not (
+            next_start_phrase
+            and block.end_cue_phrase.strip().casefold() == next_start_phrase.strip().casefold()
+        ):
             end = edge(block.end_cue_phrase, i, cursor, 1)
-        if i + 1 < len(blocks) and (phrase := blocks[i + 1].start_cue_phrase):
-            cut = edge(phrase, i + 1, end if end is not None else cursor + 1, 0)
+        if next_start_phrase:
+            cut = edge(next_start_phrase, i + 1, end if end is not None else cursor + 1, 0)
             if end is not None and cut > end:
                 # Hold the outgoing picture through a natural breath up to the next onset.
                 between, _, _, _ = local_narration_window(cues, 0.15 - end / rate, (cut - end) / rate)
