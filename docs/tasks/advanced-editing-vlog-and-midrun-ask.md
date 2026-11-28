@@ -1,6 +1,6 @@
 # Batch 3 · Mid-Run Ask User、高级剪辑原语与 Vlog 首页演示（施工合同）
 
-> **状态（2026-11-27）**：DRAFT（待确认开工）。本合同整合三项强关联施工块：① **底座 A · 执行中 `ask_user` 同轨挂起与无感续跑**；② **底座 B · 双引擎视觉生产底座**——**B1 实拍高级剪辑原语**（画中画、层序、关键帧、蒙版、Clip 级通用变速、Top 10 参数化滤镜预设层、支持视频源的 Motion Block、源视频抽帧感知）、**B2 React / TSX + HTML + SVG 受控代码画笔（解锁并跨平台化现有 `remotion-project` 运行时）+ 定格抠像**、**B3 视频主体抠像（Luma Matte）** 及配套 Skills；③ **前台 C · 隐藏「模板」Tab，重构面向高级剪辑力、Vlog 与动态设计的首页演示货架、精细化技法填空 Brief 与真实标杆成片**。
+> **状态（2026-11-29 修订）**：READY FOR BRANCH（待在新分支开工）。本合同整合三项强关联施工块，并按交付收益重排落地顺序：**Stage 1 · 底座 A（执行中与修改轮 `ask_user` 同轨挂起、无感续跑与非写死决策记忆）** → **Stage 2 · 底座 B2-A（React / TSX + HTML + SVG 受控代码画笔：解锁并跨平台化现有 `remotion-project` 运行时，独立可交付商业大片跃升）** → **Stage 3 · 底座 B1（实拍高级剪辑原语：画中画、层序、关键帧、蒙版、变速、Top 10 参数化滤镜、视频 Motion Block 与源帧感知）+ 底座 B2-B/B3（定格与视频 Luma Matte 抠像）+ 前台 C（隐藏「模板」Tab 与首页货架/标杆成片）**。
 >
 > 上位架构与硬约束以 [Agent Editor 主合同](new-agent.md)、[作品模型](../VIDEO_PROJECT.md)、[渲染契约](../RENDERING.md)、[声音合同](../MUSIC_ARCHITECTURE.md)、[账本与授权](../BILLING.md) 及 [进度 §0](../PROGRESS.md) 为准。
 
@@ -30,23 +30,26 @@
 
 ---
 
-## 3. 底座 A · Mid-Run `ask_user` 同轨挂起与无感续跑
+## 3. 底座 A · Mid-Run 与修改轮 `ask_user` 同轨挂起、无感续跑与决策协同
 
-### 3.1 解除现有 4 处过度限制（Backend）
+### 3.1 解除现有过度限制（Backend）
 
 | 目标文件 | 现状限制 | 改造方案 |
 | :--- | :--- | :--- |
-| `apps/api/app/chat/prompts.py` | ① `not native_creation` 时裁剪 `items`；② `authorized_media.status == "available"` 时 `discard("ask_user")` | ① 制作/编辑阶段全量开放 `ask_user` 的 `items` 多题数组；② 仅在“已导出固定 MP4 且仅剩 `review_video/deliver_video`”的窄收尾分支限制 `ask_user`，其余创作/修订/媒体就绪后阶段均允许调用 `ask_user` |
-| `apps/api/app/chat/plan_turn.py` & `apps/api/app/models/schemas.py` | `missing_brief_question_items` 强制把 `items` 绑定到旧 `Brief` 固定槽位，临时剪辑问题被拒；同 `slot` 二次提问被拒 | 保留已知 `Brief` 槽位自动回填兼容，同时支持 **自由临时题（ad-hoc item）**（`slot` 可为可选字段或普通 `topic_key`，不再强制校验必须属于旧 `Brief` 字段集）；不阻断制作中基于新素材/新预览产生的合法追问 |
-| `apps/api/app/chat/service.py` & `routes.py` | 调 `ask_user` 后终止并结算当前步骤；`/answer` 续行在视觉上新起一轮 | ① 持久化问题行携带 `mid_run_ask: true` 与所属 `opening_id` / 当前 `steps` 快照（**不把 `in_progress` 步骤误结为 `done`**）；② `/answer` 提交答案后沿原 `opening_id`、`steps`、已保存版本与已完成的工具回执继续拉起 `ToolLoop` |
-| `apps/api/app/prompts/chat/video_editor.j2` | 明文禁止“确认卡后再问第二次”、禁止弹卡前调 `update_steps` | 改写为**克制提问宪法**：① 允许在 `update_steps` 展开的多步执行中途发起单卡 `ask_user`（遇多段素材选片、定格抠像选帧、原声/配乐取舍、明显审美分叉时）；② 纯技术参数（坐标、缓动、音效配方、闪避 dB）严禁打扰用户；③ 每次提问必给 `recommended_id` 与 `default_path`（一键跳过按推荐继续） |
+| `apps/api/app/chat/prompts.py` | ① Line 351 隐藏路径 `names.discard("ask_user")`；② Line 492 `dialogue_wire` 裁掉 `slot`，Line 493 `not native_creation` 裁掉 `items`；③ Line 497 `authorized_media.status == "available"` 丢弃 `ask_user` | ① 制作/编辑/修改阶段全量开放 `ask_user` 的自由题与 `items` 多题数组；② 解除 Line 351 / 497 的过宽丢弃，**与最新 `export_video` 导出即自动交付机制对齐**（仅在“本轮已完成正式交付、只剩最终收尾回复”的窄态禁用 `ask_user`），其余创作、媒体就绪后与后续修改轮均允许调用 `ask_user` |
+| `apps/api/app/chat/plan_turn.py` & `apps/api/app/models/schemas.py` | Lines 860–896 `missing_brief_question_items` 强制把 `items` 绑定到旧 `Brief` 固定槽位；`merged_brief.asked` 阻断同槽二次追问 | 保留旧 `Brief` 槽位兼容，同时全面放行 **无固定枚举的自由临时题（ad-hoc item）**（不要求预定义槽位表，任意创作分叉或修改方案确认均可直接发起） |
+| `apps/api/app/chat/service.py` & `routes.py` | ① 调 `ask_user` 后终止并结算当前步骤；② `_continue_chat_answer`（Lines 1329–1336）把初始 `opening.content` 原封不动重拼进 `reply`，中途续行易误导模型重做全片；③ 自由题答案未投影给后续修改轮 | ① 持久化问题行携带 `mid_run_ask: true` 与所属 `opening_id` / 当前 `steps` 快照（**不把 `in_progress` 步骤误结为 `done`**）；② 中途/修改轮续行构造**增量续行上下文**（明确标出当前已保存 `version_id`、已完成工具回执与用户刚作出的决定），**不再把初始 `opening.content` 伪装成新指令重发**；③ 见 §3.2 轻量决策投影 |
+| `apps/api/app/prompts/chat/video_editor.j2` | 明文禁止“确认卡后再问第二次”、禁止弹卡前调 `update_steps` | 改写为**克制提问与修改协同宪法**：① 允许在多步执行中途（选片/选帧/音画取舍/明显审美分叉）以及**成片后模糊修改请求**（如“第 3 幕改清爽点”给出 2–3 个具体改法选项先对齐再动手）发起单卡 `ask_user`；② 纯技术参数（坐标、缓动、音效配方、闪避 dB）严禁打扰用户；③ 每次提问必给 `recommended_id` 与 `default_path`（一键跳过按推荐继续） |
 
-### 3.2 续行返回 Agentic Loop 的自由响应策略
+### 3.2 轻量非写死决策记忆与修改协同（Antigravity / Neon 风格）
 
-用户提交 `ask_user` 答案并进入续行 `ToolLoop` 后，**模型完全自主决定是否输出过渡文本**：
-- **静音直调工具（允许零前置 prose）**：模型可以直接根据用户答案立即发出下一批工具调用（如 `insert_visual` / `extract_subject` / `create_video`），不强制吐一句“好的我收到了”，也不触发空文本异常；
-- **简短确认 + 调工具**：模型也可以先用 1 句自然确认句交代即将执行的动作，再并行调用工具；
-- **直接文本答复结束**：若用户的回答明确要求取消、仅回答问题或不再继续制作，模型可直接正文答复结束，不误触发 `bare_production_feedback` 强逼继续导出。
+`ask_user` 不只是“提问”，本质上是用户在创作与修改途中注入的**权威决策**。严禁为此新建写死字段的数据库表或固定枚举槽位，采用与顶级 Agent 一致的**无模式（schema-less）对话记录投影**：
+1. **直接复用持久化 Q&A 记录（零新表、零写死槽位）**：每一次用户已作答的 `ask_user` 行本就持久化在 `messages`（含 `question`、`answer`、`turn_id` 及当时关联的 `version_id` / `scene_id` 语境）。
+2. **上下文轻量投影（防跨轮失忆与修改回退）**：在 `prompts.py` 组装当前轮与后续任意**修改轮**上下文时，自动从会话最近已作答的 `ask_user` 记录中投影一个紧凑、自由格式的 `settled_user_decisions` 列表（每条仅含 `question`、`user_choice`、`at_version`），同时纳入 Per-Turn Trace（`turn_trace.py`）的 `context_sources` 审计。
+3. **续行自由响应策略**：用户提交答案进入续行 `ToolLoop` 后，模型完全自主决定响应方式：
+   - **静音直调工具（允许零前置 prose）**：直接按用户决定发出下一批工具调用（如 `update_motion_block` / `insert_visual_component` / `create_video`），不强制吐过渡废话；
+   - **简短确认 + 调工具**：先用 1 句自然确认句交代动作再并行调工具；
+   - **直接文本答复结束**：若用户明确取消或仅需说明，直接正文答复结束，不误触发强逼继续导出。
 
 ### 3.3 等待期与回答后的前端无感连续态（Frontend）
 
@@ -125,21 +128,30 @@
 
 ---
 
-### 4.2 Phase B2（两条王炸进阶能力）：React / TSX + HTML + SVG 代码画笔 + 静图/定格主体抠像
+### 4.2 Phase B2（其中 B2-A 提前至 Stage 2 优先落地）：React / TSX + HTML + SVG 代码画笔 + 静图/定格主体抠像
 
-#### A. 解锁并跨平台化现有 `remotion-project` 受控组件运行时（HTML / SVG / CSS / React）
+#### A. 解锁并跨平台化现有 `remotion-project` 受控组件运行时（Phase B2-A — Stage 2 核心）
 严禁使用低表现力的自定义光栅指令（放弃扩写 `draw-2d` PIL 光栅方案），直接启用并补齐仓库已有的 **React + TSX + HTML + SVG + CSS** 组件烘焙管线（`apps/render/src/component-runtime/{policy,worker,bake}.ts` + `apps/api/app/tools/video/components.py`）：
-- **补齐 Linux 生产隔离与跨平台路径（解除当前仅 macOS Seatbelt 阻塞）**：
-  - 修正 `bake.ts` 与 `worker.ts` 中硬编码的 `mac-arm64`/`mac-x64` Chrome Headless Shell 路径，改为跨平台自动解析（macOS / Linux x86_64 / Linux ARM64）；
-  - 保留本地 macOS `sandbox-exec` 隔离，同时在 Linux 生产环境（`apps/render/Dockerfile`）新增标准内核级隔离方案：**`bubblewrap (bwrap)` 无网只读沙箱**（`--unshare-net`、只读挂载运行依赖、仅 `<work>` 目录可写、`--die-with-parent` + `ulimit` CPU/RSS/文件上限 + 清空业务环境变量）或**独立无网 `component-runner` Sidecar 容器**（`network_mode: none` / 内部只读）；`componentIsolation()` 如实上报当前隔离类型，缺失合法隔离时保持 fail-closed。
-- **验证并开放完整 HTML / SVG / CSS 表现力（保留 AST 安全白名单）**：
-  - 保留 `policy.ts` 的 TypeScript AST 安全审计（禁止 `fetch`/`process`/`eval`/`window`/`document`/`setTimeout`/裸 `<img>`/`<iframe>`/`<script>`，保持 `staticFile` 白名单防线与 `assertDynamicComponentFrames` 防静帧校验）；
-  - 明确支持完整 React + HTML + CSS + 矢量 SVG 语法（`<svg>`、`<path>`、`<polygon>`、`<circle>`、`<rect>`、`<defs>`、`<filter>`/`<feGaussianBlur>`、`<linearGradient>`/`<radialGradient>`、`<clipPath>`、`<mask>`、CSS 排版/渐变/混合模式、`spring()`、`interpolate()`、`Easing`、`random()`），同时支持单文件组件与多文件 TSX 工程、以及引用项目已固定的静态图片资源。
-- **向普通对话开放原生工具 `insert_visual_component` & `update_visual_component`**：
-  - 解除当前 `prompts.py` 中“仅绑定外部 `ExternalSkillReference` 才开放 `remotion-project`”的限制，允许 Agent 在普通创作与修订轮直接编写 React/TSX/HTML/SVG 场景；
-  - `insert_visual_component(start_seconds, end_seconds, code_or_files, parameters?, resources?, background?, layer?)`：在事务外经隔离渲染器烘焙为不可变固定视频与 `SourceSnapshot`，生成 `GeneratorObject(producer="remotion-project")` 原子落轨（精确 `program_digest` 命中缓存零重算）；
-  - `update_visual_component(clip_id, code_or_files?, parameters?)`：保留时间位置、层序与周围音画，仅改 React/TSX/SVG 代码或参数重新烘焙，配合 `preview_range` 看帧闭环迭代；编译/AST/运行诊断以 `source_repairable=True` 返回模型自主修复。
-- **新增内置 Skill `generative-motion/SKILL.md`**：教 Agent 合理分工（常规界面/产品演示/字幕优先用原生 `MotionBlockObject` 与 `TextObject`；多边形形变、点阵波场、3D 投影 SVG 丝带、实验排版等自由创意 MG 用 `insert_visual_component` 编写纯帧驱动 React + SVG + HTML），并约束确定性时间函数、构图留白、色彩对比与 Sound Engine 声画踩点纪律。
+
+- **架构铁律：坚决不把 `remotion-project` 做成「半个 OpenFilm」**（源码、文件与全链路边界）：
+  - **现状链路剖析**：
+    1. **原生活对象层**：`TextObject`、`MotionBlockObject` 在 `apps/api/app/editing/video_spec.py`（Lines 198–206）编译为活结构化 JSON，由前端 `packages/video-remotion/src/Video.tsx`（`TextLine` / `MotionBlocks.tsx`）实时作为真实 DOM/React 渲染——改文案、改字号、改颜色 0ms 生效，且天然支持未来画布直接点选文字；
+    2. **代码画笔烘焙层**：`GeneratorObject(producer="remotion-project")` 在 `apps/api/app/editing/schemas.py`（`RemotionProjectSource` Lines 540–600、`GeneratorObject` Lines 1247–1330）完整保存不可变 TSX 源码与 `props` / `props_schema`；经 `apps/api/app/tools/video/components.py` → `apps/render/src/component-runtime/{bake.ts,policy.ts,worker.ts}` 烘焙为 `h264` MP4 后，在 `apps/api/app/editing/video_spec.py`（Lines 207–222、472–489）降维编译为普通 `kind: "video"` 片段，由 `Video.tsx` 通过 `<OffthreadVideo>` 播放；修订时再通过 `apps/api/app/editing/service.py`（Lines 408–427）把完整 `project` 源码和 `props` 读回给 Agent 做单 Clip 精准重烘。
+  - **为什么必须防退化**：如果把本该活着的普通字幕/常规标题硬写死进 TSX 字符串，或把整条 30–45s 视频烘成一个巨型 `remotion-project` Clip，就会丧失网页/DOM 的瞬间编辑优势，退化成“改一个字等半分钟全片重烘”的半个 OpenFilm。
+  - **4 条强制工程与创作护栏**（落地于 `insert_visual_component` / `update_visual_component` schema、`apps/api/app/editing/service.py` 与 `generative-motion/SKILL.md`）：
+    1. **活字留原生轨，画笔专攻高表现力图形**：普通字幕、常规角标与常规标题继续留在原生 `TextObject` 轨叠加在代码画笔之上（0ms 修改、可批量 `edit_text`）；只有文字与 SVG 遮罩/路径/粒子存在像素级融合（如 Claude 15s 片里的遮罩字效、Gemini 粒子聚字）时才放进 `remotion-project`。
+    2. **文案、字号、品牌色必须参数化进 `props` + `props_schema`**：`insert_visual_component` 鼓励/要求将组件内可变文案、字号缩放、主色/底色声明在 `RemotionProjectSource.props` 与 `props_schema`；`update_visual_component` 支持轻量 `props_patch`（无需重写 TSX 源码即可精准改字/改字号/换色，100% 确定性不漂移）。
+    3. **按幕/按拍模块化（单 Clip 2–8s），禁止整片单组件烘焙**：每个代码画笔 Clip 独立对应 1 个视觉幕或高潮拍，修改局部时仅重烘该 Clip，命中相同 `program_digest` 直接复用缓存，周围音轨、字幕与其他幕纹丝不动。
+    4. **B2-A 先行聚焦全屏/实底 `h264`（`worker.ts:179`）**：不盲目引入有 Safari 兼容风险的 WebM Alpha，实底/全屏独立幕直接复用现有 `h264` 管线零风险落地；如需叠加透明前景留给 B3 Luma Matte。
+
+- **解除 4 处已有代码卡点（实测现状已确认）**：
+  1. **修复 `bake.ts` 单槽并发硬拒**：`apps/render/src/component-runtime/bake.ts`（Lines 31–32、100）当前 `MAX_ACTIVE_BAKES = 1` 在并行调用时**直接抛错**，会导致 Agent 同轮并行创建多幕 TSX 组件时第 2、3 幕瞬间失败；必须改为**有界 FIFO 排队队列**（并发 1–2，超额排队而非报错）。
+  2. **跨平台浏览器路径与 Linux 生产隔离**：修正 `bake.ts`（Lines 15–25、40–44）与 `worker.ts`（Lines 24–32）硬编码的 `mac-arm64`/`mac-x64` Chrome Headless Shell 路径；本地开发继续沿用已实测可用的 macOS Seatbelt（`sandbox-exec`，本机 `:3001/health` 已返回 `enabled: true`），**Linux 生产优先落地独立无网 `component-runner` Sidecar 容器**（`network_mode: none` + 只读依赖挂载，避免云容器默认 seccomp 禁止非特权 userns 导致 `bwrap --unshare-net` 报 `Operation not permitted`；`bwrap` 作为裸机环境可选后端）；`componentIsolation()` 如实上报，缺隔离保持 fail-closed。
+  3. **保留并验证完整 HTML / SVG / CSS 表现力**：保留 `policy.ts` 的 TypeScript AST 安全审计（`url(#id)` 本地 SVG 滤镜/渐变/遮罩已放行，保持 `staticFile` 白名单与 `assertDynamicComponentFrames` 校验，并核查 `dynamics.ts` 避免误杀含短开场留白的创意镜头）；全面支持 React + HTML + CSS + 矢量 SVG（`<svg>`、`<path>`、`<polygon>`、`<circle>`、`<rect>`、`<defs>`、`<filter>`/`<feGaussianBlur>`、`<linearGradient>`/`<radialGradient>`、`<clipPath>`、`<mask>`、`spring()`、`interpolate()`、`Easing`、`random()`）及单/多文件 TSX 工程与已固定图片资源。
+  4. **向普通对话开放原生工具 + Per-Turn Trace 埋点**：
+     - 解除 `apps/api/app/chat/prompts.py`（Lines 83–84、107–108）与 `editor_create.py`（Lines 1089–1096）“仅外部 `ExternalSkillReference` 才开放 `remotion-project`”的限制；
+     - 新增 `insert_visual_component(start_seconds, end_seconds, code_or_files, props?, props_schema?, resources?, background?)` 与 `update_visual_component(clip_id, code_or_files?, props_patch?)`（编译/AST/运行诊断以 `source_repairable=True` 返回模型自主修复，并把编译耗时、缓存命中与修复轨迹写入 `apps/api/app/providers/llm/turn_trace.py`）；
+     - 新增内置 Skill `generative-motion/SKILL.md`：讲清“原生积木 / 原生 `TextObject` / 代码画笔”三者分工，以及参数化 `props`、模块化时长、确定性帧函数与声画踩点纪律。
 
 #### B. 静图 / 视频定格帧主体抠像
 - **新增异步工具 `extract_subject(mode="image" | "freeze_frame")`**（复用既有 `MediaJob` 报价、授权、预占与 Worker fencing 链路）：
@@ -212,11 +224,11 @@
 
 ---
 
-## 6. 施工顺序与逐阶段验收门禁
+## 6. 施工顺序与逐阶段验收门禁（按商业交付收益重排）
 
 | 阶段 | 施工内容 | 确定性门禁 | 真实浏览器 & 视听验收 |
 | :--- | :--- | :--- | :--- |
-| **Milestone 1 · 底座 A** | `ask_user` 解绑（`prompts.py` / `plan_turn.py` / `service.py` / `video_editor.j2`）+ 续行静音直调工具支持 + `liveState.ts` / `ChatConversation.tsx` 进行态保持与轨内 Q&A 折叠 + `confirm_credits` 正交回归测试 | `make test-fast`、`make test-chat`、`make test-web`、`make test-e2e` | Chrome 实测：① 多步执行中途弹出自由多题卡，顶栏（展开与收起态）均保持 ing 不出现 `Worked for Xs`；② 刷新页面后挂起态与步骤不丢；③ 回答后 Q&A 收进同一工作轨、模型可直接调工具继续；④ `confirm_credits=auto` 下仍正常弹创作 `ask_user`，`confirm_credits=ask` 下付费导出仍独立弹授权卡且不可被纯文字绕过 |
-| **Milestone 2 · 底座 B1** | `playback_rate`/`color_grade`（Top 10 目录 + 参数微调）/`crop`/`frame`/`mask` Schema + `Video.tsx` 渲染 + `MotionBlockObject` 视频源挂载与 `editorial_grid_frame` + `insert_visual` 视频 PiP + `set_layer_order` + `animate_object` + `set_mask` + `set_clip_speed` + `set_color_grade` + `inspect_source_frames` + `vlog-editing` & 升级 `talking-head-video` Skills | `make test-all`（含 Py↔TS Zod/动画/蒙版/滤镜/变速 parity 与旧 digest 零漂移） | 真实上传实拍素材走 `/api/v1/chat`，分别跑通：① 胶片旅拍 Vlog（含居中画中画 + 局部变速 + `fuji_classic` 参数微调）；② 瑞士动态网格视频块；③ 圆形蒙版相似形匹配快剪（对齐中心 + 圆形蒙版关键帧 + 三层音效）；验证 Web Player 与 1080p MP4 逐帧对齐及单对象续改 |
-| **Milestone 3 · 前台 C** | 隐藏「模板」Tab，重构 `DemoGallery.tsx` 分类与 hover 标签、更新 `en.ts`/`zh.ts` 填空 Brief、上架首批真实产出的 Vlog 与创意合成标杆成片 | `make test-web`（含 EN↔ZH 键与槽位 parity）、`make test-e2e` | Chrome 实测桌面/手机、中英、明暗、reduced-motion 下的混画幅播放、hover 开声与静音互斥、点击预填填空 Brief（零自动发请求） |
-| **Milestone 4 · 底座 B2 → B3** | **B2**：跨平台化并解锁 `remotion-project`（Linux `bwrap` / 无网 Sidecar 隔离 + 跨平台 Chromium 路径 + React/TSX/HTML/SVG 完整矢量支持 + `insert_visual_component` / `update_visual_component` + `generative-motion` Skill）与 `extract_subject(image \| freeze_frame)` + `layered-compositing` Skill，产出「动态设计师 Showreel（视频 4）」与「人物定格介绍卡」；**B3**：独立启动 `extract_subject(video_clip)` Luma Matte 管线与边缘/时序/成本专项验收 | `make test-api`、`make test-render`、`make test-web`（含 AST 策略安全、Linux `bwrap` 隔离逃逸/断网/超时测试与确定性帧回归） | ① 实测 15 秒 React/SVG 动态设计师 Showreel（多边形形变+线框残影、点阵波场、3D 发光丝带）及 `update_visual_component` 二次自然语言改色/改节奏；② 核对定格/视频抠像在 Web Player 与 1080p MP4 中的透明边缘、文字穿人后可二次改字，以及积分预占/实扣/取消释放台账 |
+| **Stage 1 · 底座 A（Mid-Run & 修改轮 `ask_user`）** | `ask_user` 全量解绑（`prompts.py:351/492/493/497`、`plan_turn.py:860-896`、`video_editor.j2`，对齐最新导出即交付流程）+ 修复 `_continue_chat_answer` 重复拼接 `opening.content` + 无模式 `settled_user_decisions` 对话投影（防后续修改轮失忆回退）+ 续行静音直调工具 + `liveState.ts` / `ChatConversation.tsx` 进行态保持与轨内 Q&A 折叠 + `confirm_credits` 正交测试 + Per-Turn Trace 埋点 | `make test-fast`、`make test-chat`、`make test-web`、`make test-e2e` | Chrome 实测：① 多步执行中途与成片后模糊修改轮均可弹出自由多题卡，顶栏（展开与收起态）保持 ing 不出现 `Worked for Xs`；② 刷新页面挂起态与步骤不丢；③ 回答后 Q&A 收进同一工作轨、续行不重做已保存版本且后续第 2/3 轮修改仍记住已拍板决定；④ `confirm_credits` 与 `ask_user` 严格正交 |
+| **Stage 2 · 底座 B2-A（提前！React/TSX + HTML + SVG 代码画笔）** | 解锁并升级 `remotion-project`：`bake.ts` 单槽硬拒改为有界 FIFO 队列 + 跨平台 Chromium 路径 + Linux 生产无网 Sidecar 隔离（保留本地 macOS Seatbelt）+ `insert_visual_component` / `update_visual_component`（支持 `props_patch` 参数化微调，严防做成“半个 OpenFilm”）+ `generative-motion/SKILL.md` + Per-Turn Trace 烘焙/修复诊断。**完成 Stage 1 + Stage 2 即达到可直接给领导演示的视觉跃升交付点** | `make test-api`、`make test-render`、`make test-web`（含 AST 安全审计、并发队列排队、隔离逃逸/断网/超时、确定性帧与 `props_patch` 重烘回归） | ① 真实跑出 15 秒 React/SVG 动态设计师 Showreel（多边形形变+线框残影、点阵波场、3D 发光丝带）及带定制粒子/微交互幕的商业官网宣传片；② 验证 `update_visual_component(props_patch=...)` 精准改字号/配色/文案不漂移且周围音轨字幕不动；③ 验证原生 `TextObject` 字幕叠在代码画笔之上可 0ms 单独修改 |
+| **Stage 3A · 底座 B1（Vlog 高级剪辑原语）** | `playback_rate`/`color_grade`（Top 10 目录 + 参数微调）/`crop`/`frame`/`mask` Schema + `Video.tsx` 渲染 + `MotionBlockObject` 视频源挂载与 `editorial_grid_frame` + `insert_visual` 视频 PiP + `set_layer_order` + `animate_object` + `set_mask` + `set_clip_speed` + `set_color_grade` + `inspect_source_frames` + `vlog-editing` & 升级 `talking-head-video` Skills | `make test-all`（含 Py↔TS Zod/动画/蒙版/滤镜/变速 parity 与旧 digest 零漂移） | 真实上传实拍素材走 `/api/v1/chat`，分别跑通：① 胶片旅拍 Vlog（居中画中画 + 局部变速 + `fuji_classic` 微调）；② 瑞士动态网格视频块；③ 圆形蒙版相似形匹配快剪；验证 Web Player 与 1080p MP4 逐帧对齐及单对象续改 |
+| **Stage 3B · 底座 B2-B → B3 & 前台 C（抠像与首页重构）** | **B2-B**：`extract_subject(image \| freeze_frame)` + `layered-compositing` Skill；**B3**：独立启动 `extract_subject(video_clip)` Luma Matte 管线与边缘/时序/成本专项验收；**前台 C**：隐藏「模板」Tab，重构 `DemoGallery.tsx` 与 Landing，上架首批真实标杆成片 | `make test-api`、`make test-web`（含 EN↔ZH 键与槽位 parity）、`make test-e2e` | ① 核对定格/视频抠像在 Web Player 与 1080p MP4 中的透明边缘、文字穿人后可二次改字及积分台账；② Chrome 实测桌面/手机、中英、明暗、reduced-motion 下的混画幅播放与填空 Brief |
