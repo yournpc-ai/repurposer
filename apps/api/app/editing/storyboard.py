@@ -33,8 +33,81 @@ from app.editing.schemas import (
     VideoObject,
     WebObject,
 )
+from app.editing.caption_timing import is_cjk_char
 from app.editing.timing import SOURCE_TIMEBASE, ticks_to_frames
 from app.editing.temporal import timeline_duration
+
+
+def _clean_str(value: Any) -> str:
+    return value.strip() if isinstance(value, str) else ""
+
+
+def _join_caption_lines(lines: list[str]) -> str | None:
+    cleaned = [line.strip() for line in lines if line and line.strip()]
+    if not cleaned:
+        return None
+    sample = "".join(cleaned)
+    cjk_count = sum(1 for ch in sample if is_cjk_char(ch))
+    sep = "" if cjk_count * 2 >= max(1, len(sample)) else " "
+    return sep.join(cleaned)
+
+
+def _motion_block_metadata(block: MotionBlockObject) -> tuple[str | None, list[str]]:
+    props = block.props if isinstance(block.props, dict) else {}
+    highlights: list[str] = []
+
+    def _add(text: Any) -> None:
+        s = _clean_str(text)
+        if s and s not in highlights and len(highlights) < 4:
+            highlights.append(s)
+
+    for key in ("callout_steps", "cards", "steps", "nodes", "items", "points"):
+        raw_list = props.get(key)
+        if not isinstance(raw_list, list):
+            continue
+        for item in raw_list:
+            if not isinstance(item, dict):
+                continue
+            val = _clean_str(item.get("value"))
+            lbl = _clean_str(item.get("label") or item.get("title") or item.get("text"))
+            if val and lbl:
+                _add(f"{val} · {lbl}")
+            elif lbl:
+                _add(lbl)
+            elif val:
+                _add(val)
+
+    _add(props.get("url_text"))
+    _add(props.get("callout_label"))
+    _add(props.get("cta_label"))
+    _add(props.get("tagline"))
+
+    title: str | None = None
+    for key in ("headline", "title"):
+        if candidate := _clean_str(props.get(key)):
+            title = candidate
+            break
+    if not title and (quote := _clean_str(props.get("quote"))):
+        title = quote[:48].rstrip() + ("…" if len(quote) > 48 else "")
+    if not title and _clean_str(props.get("left_heading")) and _clean_str(props.get("right_heading")):
+        title = f"{_clean_str(props.get('left_heading'))} vs {_clean_str(props.get('right_heading'))}"
+    if not title and _clean_str(props.get("left_text")) and _clean_str(props.get("right_text")):
+        title = f"{_clean_str(props.get('left_text'))} {_clean_str(props.get('right_text'))}"
+    if not title and (url_text := _clean_str(props.get("url_text"))):
+        title = url_text
+    if not title and highlights:
+        title = highlights[0]
+    if not title and isinstance(props.get("words"), list):
+        words = [_clean_str(w) for w in props["words"] if _clean_str(w)]
+        if words:
+            title = " · ".join(words[:3])
+    if not title:
+        for key in ("brand_name", "badge", "eyebrow"):
+            if candidate := _clean_str(props.get(key)):
+                title = candidate
+                break
+
+    return title, highlights
 
 
 def _kf_summary(kf: Any, timebase: int, fps_num: int, fps_den: int) -> dict[str, Any]:
@@ -215,6 +288,14 @@ def storyboard_payload(
             clip_tracks[clip.clip_id] = track
 
     all_clips = [c for t in content.timeline.tracks for c in t.clips]
+    effect_clips = [
+        c
+        for t in content.timeline.tracks
+        if t.role == "effect"
+        for c in t.clips
+        if isinstance(c.object, AudioObject)
+    ]
+    transitions_by_from = {tr.from_clip_id: tr.kind for tr in content.timeline.transitions}
     scenes = []
     for index, scene in enumerate(content.scenes):
         scene_clips = [c for c in all_clips if c.scene_id == scene.scene_id]
@@ -224,6 +305,37 @@ def storyboard_payload(
             for ref in scene.speech_clip_ids
             if ref in by_id and isinstance(by_id[ref].object, SpeechObject)
         ]
+        if speech:
+            narration = "\n".join(obj.text for obj in speech)
+        else:
+            caption_clips = sorted(
+                (
+                    c
+                    for c in scene_clips
+                    if isinstance(c.object, TextObject) and c.object.caption is not None
+                ),
+                key=lambda c: c.range.start,
+            )
+            narration = _join_caption_lines(
+                [c.object.text.split("\n", 1)[0] for c in caption_clips]
+            )
+        motion_block = next(
+            (c.object for c in scene_clips if isinstance(c.object, MotionBlockObject)),
+            None,
+        )
+        block_label: str | None = None
+        visual_highlights: list[str] = []
+        if motion_block is not None:
+            block_label, visual_highlights = _motion_block_metadata(motion_block)
+        transition_after = next(
+            (transitions_by_from[cid] for cid in by_id if cid in transitions_by_from),
+            None,
+        )
+        sfx_count = sum(
+            1
+            for eff in effect_clips
+            if scene.range.start <= eff.range.start < scene.range.end
+        )
         scene_payload: dict[str, Any] = {
             "scene_id": scene.scene_id,
             "number": index + 1,
@@ -235,9 +347,14 @@ def storyboard_payload(
                 "start": ticks_to_frames(scene.range.start, timebase, fps_num, fps_den),
                 "end": ticks_to_frames(scene.range.end, timebase, fps_num, fps_den),
             },
+            "label": block_label or scene.intent,
             "intent": scene.intent,
             "visual_description": scene.visual_description,
-            "narration": "\n".join(obj.text for obj in speech) if speech else None,
+            "narration": narration,
+            "block_id": motion_block.block_id if motion_block is not None else None,
+            "visual_highlights": visual_highlights,
+            "transition_after": transition_after,
+            "sfx_count": sfx_count,
             "clips": [
                 _clip_summary(
                     c, content, track_id=clip_tracks[c.clip_id].track_id,

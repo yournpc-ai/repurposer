@@ -34,6 +34,8 @@ export type WorkbenchArtifact =
       outputId: string
       title?: string
       selectRegion?: boolean
+      seekSeconds?: number
+      seekNonce?: number
     }
   | {
       key: string

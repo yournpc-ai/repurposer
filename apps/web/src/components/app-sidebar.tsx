@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { AccountConsole } from "@/components/account-console"
+import { CreditsPill } from "@/components/credits/CreditsPill"
 import { LogoMark } from "@/components/LogoMark"
 import { ProjectConversationsTree } from "@/components/project/ProjectConversationsTree"
 import { Avatar } from "@/components/ui/avatar-clean"
@@ -83,8 +84,15 @@ export function AppSidebar({ defaultOpen }: { defaultOpen: boolean }) {
         toggle()
       }
     }
+    const onMobileToggle = () => {
+      if (mobile) setMobileOpen((prev) => !prev)
+    }
     window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
+    window.addEventListener("repurposer:toggle-mobile-sidebar", onMobileToggle)
+    return () => {
+      window.removeEventListener("keydown", onKey)
+      window.removeEventListener("repurposer:toggle-mobile-sidebar", onMobileToggle)
+    }
   }, [mobile, mobileOpen, expanded])
   const nav = (
     <nav className="flex flex-col gap-1">
@@ -131,7 +139,10 @@ export function AppSidebar({ defaultOpen }: { defaultOpen: boolean }) {
           activeConversationId={activeConversationId}
           onNavigate={() => setMobileOpen(false)}
         />
-        <AccountMenu expanded />
+        <div className="mt-3 flex items-center justify-between gap-2 border-t border-subtle pt-3">
+          <AccountMenu expanded />
+          <CreditsPill refreshKey={activeProjectId ?? "mobile-sidebar"} />
+        </div>
       </Dialog>
     )
   return (

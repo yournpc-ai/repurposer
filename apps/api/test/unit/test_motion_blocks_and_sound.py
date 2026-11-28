@@ -1415,3 +1415,163 @@ def test_parse_tool_arguments_repairs_comma_slips_but_rejects_truncation():
 
     with pytest.raises(LLMSchemaError):
         _parse_tool_arguments("create_video", '{"name":"truncated', "tool_calls")
+
+
+def test_storyboard_payload_extracts_motion_block_label_highlights_and_caption_narration():
+    from app.editing.schemas import (
+        AudioObject,
+        Clip,
+        CompositionContent,
+        MotionBlockObject,
+        Scene,
+        SourceCaptionDerivation,
+        ClipSource,
+        TextObject,
+        TextStyle,
+        TimeRange,
+        Track,
+        Transition,
+        VersionSettings,
+        speech_text_digest,
+    )
+    from app.editing.storyboard import storyboard_payload
+
+    snap_id = uuid4()
+    sfx_snap_id = uuid4()
+    digest = "a" * 64
+    line1 = "A live valuation returns £18.7m,"
+    line2 = "with 94% evidence coverage."
+    content = CompositionContent(
+        settings=VersionSettings(width=1920, height=1080),
+        scenes=[
+            Scene(
+                scene_id="scn_1",
+                range=TimeRange(start=0, end=300000),
+                intent="OxValue — Defensible Valuations",
+            ),
+        ],
+        timeline={
+            "tracks": [
+                Track(
+                    track_id="trk_v",
+                    kind="visual",
+                    role="main",
+                    order=0,
+                    clips=[
+                        Clip(
+                            clip_id="clp_mg_1",
+                            scene_id="scn_1",
+                            range=TimeRange(start=0, end=300000),
+                            object=MotionBlockObject(
+                                kind="motion_block",
+                                object_id="obj_mg_1",
+                                layout=BOX,
+                                block_id="product_showcase",
+                                props={
+                                    "badge": "Live Valuation",
+                                    "callout_steps": [
+                                        {"label": "£18.7m enterprise value", "x": 0.5, "y": 0.4, "width": 0.3, "height": 0.2, "start_s": 0.5, "end_s": 2.5},
+                                        {"label": "94% evidence coverage", "x": 0.7, "y": 0.4, "width": 0.2, "height": 0.2, "start_s": 2.5, "end_s": 4.5},
+                                    ],
+                                },
+                                resources=[
+                                    dict(
+                                        path="media/ui.png",
+                                        snapshot_id=str(snap_id),
+                                        snapshot_digest=digest,
+                                        content_type="image/png",
+                                    )
+                                ],
+                            ),
+                        ),
+                    ],
+                ),
+                Track(
+                    track_id="trk_cap",
+                    kind="visual",
+                    role="caption",
+                    order=1,
+                    clips=[
+                        Clip(
+                            clip_id="clp_cap_1",
+                            scene_id="scn_1",
+                            range=TimeRange(start=10000, end=120000),
+                            object=TextObject(
+                                kind="text",
+                                object_id="obj_cap_1",
+                                text=line1,
+                                style=TextStyle(font_size=36, color="#FFFFFF"),
+                                layout=BOX,
+                                caption=SourceCaptionDerivation(
+                                    snapshot_id=snap_id,
+                                    snapshot_digest=digest,
+                                    sentence_id="s1",
+                                    source_range=TimeRange(start=0, end=1000),
+                                    source_text_digest=speech_text_digest(line1),
+                                    state="derived",
+                                ),
+                            ),
+                        ),
+                        Clip(
+                            clip_id="clp_cap_2",
+                            scene_id="scn_1",
+                            range=TimeRange(start=120000, end=240000),
+                            object=TextObject(
+                                kind="text",
+                                object_id="obj_cap_2",
+                                text=line2,
+                                style=TextStyle(font_size=36, color="#FFFFFF"),
+                                layout=BOX,
+                                caption=SourceCaptionDerivation(
+                                    snapshot_id=snap_id,
+                                    snapshot_digest=digest,
+                                    sentence_id="s2",
+                                    source_range=TimeRange(start=1000, end=2000),
+                                    source_text_digest=speech_text_digest(line2),
+                                    state="derived",
+                                ),
+                            ),
+                        ),
+                    ],
+                ),
+                Track(
+                    track_id="trk_sfx",
+                    kind="audio",
+                    role="effect",
+                    order=2,
+                    clips=[
+                        Clip(
+                            clip_id="clp_sfx_1",
+                            scene_id="scn_1",
+                            range=TimeRange(start=50000, end=70000),
+                            source=ClipSource(snapshot_id=sfx_snap_id, snapshot_digest=digest),
+                            object=AudioObject(kind="audio", object_id="obj_sfx_1"),
+                        ),
+                    ],
+                ),
+            ],
+            "transitions": [
+                Transition(
+                    transition_id="trn_1",
+                    kind="crossfade",
+                    from_clip_id="clp_mg_1",
+                    to_clip_id="clp_mg_2",
+                    duration=15000,
+                )
+            ],
+        },
+    )
+    payload = storyboard_payload(
+        content,
+        composition_id=uuid4(),
+        version_id=uuid4(),
+        version=1,
+        content_digest=digest,
+    )
+    sc = payload["scenes"][0]
+    assert sc["block_id"] == "product_showcase"
+    assert sc["label"] == "£18.7m enterprise value"
+    assert sc["visual_highlights"] == ["£18.7m enterprise value", "94% evidence coverage"]
+    assert sc["narration"] == f"{line1} {line2}"
+    assert sc["transition_after"] == "crossfade"
+    assert sc["sfx_count"] == 1

@@ -77,11 +77,15 @@ const MAX_SCRUB_WINDOW_S = 12
 interface RawStoryboardScene {
   scene_id?: string
   number?: number
-  label?: string
+  label?: string | null
   intent?: string | null
   visual_description?: string | null
   description?: string | null
   narration?: string | null
+  block_id?: string | null
+  visual_highlights?: string[] | null
+  transition_after?: string | null
+  sfx_count?: number | null
   duration_seconds?: number
   start_seconds?: number
   end_seconds?: number
@@ -92,8 +96,13 @@ interface NormalizedScene {
   id: string
   number: number
   title: string
+  blockId: string | null
+  blockRole: string | null
   summary: string | null
   narration: string | null
+  visualHighlights: string[]
+  transitionAfter: string | null
+  sfxCount: number
   startSeconds: number
   endSeconds: number
   durationSeconds: number
@@ -144,8 +153,13 @@ function resolveOutputPosterUrl(
 function normalizeScenes(
   raw: RawStoryboardScene[] | undefined,
   fallbackScenePrefix: string,
+  opts?: {
+    compName?: string | null
+    translate?: (key: string, options?: Record<string, unknown>) => string
+  },
 ): NormalizedScene[] {
   if (!raw || raw.length === 0) return []
+  const normalizedCompName = opts?.compName?.trim().toLowerCase() || ""
   let cursor = 0
   return raw.map((scene, idx) => {
     const start =
@@ -171,22 +185,60 @@ function normalizeScenes(
     cursor = Math.max(cursor, end)
 
     const number = typeof scene.number === "number" ? scene.number : idx + 1
+    const blockId = scene.block_id?.trim() || null
+    const rawRole =
+      blockId && opts?.translate
+        ? opts.translate(`workbench.storyboard.blockRoles.${blockId}`, {
+            defaultValue: "",
+          })
+        : ""
+    const blockRole =
+      rawRole && !rawRole.startsWith("workbench.storyboard.blockRoles.")
+        ? rawRole
+        : null
+
+    const rawTitle = scene.label?.trim() || scene.intent?.trim() || ""
+    const isRedundantCompName =
+      Boolean(normalizedCompName) &&
+      rawTitle.toLowerCase() === normalizedCompName
     const title =
-      scene.label?.trim() ||
-      scene.intent?.trim() ||
+      (!isRedundantCompName && rawTitle) ||
+      blockRole ||
       `${fallbackScenePrefix} ${number}`
     const summary =
       scene.visual_description?.trim() ||
       scene.description?.trim() ||
       null
     const narration = scene.narration?.trim() || null
+    const visualHighlights = Array.isArray(scene.visual_highlights)
+      ? scene.visual_highlights.filter(
+          (item): item is string => typeof item === "string" && item.trim().length > 0,
+        )
+      : []
+    const transitionRaw = scene.transition_after?.trim() || null
+    const transitionTranslated =
+      transitionRaw && opts?.translate
+        ? opts.translate(`workbench.storyboard.transitions.${transitionRaw}`, {
+            defaultValue: transitionRaw,
+          })
+        : transitionRaw
+    const transitionAfter =
+      transitionTranslated &&
+      !transitionTranslated.startsWith("workbench.storyboard.transitions.")
+        ? transitionTranslated
+        : transitionRaw
 
     return {
       id: scene.scene_id ?? `scene-${number}`,
       number,
       title,
+      blockId,
+      blockRole,
       summary,
       narration,
+      visualHighlights,
+      transitionAfter,
+      sfxCount: typeof scene.sfx_count === "number" ? scene.sfx_count : 0,
       startSeconds: start,
       endSeconds: end,
       durationSeconds: rawDuration > 0 ? rawDuration : Math.max(0, end - start),
@@ -280,12 +332,16 @@ function DirectorSceneList({
 function OutputArtifactView({
   outputId,
   initialSelectRegion = false,
+  seekSeconds,
+  seekNonce,
 }: {
   outputId: string
   initialSelectRegion?: boolean
+  seekSeconds?: number
+  seekNonce?: number
 }) {
   const { t } = useTranslation()
-  const { workbench, openArtifact, citeMention, citeText } = useWorkbench()
+  const { workbench, openArtifact, citeMention } = useWorkbench()
 
   const output = useMemo(
     () => (workbench?.outputs ?? []).find((o) => o.id === outputId) ?? null,
@@ -322,6 +378,16 @@ function OutputArtifactView({
   }, [outputId, initialSelectRegion])
 
   useEffect(() => {
+    if (seekSeconds == null || seekNonce == null) return
+    const target = Math.max(0, seekSeconds)
+    if (videoRef.current) {
+      videoRef.current.currentTime = target
+      void videoRef.current.play().catch(() => {})
+    }
+    setCurrentTime(target)
+  }, [seekSeconds, seekNonce])
+
+  useEffect(() => {
     const versionId = output?.composition_version_id
     if (!versionId) {
       setScenes([])
@@ -339,6 +405,7 @@ function OutputArtifactView({
             normalizeScenes(
               data.storyboard?.scenes ?? data.scenes,
               t("workbench.player.scenePrefix"),
+              { compName: matchingComp?.name, translate: t },
             ),
           )
         }
@@ -347,14 +414,21 @@ function OutputArtifactView({
     return () => {
       cancelled = true
     }
-  }, [output?.composition_version_id, t])
+  }, [output?.composition_version_id, matchingComp?.name, t])
 
-  const activeSceneId = useMemo(() => {
-    const hit = scenes.find(
-      (s) => currentTime >= s.startSeconds && currentTime < s.endSeconds,
+  const activeScene = useMemo(() => {
+    if (scenes.length === 0) return null
+    return (
+      scenes.find(
+        (s) => currentTime >= s.startSeconds && currentTime < s.endSeconds,
+      ) ?? scenes[0]
     )
-    return hit?.id ?? null
   }, [scenes, currentTime])
+
+  const totalSceneDuration = useMemo(
+    () => scenes.reduce((acc, s) => Math.max(acc, s.endSeconds), 0),
+    [scenes],
+  )
 
   const label = matchingComp?.name || t("workbench.chip.output")
 
@@ -389,19 +463,15 @@ function OutputArtifactView({
     [output, citeMention, label, region, t],
   )
 
-  const handleCiteScene = useCallback(
-    (scene: NormalizedScene) => {
-      const citation = t("workbench.player.sceneCitation", {
-        number: scene.number,
-        range: formatTimeRange(scene.startSeconds, scene.endSeconds),
-        title: scene.title,
-      })
-      if (citeText(citation)) {
-        toast.success(t("workbench.inspector.regionCited"))
-      }
-    },
-    [citeText, t],
-  )
+  const openStoryboardTab = useCallback(() => {
+    if (!output?.composition_version_id) return
+    openArtifact({
+      key: `storyboard:${output.composition_version_id}`,
+      kind: "storyboard",
+      versionId: output.composition_version_id,
+      title: t("workbench.storyboard.shortTabTitle"),
+    })
+  }, [output?.composition_version_id, openArtifact, t])
 
   if (!output || !videoUrl) {
     return (
@@ -468,7 +538,57 @@ function OutputArtifactView({
         />
       </div>
 
-      {/* Action Bar */}
+      {/* Compact Chapter Strip + Active Scene Cue (full script lives in its own Storyboard tab) */}
+      {scenes.length > 0 && activeScene ? (
+        <div className="flex shrink-0 flex-col gap-2 rounded-lg border border-subtle bg-card/60 px-3 py-2.5">
+          {totalSceneDuration > 0 ? (
+            <div className="flex h-1.5 w-full items-center gap-0.5">
+              {scenes.map((scene) => {
+                const isActive = scene.id === activeScene.id
+                const flexGrow = Math.max(0.4, scene.durationSeconds)
+                return (
+                  <button
+                    key={scene.id}
+                    type="button"
+                    title={`${String(scene.number).padStart(2, "0")} · ${scene.title} (${formatTimeRange(scene.startSeconds, scene.endSeconds)})`}
+                    aria-label={t("workbench.storyboard.jumpToScene", {
+                      range: formatTimeRange(scene.startSeconds, scene.endSeconds),
+                    })}
+                    onClick={() => {
+                      if (videoRef.current) {
+                        videoRef.current.currentTime = scene.startSeconds
+                        setCurrentTime(scene.startSeconds)
+                      }
+                    }}
+                    style={{ flexGrow }}
+                    className={cn(
+                      "h-full rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-ring",
+                      isActive
+                        ? "bg-foreground"
+                        : "bg-foreground/15 hover:bg-foreground/35",
+                    )}
+                  />
+                )
+              })}
+            </div>
+          ) : null}
+          <div className="flex items-center justify-between gap-2 text-xs">
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="shrink-0 font-mono text-[10px] tabular-nums text-muted-foreground">
+                {String(activeScene.number).padStart(2, "0")}/{String(scenes.length).padStart(2, "0")}
+              </span>
+              <span className="truncate font-medium text-foreground">
+                {activeScene.title}
+              </span>
+            </div>
+            <span className="shrink-0 font-mono text-[10px] tabular-nums text-muted-foreground">
+              {formatTimeRange(activeScene.startSeconds, activeScene.endSeconds)}
+            </span>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Clean Single-Row Action Bar */}
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-1.5">
           <Button
@@ -500,14 +620,7 @@ function OutputArtifactView({
               size="sm"
               variant="ghost"
               icon={<FileText className="size-3.5" />}
-              onClick={() =>
-                openArtifact({
-                  key: `storyboard:${output.composition_version_id!}`,
-                  kind: "storyboard",
-                  versionId: output.composition_version_id!,
-                  title: t("workbench.storyboard.tabTitle", { name: label }),
-                })
-              }
+              onClick={openStoryboardTab}
             >
               {t("workbench.storyboard.openAction")}
             </Button>
@@ -535,18 +648,6 @@ function OutputArtifactView({
           {t("workbench.inspector.dragRegionHint")}
         </p>
       ) : null}
-
-      <DirectorSceneList
-        scenes={scenes}
-        activeSceneId={activeSceneId}
-        onSelectScene={(scene) => {
-          if (videoRef.current) {
-            videoRef.current.currentTime = scene.startSeconds
-            setCurrentTime(scene.startSeconds)
-          }
-        }}
-        onCiteScene={handleCiteScene}
-      />
     </div>
   )
 }
@@ -699,8 +800,9 @@ function VersionArtifactView({
       normalizeScenes(
         storyboard?.storyboard?.scenes ?? storyboard?.scenes,
         t("workbench.player.scenePrefix"),
+        { compName: activeVersion?.compositionName, translate: t },
       ),
-    [storyboard, t],
+    [storyboard, activeVersion?.compositionName, t],
   )
 
   const activeSceneId = useMemo(() => {
@@ -893,9 +995,7 @@ function VersionArtifactView({
                 key: `storyboard:${activeVersion.version_id}`,
                 kind: "storyboard",
                 versionId: activeVersion.version_id,
-                title: t("workbench.storyboard.tabTitle", {
-                  name: activeVersion.compositionName,
-                }),
+                title: t("workbench.storyboard.shortTabTitle"),
               })
             }
           >
@@ -916,7 +1016,7 @@ function VersionArtifactView({
 
 function StoryboardMarkdownView({ versionId }: { versionId: string }) {
   const { t } = useTranslation()
-  const { workbench, openArtifact } = useWorkbench()
+  const { workbench, openArtifact, citeText } = useWorkbench()
   const [data, setData] = useState<StoryboardResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState(false)
@@ -924,10 +1024,29 @@ function StoryboardMarkdownView({ versionId }: { versionId: string }) {
   const versionMeta = useMemo(() => {
     for (const comp of workbench?.compositions ?? []) {
       const hit = comp.versions.find((v) => v.version_id === versionId)
-      if (hit) return { compName: comp.name || t("workbench.tabs.player"), ver: hit }
+      if (hit) {
+        return {
+          compId: comp.composition_id,
+          compName: comp.name || t("workbench.tabs.player"),
+          ver: hit,
+        }
+      }
     }
     return null
   }, [workbench?.compositions, versionId, t])
+
+  const matchingOutput = useMemo(() => {
+    const outputs = (workbench?.outputs ?? []).filter((o) =>
+      Boolean(resolveOutputVideoUrl(o)),
+    )
+    return (
+      outputs.find((o) => o.composition_version_id === versionId) ??
+      (versionMeta?.compId
+        ? outputs.find((o) => o.composition_id === versionMeta.compId)
+        : null) ??
+      null
+    )
+  }, [workbench?.outputs, versionId, versionMeta?.compId])
 
   useEffect(() => {
     let cancelled = false
@@ -956,30 +1075,39 @@ function StoryboardMarkdownView({ versionId }: { versionId: string }) {
       normalizeScenes(
         data?.storyboard?.scenes ?? data?.scenes,
         t("workbench.player.scenePrefix"),
+        { compName: versionMeta?.compName, translate: t },
       ),
-    [data, t],
+    [data, versionMeta?.compName, t],
   )
 
+  const title = versionMeta?.compName || t("workbench.storyboard.defaultTitle")
+  const versionNum = data?.version ?? versionMeta?.ver.version
+  const durationSeconds =
+    data?.storyboard?.duration_seconds ??
+    versionMeta?.ver.duration_seconds ??
+    scenes.reduce((acc, s) => Math.max(acc, s.endSeconds), 0)
+
   const markdown = useMemo(() => {
-    const title = versionMeta?.compName || t("workbench.storyboard.defaultTitle")
-    const versionNum = data?.version ?? versionMeta?.ver.version
-    const dur =
-      data?.storyboard?.duration_seconds ??
-      versionMeta?.ver.duration_seconds ??
-      scenes.reduce((acc, s) => Math.max(acc, s.endSeconds), 0)
     const lines: string[] = [
       `# ${title}${versionNum != null ? ` (v${versionNum})` : ""}`,
       "",
-      `- **${t("workbench.storyboard.durationLabel")}**: ${Math.round(dur * 10) / 10}s`,
+      `- **${t("workbench.storyboard.durationLabel")}**: ${Math.round(durationSeconds * 10) / 10}s`,
       `- **${t("workbench.player.scenesHeading")}**: ${scenes.length}`,
       "",
     ]
     for (const scene of scenes) {
+      const roleSuffix =
+        scene.blockRole && scene.blockRole !== scene.title
+          ? ` · ${scene.blockRole}`
+          : ""
       lines.push(
-        `### ${String(scene.number).padStart(2, "0")} · ${scene.title} \`${formatTimeRange(scene.startSeconds, scene.endSeconds)}\``,
+        `### ${String(scene.number).padStart(2, "0")} · ${scene.title}${roleSuffix} \`${formatTimeRange(scene.startSeconds, scene.endSeconds)}\``,
       )
       lines.push("")
-      if (scene.summary) {
+      if (scene.visualHighlights.length > 0) {
+        lines.push(`- ${scene.visualHighlights.join(" · ")}`)
+        lines.push("")
+      } else if (scene.summary) {
         lines.push(scene.summary)
         lines.push("")
       }
@@ -989,7 +1117,7 @@ function StoryboardMarkdownView({ versionId }: { versionId: string }) {
       }
     }
     return lines.join("\n")
-  }, [data, versionMeta, scenes, t])
+  }, [title, versionNum, durationSeconds, scenes, t])
 
   const handleCopy = async () => {
     try {
@@ -1001,27 +1129,60 @@ function StoryboardMarkdownView({ versionId }: { versionId: string }) {
     }
   }
 
+  const handleJumpToScene = useCallback(
+    (scene: NormalizedScene) => {
+      if (matchingOutput) {
+        openArtifact({
+          key: `output:${matchingOutput.id}`,
+          kind: "output",
+          outputId: matchingOutput.id,
+          title: versionMeta?.compName,
+          seekSeconds: scene.startSeconds,
+          seekNonce: Date.now(),
+        })
+        return
+      }
+      openArtifact({
+        key: `version:${versionId}`,
+        kind: "version",
+        versionId,
+        title: versionMeta?.compName,
+        startSeconds: scene.startSeconds,
+        endSeconds: Math.min(durationSeconds || scene.endSeconds, Math.max(scene.endSeconds, scene.startSeconds + 6)),
+      })
+    },
+    [matchingOutput, openArtifact, versionId, versionMeta?.compName, durationSeconds],
+  )
+
+  const handleCiteScene = useCallback(
+    (scene: NormalizedScene) => {
+      const citation = t("workbench.player.sceneCitation", {
+        number: scene.number,
+        range: formatTimeRange(scene.startSeconds, scene.endSeconds),
+        title: scene.title,
+      })
+      if (citeText(citation)) {
+        toast.success(t("workbench.inspector.regionCited"))
+      }
+    },
+    [citeText, t],
+  )
+
   if (loading) {
     return (
       <Loading label={t("common.loading")} className="flex flex-1 flex-col overflow-hidden">
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-subtle px-4 py-2.5">
-          <Skeleton width={96} height={24} radius={6} />
+          <Skeleton width={132} height={18} radius={6} />
           <Skeleton width={68} height={24} radius={6} />
         </div>
-        <div className="flex flex-col gap-5 p-5">
-          <Skeleton width="44%" height={16} radius={6} />
-          <div className="flex flex-col gap-2">
-            <Skeleton line width="96%" height={10} />
-            <Skeleton line width="88%" height={10} />
-            <Skeleton line width="92%" height={10} />
-            <Skeleton line width="62%" height={10} />
-          </div>
-          <Skeleton width="36%" height={14} radius={6} className="mt-2" />
-          <div className="flex flex-col gap-2">
-            <Skeleton line width="94%" height={10} />
-            <Skeleton line width="82%" height={10} />
-            <Skeleton line width="54%" height={10} />
-          </div>
+        <div className="flex flex-col gap-3 p-4">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="flex flex-col gap-2 rounded-lg border border-subtle p-3">
+              <Skeleton width="55%" height={14} radius={4} />
+              <Skeleton line width="92%" height={10} />
+              <Skeleton line width="68%" height={10} />
+            </div>
+          ))}
         </div>
       </Loading>
     )
@@ -1029,34 +1190,124 @@ function StoryboardMarkdownView({ versionId }: { versionId: string }) {
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-subtle px-4 py-2">
-        <Button
-          size="sm"
-          variant="ghost"
-          icon={<Play className="size-3.5" />}
-          onClick={() =>
-            openArtifact({
-              key: `version:${versionId}`,
-              kind: "version",
-              versionId,
-              title: versionMeta?.compName,
-            })
-          }
-        >
-          {t("workbench.storyboard.openVideo")}
-        </Button>
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-subtle px-4 py-2.5">
+        <div className="min-w-0">
+          <div className="truncate text-[13px] font-semibold text-foreground">
+            {title}
+          </div>
+          <div className="mt-0.5 flex items-center gap-1.5 font-mono text-[11px] tabular-nums text-muted-foreground">
+            <span>{`${Math.round(durationSeconds * 10) / 10}s`}</span>
+            <span>·</span>
+            <span>{t("workbench.storyboard.scenesSummary", { count: scenes.length })}</span>
+            {versionNum != null ? (
+              <>
+                <span>·</span>
+                <span>{`v${versionNum}`}</span>
+              </>
+            ) : null}
+          </div>
+        </div>
         <Button
           size="sm"
           variant="ghost"
           icon={copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
           onClick={handleCopy}
         >
-          {t(copied ? "common.copied" : "common.copy")}
+          {t(copied ? "common.copied" : "workbench.storyboard.copyMarkdown")}
         </Button>
       </div>
-      <div className="flex-1 overflow-y-auto px-5 py-4 thin-scroll">
-        <div className="prose-sm max-w-none text-sm leading-relaxed text-foreground">
-          <Streamdown mode="static">{markdown}</Streamdown>
+
+      <div className="flex-1 overflow-y-auto p-3.5 thin-scroll">
+        <div className="flex flex-col gap-2">
+          {scenes.map((scene) => {
+            const timeRange = formatTimeRange(scene.startSeconds, scene.endSeconds)
+            const showRole =
+              Boolean(scene.blockRole) && scene.blockRole !== scene.title
+            const hasDetails =
+              scene.visualHighlights.length > 0 ||
+              Boolean(scene.transitionAfter) ||
+              scene.sfxCount > 0
+            return (
+              <div
+                key={scene.id}
+                className="group rounded-lg border border-subtle bg-card px-3 py-2.5 transition-colors hover:border-foreground/20"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex min-w-0 flex-1 items-center gap-2">
+                    <span className="shrink-0 font-mono text-[11px] font-medium tabular-nums text-muted-foreground">
+                      {String(scene.number).padStart(2, "0")}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleJumpToScene(scene)}
+                      title={t("workbench.storyboard.jumpToScene", { range: timeRange })}
+                      className="inline-flex shrink-0 items-center gap-1 rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] tabular-nums text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+                    >
+                      <Play className="size-2.5" />
+                      <span>{timeRange}</span>
+                    </button>
+                    <span className="truncate text-[13px] font-medium text-foreground">
+                      {scene.title}
+                    </span>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1">
+                    {showRole ? (
+                      <Badge tone="neutral" size="sm">
+                        {scene.blockRole}
+                      </Badge>
+                    ) : null}
+                    <IconButton
+                      size="sm"
+                      variant="ghost"
+                      icon={<MessageSquarePlus className="size-3.5" />}
+                      label={t("workbench.player.citeScene")}
+                      onClick={() => handleCiteScene(scene)}
+                      className="opacity-0 transition-opacity group-hover:opacity-100 group-has-[:focus-visible]:opacity-100 max-md:opacity-100"
+                    />
+                  </div>
+                </div>
+
+                {scene.narration ? (
+                  <p className="mt-2 border-l-2 border-foreground/15 pl-2.5 text-xs leading-relaxed text-foreground/90">
+                    {scene.narration}
+                  </p>
+                ) : scene.blockId ? (
+                  <p className="mt-1.5 text-[11px] italic text-muted-foreground">
+                    {t("workbench.storyboard.silentBeat")}
+                  </p>
+                ) : null}
+
+                {!scene.narration && scene.summary ? (
+                  <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+                    {scene.summary}
+                  </p>
+                ) : null}
+
+                {hasDetails ? (
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    {scene.visualHighlights.map((chip) => (
+                      <span
+                        key={chip}
+                        className="inline-flex max-w-[200px] truncate rounded bg-muted/80 px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                      >
+                        {chip}
+                      </span>
+                    ))}
+                    {scene.transitionAfter ? (
+                      <span className="inline-flex rounded bg-muted/60 px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                        {`→ ${scene.transitionAfter}`}
+                      </span>
+                    ) : null}
+                    {scene.sfxCount > 0 ? (
+                      <span className="inline-flex rounded bg-muted/60 px-1.5 py-0.5 font-mono text-[10px] tabular-nums text-muted-foreground">
+                        {t("workbench.storyboard.sfxCount", { count: scene.sfxCount })}
+                      </span>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            )
+          })}
         </div>
       </div>
     </div>
@@ -1663,14 +1914,14 @@ export function WorkbenchPane({
       })
       items.push({
         key: `storyboard:${head.version_id}`,
-        label: t("workbench.storyboard.tabTitle", { name: title }),
-        meta: "MD",
+        label: t("workbench.storyboard.shortTabTitle"),
+        meta: `v${head.version}`,
         icon: <FileText className="size-3.5 shrink-0 text-muted-foreground" />,
         artifact: {
           key: `storyboard:${head.version_id}`,
           kind: "storyboard",
           versionId: head.version_id,
-          title: t("workbench.storyboard.tabTitle", { name: title }),
+          title: t("workbench.storyboard.shortTabTitle"),
         },
       })
     }
@@ -1698,75 +1949,74 @@ export function WorkbenchPane({
       })
     }
 
-    for (const skill of workbench?.skills ?? []) {
-      if (skill.reference.kind !== "external" || !skill.reference.skill_version_id) {
-        continue
-      }
-      items.push({
-        key: `skill:${skill.reference.skill_version_id}`,
-        label: skill.name,
-        icon: <Sparkles className="size-3.5 shrink-0 text-muted-foreground" />,
-        artifact: {
-          key: `skill:${skill.reference.skill_version_id}`,
-          kind: "skill",
-          skillVersionId: skill.reference.skill_version_id,
-          title: skill.name,
-        },
-      })
-    }
-
     return items
   }, [workbench, t])
 
   const paneContent = (
-    <div className="flex h-full min-h-0 flex-col bg-transparent">
-      {/* Only render the tab strip when there is an open artifact — zero dead header bar or + button */}
-      {openArtifacts.length > 0 ? (
-        <div className="flex h-12 shrink-0 items-center border-b border-subtle px-2.5">
-          <div
-            role="tablist"
-            aria-label={t("workbench.title")}
-            className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto no-scrollbar"
-          >
-            {openArtifacts.map((artifact) => {
-              const selected = artifact.key === activeArtifact?.key
-              const label = resolveArtifactLabel(artifact)
-              return (
-                <div
-                  key={artifact.key}
-                  className={cn(
-                    "group flex max-w-[220px] shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors",
-                    selected
-                      ? "bg-card text-foreground shadow-resting"
-                      : "text-muted-foreground hover:bg-accent hover:text-foreground",
-                  )}
-                >
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={selected}
-                    onClick={() => activateArtifact(artifact.key)}
-                    title={label}
-                    className="flex min-w-0 items-center gap-1.5 focus-visible:outline-2 focus-visible:outline-ring"
+    <div className="flex h-full min-h-0 flex-col bg-background">
+      {/* Single Antigravity-style Tab Bar (desktop: shown when tabs open; mobile: always hosts the single close × so there is zero duplicate title row) */}
+      {openArtifacts.length > 0 || mobile ? (
+        <div className="flex h-11 shrink-0 items-center gap-1.5 border-b border-subtle px-2.5">
+          {openArtifacts.length > 0 ? (
+            <div
+              role="tablist"
+              aria-label={t("workbench.title")}
+              className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto py-1 no-scrollbar"
+            >
+              {openArtifacts.map((artifact) => {
+                const selected = artifact.key === activeArtifact?.key
+                const label = resolveArtifactLabel(artifact)
+                return (
+                  <div
+                    key={artifact.key}
+                    className={cn(
+                      "group flex h-7 max-w-[196px] shrink-0 items-center gap-1 rounded-md border px-2 text-xs transition-colors",
+                      selected
+                        ? "border-border/80 bg-card font-medium text-foreground"
+                        : "border-transparent text-muted-foreground hover:bg-accent/70 hover:text-foreground",
+                    )}
                   >
-                    {artifactTabIcon(artifact)}
-                    <span className="truncate">{label}</span>
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={t("workbench.closeTab", { title: label })}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      closeArtifact(artifact.key)
-                    }}
-                    className="ml-0.5 rounded-sm p-0.5 text-muted-foreground opacity-60 transition-opacity hover:bg-accent hover:text-foreground hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-ring"
-                  >
-                    <X className="size-3" />
-                  </button>
-                </div>
-              )
-            })}
-          </div>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={selected}
+                      onClick={() => activateArtifact(artifact.key)}
+                      title={label}
+                      className="flex min-w-0 items-center gap-1.5 focus-visible:outline-2 focus-visible:outline-ring"
+                    >
+                      {artifactTabIcon(artifact)}
+                      <span className="truncate">{label}</span>
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={t("workbench.closeTab", { title: label })}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        closeArtifact(artifact.key)
+                      }}
+                      className="ml-0.5 rounded-sm p-0.5 text-muted-foreground opacity-60 transition-opacity hover:bg-accent hover:text-foreground hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-ring"
+                    >
+                      <X className="size-3" />
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <span className="flex-1 truncate px-1 text-xs font-medium text-foreground">
+              {t("workbench.title")}
+            </span>
+          )}
+          {mobile ? (
+            <IconButton
+              size="sm"
+              variant="ghost"
+              icon={<X className="size-4" />}
+              label={t("workbench.close")}
+              onClick={closeWorkbench}
+              className="shrink-0"
+            />
+          ) : null}
         </div>
       ) : null}
 
@@ -1828,6 +2078,8 @@ export function WorkbenchPane({
           <OutputArtifactView
             outputId={activeArtifact.outputId}
             initialSelectRegion={activeArtifact.selectRegion}
+            seekSeconds={activeArtifact.seekSeconds}
+            seekNonce={activeArtifact.seekNonce}
           />
         ) : activeArtifact.kind === "version" ? (
           <VersionArtifactView
@@ -1867,9 +2119,11 @@ export function WorkbenchPane({
             : t("workbench.title")
         }
         closeLabel={t("workbench.close")}
-        width={680}
+        fullscreen
       >
-        <div className="h-[72dvh] min-h-0 overflow-hidden">{paneContent}</div>
+        <div className="flex h-dvh w-full flex-col overflow-hidden bg-background">
+          {paneContent}
+        </div>
       </Dialog>
     )
   }
