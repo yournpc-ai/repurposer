@@ -9,7 +9,7 @@ from sqlalchemy import select
 
 from app.agents.tool_progress import current_call_id
 from app.editing.catalog import MOTION_BLOCK_CATALOG, MotionBlockId
-from app.editing.edits import AddClip, AddScene, AddTrack, BindSource, SetTransition, apply_ops
+from app.editing.edits import AddClip, AddScene, AddTrack, BindSource, SetTransition, UpdateScene, apply_ops
 from app.editing.revisions import coerce_motion_block_props, motion_block_ops, text_safe_layout
 from app.editing.caption_timing import (
     build_motion_block_caption_phrases,
@@ -673,6 +673,16 @@ class FirstMotionBlock(SelectedMotionBlock):
         le=2.0,
         allow_inf_nan=False,
         description="Centered transition duration in seconds when transition_after is set.",
+    )
+    visual_description: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=240,
+        description=(
+            "One crisp, concrete sentence in the user's language describing what is visually shown and "
+            "animated on screen in this act (e.g. '地址栏键入官网并展开实时估值界面，光标点开核心指标卡'). "
+            "Displayed directly in the user's Storyboard Tab."
+        ),
     )
     narration: str | None = Field(
         default=None,
@@ -1472,6 +1482,7 @@ async def create_video(db, turn, args: CreateVideoArgs):
                                 scene_id=scene_id,
                                 range=TimeRange(start=start, end=end),
                                 intent=intent_label,
+                                visual_description=mb.visual_description.strip() if mb.visual_description else None,
                                 speech_clip_ids=scene_speech_ids,
                             ),
                         ),
@@ -1558,6 +1569,17 @@ async def create_video(db, turn, args: CreateVideoArgs):
                     )
             if transition_ops:
                 comp_content = apply_ops(comp_content, transition_ops, bound_digests)
+            visual_desc_ops = [
+                UpdateScene(
+                    op="update_scene",
+                    scene_id=f"scn_mg_{idx + 1}",
+                    visual_description=mb.visual_description.strip(),
+                )
+                for idx, (_, _, _, _, mb) in enumerate(placed_blocks)
+                if mb.visual_description and mb.visual_description.strip()
+            ]
+            if visual_desc_ops:
+                comp_content = apply_ops(comp_content, visual_desc_ops, bound_digests)
             content = comp_content.model_dump(mode="json")
 
         if args.music_id is not None:

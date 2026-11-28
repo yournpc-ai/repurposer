@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import type { ComponentProps, ReactNode } from "react"
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react"
+import { act, cleanup, render, screen, within } from "@testing-library/react"
 import { afterEach, expect, it, vi } from "vitest"
 import { ChatConversation } from "./ChatConversation"
 import { buildConversationUnits } from "./timeline/project"
@@ -435,12 +435,7 @@ it("renders standalone StepsPlanCard above collapsed ThinkingState live and surv
     />,
   )
   expect(screen.queryByTestId("steps-plan-card")).toBeNull()
-  const pill = screen.getByTestId("steps-toggle-pill")
-  expect(pill.getAttribute("aria-expanded")).toBe("false")
-
-  fireEvent.click(pill)
-  expect(pill.getAttribute("aria-expanded")).toBe("true")
-  expect(screen.getByTestId("steps-plan-card").textContent).toContain("渲染成片并逐帧审片")
+  expect(screen.queryByTestId("steps-toggle-pill")).toBeNull()
   // Tool drawer remains independently closed
   expect(container.querySelector(".ui-thinkc__body")?.getAttribute("data-open")).toBe("false")
 })

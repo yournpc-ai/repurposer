@@ -1104,11 +1104,12 @@ function StoryboardMarkdownView({ versionId }: { versionId: string }) {
         `### ${String(scene.number).padStart(2, "0")} · ${scene.title}${roleSuffix} \`${formatTimeRange(scene.startSeconds, scene.endSeconds)}\``,
       )
       lines.push("")
+      if (scene.summary) {
+        lines.push(scene.summary)
+        lines.push("")
+      }
       if (scene.visualHighlights.length > 0) {
         lines.push(`- ${scene.visualHighlights.join(" · ")}`)
-        lines.push("")
-      } else if (scene.summary) {
-        lines.push(scene.summary)
         lines.push("")
       }
       if (scene.narration) {
@@ -1267,19 +1268,19 @@ function StoryboardMarkdownView({ versionId }: { versionId: string }) {
                   </div>
                 </div>
 
+                {scene.summary ? (
+                  <p className="mt-2 text-xs leading-relaxed text-foreground/85">
+                    {scene.summary}
+                  </p>
+                ) : null}
+
                 {scene.narration ? (
-                  <p className="mt-2 border-l-2 border-foreground/15 pl-2.5 text-xs leading-relaxed text-foreground/90">
+                  <p className="mt-2 border-l-2 border-foreground/15 pl-2.5 text-xs leading-relaxed text-muted-foreground">
                     {scene.narration}
                   </p>
                 ) : scene.blockId ? (
                   <p className="mt-1.5 text-[11px] italic text-muted-foreground">
                     {t("workbench.storyboard.silentBeat")}
-                  </p>
-                ) : null}
-
-                {!scene.narration && scene.summary ? (
-                  <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-                    {scene.summary}
                   </p>
                 ) : null}
 

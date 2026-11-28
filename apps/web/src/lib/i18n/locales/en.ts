@@ -2170,6 +2170,8 @@ const en = {
     // 规格」, zero template backfill) + the text seat's word-count spec.
     anchorCards: {
       view: "View {{name}}",
+      play: "Play {{name}}",
+      openInWorkbench: "Open {{name}} in workbench",
       types: {
         video: "Video",
       },

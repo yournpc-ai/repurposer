@@ -665,7 +665,11 @@ def _apply_one(content: CompositionContent, op: Op, bound_digests: dict[UUID, st
             t for t in content.timeline.tracks if t.track_id != op.track_id
         ]
     elif isinstance(op, AddClip):
-        _invalidate_visual_description(content, op.clip.scene_id)
+        is_non_visual_or_caption = isinstance(op.clip.object, (AudioObject, SpeechObject)) or (
+            isinstance(op.clip.object, TextObject) and op.clip.object.caption is not None
+        )
+        if not is_non_visual_or_caption:
+            _invalidate_visual_description(content, op.clip.scene_id)
         _find_track(content, op.track_id).clips.append(copy.deepcopy(op.clip))
     elif isinstance(op, UpdateClip):
         clip = _find_clip(content, op.clip_id)
@@ -673,7 +677,15 @@ def _apply_one(content: CompositionContent, op: Op, bound_digests: dict[UUID, st
         audio_only = isinstance(clip.object, (AudioObject, SpeechObject)) and (
             op.object is None or isinstance(op.object, (AudioObject, SpeechObject))
         )
-        if not audio_only and op.model_fields_set & {"range", "scene_id", "source", "object", "animations"}:
+        caption_only = (
+            isinstance(clip.object, TextObject)
+            and clip.object.caption is not None
+            and (
+                op.object is None
+                or (isinstance(op.object, TextObject) and op.object.caption is not None)
+            )
+        )
+        if not audio_only and not caption_only and op.model_fields_set & {"range", "scene_id", "source", "object", "animations"}:
             _invalidate_visual_description(content, old_scene_id)
         if "range" in op.model_fields_set and op.range is not None:
             clip.range = op.range

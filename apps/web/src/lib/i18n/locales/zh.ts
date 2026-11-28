@@ -2089,6 +2089,8 @@ const zh: Resources = {
     // 类型词供名缺回退(「类型词 · 规格」,零模板回填) + 文本族的字数规格。
     anchorCards: {
       view: "查看{{name}}",
+      play: "播放{{name}}",
+      openInWorkbench: "在右侧工作台打开{{name}}",
       types: {
         video: "视频",
       },

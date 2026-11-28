@@ -379,7 +379,7 @@ it("drops synthetic repair/exhaustion markers from tool trail and displays norma
   expect(screen.getAllByRole("listitem")).toHaveLength(2)
 })
 
-it("ticks a live elapsed timer on standalone Thinking rows without explicit startedAtMs and renders a circular progress ring on settled steps pills", () => {
+it("ticks a live elapsed timer on standalone Thinking rows without explicit startedAtMs and hides settled steps after completion", () => {
   const { container, rerender } = render(<WorkSegmentRow liveLabel="思考中..." />)
   expect(container.querySelector(".ui-thinkc__time")?.textContent).toMatch(/^\d+s$/)
 
@@ -389,6 +389,6 @@ it("ticks a live elapsed timer on standalone Thinking rows without explicit star
     { title: "导出审片并交付", status: "done" as const },
   ]
   rerender(<WorkSegmentRow trail={trail} elapsedMs={12_000} attachedSteps={settledSteps} />)
-  const pill = screen.getByTestId("steps-toggle-pill")
-  expect(pill.querySelector('[data-testid="steps-progress-ring"]')).toBeTruthy()
+  expect(screen.queryByTestId("steps-toggle-pill")).toBeNull()
+  expect(screen.queryByTestId("steps-plan-card")).toBeNull()
 })

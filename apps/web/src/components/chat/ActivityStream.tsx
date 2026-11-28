@@ -915,7 +915,6 @@ export function WorkSegmentRow({
     hasAttachedSteps &&
     !live &&
     !attachedSteps!.some((s) => s.status === "in_progress" || s.status === "failed")
-  const [stepsExpanded, setStepsExpanded] = useState(false)
   const doneStepsCount = stepsPlan?.filter((s) => s.status === "done").length ?? 0
   const stepsProgressLabel =
     stepsPlan && stepsPlan.length > 0
@@ -932,66 +931,6 @@ export function WorkSegmentRow({
     }
   }, [live, startedAtMs])
   const effectiveStartedAtMs = startedAtMs ?? fallbackLiveStartMs
-  const doneAttachedCount = attachedSteps?.filter((s) => s.status === "done").length ?? 0
-  const attachedRatio =
-    attachedSteps && attachedSteps.length > 0
-      ? Math.min(1, Math.max(0, doneAttachedCount / attachedSteps.length))
-      : 0
-  const attachedRingRadius = 5
-  const attachedRingCircumference = 2 * Math.PI * attachedRingRadius
-  const attachedRingOffset = attachedRingCircumference * (1 - attachedRatio)
-  const attachedStepsPill =
-    attachedStepsSettled && attachedSteps ? (
-      <button
-        type="button"
-        data-testid="steps-toggle-pill"
-        aria-expanded={stepsExpanded}
-        onClick={() => {
-          anchor(rowRef.current)
-          setStepsExpanded((current) => !current)
-        }}
-        className={cn(
-          "inline-flex h-6 shrink-0 items-center gap-1.5 rounded-md px-1.5 text-[13px] font-medium tabular-nums transition-colors outline-none focus-visible:bg-accent/60",
-          stepsExpanded
-            ? "bg-[var(--ui-tkc-wash)] text-[var(--ui-tkc-ink)]"
-            : "bg-transparent text-[var(--ui-tkc-muted)] hover:bg-[var(--ui-tkc-wash)] hover:text-[var(--ui-tkc-ink)]",
-        )}
-      >
-        <svg
-          viewBox="0 0 14 14"
-          className="size-3.5 shrink-0 -rotate-90"
-          data-testid="steps-progress-ring"
-          aria-hidden="true"
-        >
-          <circle
-            cx="7"
-            cy="7"
-            r={attachedRingRadius}
-            fill="none"
-            stroke="currentColor"
-            strokeOpacity={0.25}
-            strokeWidth={1.75}
-          />
-          <circle
-            cx="7"
-            cy="7"
-            r={attachedRingRadius}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={1.75}
-            strokeLinecap="round"
-            strokeDasharray={attachedRingCircumference}
-            strokeDashoffset={attachedRingOffset}
-          />
-        </svg>
-        <span>
-          {t("chat.activityFold.stepsProgress", {
-            done: doneAttachedCount,
-            total: attachedSteps.length,
-          })}
-        </span>
-      </button>
-    ) : undefined
   return (
     <div ref={rowRef}>
       {hasAttachedSteps && !attachedStepsSettled && attachedSteps ? (
@@ -1001,7 +940,6 @@ export function WorkSegmentRow({
       ) : null}
       <ThinkingState steps={steps} live={live} headerLabel={header} startedAtMs={effectiveStartedAtMs}
         open={open}
-        headerTrailing={attachedStepsPill}
         stepsPlan={stepsPlan}
         stepsProgressLabel={stepsProgressLabel}
         stepsAriaLabel={t("chat.steps.ariaLabel")}
@@ -1010,11 +948,6 @@ export function WorkSegmentRow({
           setOverride({ live, open: nextOpen })
         }}
       />
-      {attachedStepsSettled && stepsExpanded && attachedSteps ? (
-        <div className="mt-2">
-          <StepsPlanCard steps={attachedSteps} />
-        </div>
-      ) : null}
     </div>
   )
 }
