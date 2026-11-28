@@ -2162,11 +2162,14 @@ async def execute_editor(turn, name, args):
                     if name in {"translate", "scale"}:
                         receipt.update(transform_before=result["transform_before"], transform_after=result["transform_after"])
                     if name == "update_motion_block":
-                        receipt.update(
-                            clip_id=args.clip_id,
-                            props_before=result["props_before"],
-                            props_after=result["props_after"],
-                        )
+                        if "props_before" in result:
+                            receipt.update(
+                                clip_id=args.clip_id,
+                                props_before=result["props_before"],
+                                props_after=result["props_after"],
+                            )
+                        else:
+                            receipt["updated_blocks"] = result.get("updated_blocks", [])
                     if name == "edit_audio_clip":
                         g_before = result["gain_db_before"]
                         g_after = result["gain_db_after"]
@@ -2187,7 +2190,10 @@ async def execute_editor(turn, name, args):
                     if name in {"insert_text", "edit_text"}:
                         receipt["text_summary"] = result["text_summary"]
                     if name == "set_transition":
-                        receipt["transition"] = result["transition"]
+                        if "transition" in result:
+                            receipt["transition"] = result["transition"]
+                        else:
+                            receipt["transitions"] = result.get("transitions", [])
                     if name == "split_clip":
                         receipt["right_clip_id"] = result["right_clip_id"]
                     before = getattr(turn, "_editor_last_preview", None)
