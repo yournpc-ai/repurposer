@@ -2338,7 +2338,10 @@ const zh: Resources = {
     activeJob: "后台任务执行中",
     awaitingInput: "等待你的确认",
     moreActions: "对话操作",
-    messagesCount: "{{count}} 条",
+    messagesCount: "{{count}} 条消息",
+    chatsCount: "{{count}} 个对话",
+    updatedAt: "更新于 {{time}}",
+    latestChat: "最新：{{title}}",
     empty: "暂无对话",
   },
   presetsPage: {

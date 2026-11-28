@@ -10,6 +10,7 @@ import { Avatar } from "@/components/ui/avatar-clean"
 import { Dialog } from "@/components/ui/dialog-clean"
 import { IconButton } from "@/components/ui/icon-button-clean"
 import { Popover } from "@/components/ui/popover-clean"
+import { Tooltip } from "@/components/ui/tooltip-clean"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { useAuth } from "@/lib/auth-context"
 
@@ -23,21 +24,22 @@ export function AccountMenu({ expanded = false }: { expanded?: boolean }) {
   const name = user?.name || user?.email || t("common.guest")
   return (
     <div className="relative min-w-0">
-      <button
-        ref={trigger}
-        type="button"
-        className="ui-as-side__item"
-        aria-label={name}
-        title={name}
-        aria-expanded={open}
-        aria-haspopup="dialog"
-        onClick={() => setOpen(!open)}
-      >
-        <span className="grid size-6 shrink-0 place-items-center">
-          {user ? <Avatar name={name} size={24} /> : <User size={18} />}
-        </span>
-        {expanded && <span className="ui-as-side__label truncate">{name}</span>}
-      </button>
+      <Tooltip content={name} side="right" offset={8} delay={200} disabled={expanded || open}>
+        <button
+          ref={trigger}
+          type="button"
+          className="ui-as-side__item"
+          aria-label={name}
+          aria-expanded={open}
+          aria-haspopup="dialog"
+          onClick={() => setOpen(!open)}
+        >
+          <span className="grid size-6 shrink-0 place-items-center">
+            {user ? <Avatar name={name} size={24} /> : <User size={18} />}
+          </span>
+          {expanded && <span className="ui-as-side__label truncate">{name}</span>}
+        </button>
+      </Tooltip>
       <Popover
         open={open}
         onClose={() => setOpen(false)}
@@ -93,18 +95,25 @@ export function AppSidebar({ defaultOpen }: { defaultOpen: boolean }) {
           { to: "/presets", label: t("nav.presets"), Icon: SlidersHorizontal },
         ] as const
       ).map(({ to, label, Icon }) => (
-        <Link
+        <Tooltip
           key={to}
-          to={to}
-          title={label}
-          aria-label={label}
-          className="ui-as-side__item"
-          activeProps={{ "aria-current": "page" }}
-          onClick={() => setMobileOpen(false)}
+          content={label}
+          side="right"
+          offset={8}
+          delay={200}
+          disabled={mobile || expanded}
         >
-          <Icon size={16} />
-          <span className="ui-as-side__label truncate">{label}</span>
-        </Link>
+          <Link
+            to={to}
+            aria-label={label}
+            className="ui-as-side__item"
+            activeProps={{ "aria-current": "page" }}
+            onClick={() => setMobileOpen(false)}
+          >
+            <Icon size={16} />
+            <span className="ui-as-side__label truncate">{label}</span>
+          </Link>
+        </Tooltip>
       ))}
     </nav>
   )
@@ -138,13 +147,21 @@ export function AppSidebar({ defaultOpen }: { defaultOpen: boolean }) {
         >
           <LogoMark className="size-6" />
         </div>
-        <IconButton
-          className="ui-as-side__toggle"
-          aria-expanded={expanded}
-          icon={<PanelLeft />}
-          label={t(expanded ? "a11y.toggleSidebar" : "a11y.openSidebar")}
-          onClick={toggle}
-        />
+        <Tooltip
+          content={t(expanded ? "a11y.toggleSidebar" : "a11y.openSidebar")}
+          shortcut="⌘B"
+          side="right"
+          offset={8}
+          delay={300}
+        >
+          <IconButton
+            className="ui-as-side__toggle"
+            aria-expanded={expanded}
+            icon={<PanelLeft />}
+            label={t(expanded ? "a11y.toggleSidebar" : "a11y.openSidebar")}
+            onClick={toggle}
+          />
+        </Tooltip>
       </div>
       {nav}
       <ProjectConversationsTree

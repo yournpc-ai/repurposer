@@ -9,6 +9,7 @@ import {
   EllipsisVertical,
   Folder,
   FolderOpen,
+  History,
   Minimize2,
   Pencil,
   Plus,
@@ -43,6 +44,10 @@ import { cn } from "@/lib/utils"
 interface SidebarProject {
   id: string
   title: string
+  status?: string | null
+  language?: string | null
+  created_at?: string | null
+  updated_at?: string | null
 }
 
 export interface ProjectConversationsTreeProps {
@@ -51,6 +56,32 @@ export interface ProjectConversationsTreeProps {
   /** When the sidebar is folded into its 48px icon rail, show compact project folder icons. */
   collapsed?: boolean
   onNavigate?: () => void
+}
+
+function formatHoverTimestamp(
+  iso: string | null | undefined,
+  isZh: boolean,
+): string {
+  if (!iso) return ""
+  const parsed = Date.parse(iso)
+  if (Number.isNaN(parsed)) return ""
+  const d = new Date(parsed)
+  const now = new Date()
+  const hh = String(d.getHours()).padStart(2, "0")
+  const mm = String(d.getMinutes()).padStart(2, "0")
+  const sameDay =
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate()
+  if (sameDay) return `${hh}:${mm}`
+  if (d.getFullYear() === now.getFullYear()) {
+    return isZh
+      ? `${d.getMonth() + 1}月${d.getDate()}日 ${hh}:${mm}`
+      : `${d.toLocaleString("en-US", { month: "short" })} ${d.getDate()}, ${hh}:${mm}`
+  }
+  return isZh
+    ? `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`
+    : `${d.toLocaleString("en-US", { month: "short" })} ${d.getDate()}, ${d.getFullYear()}`
 }
 
 function formatCompactAge(
@@ -150,11 +181,25 @@ export function ProjectConversationsTree({
         { toast: false },
       )
       if (!res.ok) return
-      const rows = (await res.json()) as { id?: string; title?: string }[]
+      const rows = (await res.json()) as {
+        id?: string
+        title?: string
+        status?: string | null
+        language?: string | null
+        created_at?: string | null
+        updated_at?: string | null
+      }[]
       if (!Array.isArray(rows)) return
       const parsed = rows
-        .filter((r): r is SidebarProject => Boolean(r?.id))
-        .map((r) => ({ id: r.id, title: r.title || t("common.untitled") }))
+        .filter((r): r is { id: string } & typeof r => Boolean(r?.id))
+        .map((r) => ({
+          id: r.id,
+          title: r.title || t("common.untitled"),
+          status: r.status ?? null,
+          language: r.language ?? null,
+          created_at: r.created_at ?? null,
+          updated_at: r.updated_at ?? null,
+        }))
       setProjects(parsed)
       if (!projectId && parsed[0]) {
         setExpandedIds((prev) =>
@@ -347,6 +392,124 @@ export function ProjectConversationsTree({
     }
   }
 
+  const renderProjectHoverCard = (proj: SidebarProject) => {
+    const convs = conversationsByProject[proj.id]
+    const latestConv = convs?.[0]
+    const latestIso =
+      latestConv?.updated_at ??
+      latestConv?.created_at ??
+      proj.updated_at ??
+      proj.created_at
+    const formattedTime = formatHoverTimestamp(latestIso, isZh)
+    const hasBusy = Boolean(
+      convs?.some((c) => c.has_active_job || activityState.busy.has(c.id)),
+    )
+    const hasPending = Boolean(
+      !hasBusy &&
+        convs?.some(
+          (c) =>
+            activityState.pendingQuestion.get(c.id) ??
+            Boolean(c.has_pending_question),
+        ),
+    )
+
+    return (
+      <span className="flex flex-col gap-1.5 text-left">
+        <span className="text-[13px] leading-[1.35] font-medium text-foreground">
+          {proj.title}
+        </span>
+        <span className="flex flex-col gap-1 text-[11.5px] leading-4 text-muted-foreground">
+          {convs ? (
+            <span className="flex items-center gap-1.5">
+              <Folder className="size-3.5 shrink-0 opacity-75" aria-hidden="true" />
+              <span className="truncate">
+                {convs.length > 0
+                  ? t("conversations.chatsCount", { count: convs.length })
+                  : t("conversations.empty")}
+                {latestConv?.title
+                  ? ` · ${t("conversations.latestChat", { title: latestConv.title })}`
+                  : ""}
+              </span>
+            </span>
+          ) : (
+            <span className="flex items-center gap-1.5">
+              <Folder className="size-3.5 shrink-0 opacity-75" aria-hidden="true" />
+              <span>{t("conversations.sectionTitle")}</span>
+            </span>
+          )}
+          {(formattedTime || hasBusy || hasPending) && (
+            <span className="flex items-center gap-1.5 tabular-nums">
+              <History className="size-3.5 shrink-0 opacity-75" aria-hidden="true" />
+              <span className="truncate">
+                {[
+                  formattedTime
+                    ? t("conversations.updatedAt", { time: formattedTime })
+                    : null,
+                  hasBusy
+                    ? t("conversations.activeJob")
+                    : hasPending
+                      ? t("conversations.awaitingInput")
+                      : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </span>
+            </span>
+          )}
+        </span>
+      </span>
+    )
+  }
+
+  const renderConversationHoverCard = (
+    proj: SidebarProject,
+    conv: ProjectConversationSummary,
+    working: boolean,
+    awaitingInput: boolean,
+  ) => {
+    const formattedTime = formatHoverTimestamp(
+      conv.updated_at ?? conv.created_at,
+      isZh,
+    )
+    return (
+      <span className="flex flex-col gap-1.5 text-left">
+        <span className="text-[13px] leading-[1.35] font-medium text-foreground">
+          {conv.title || t("conversations.defaultTitle")}
+        </span>
+        <span className="flex flex-col gap-1 text-[11.5px] leading-4 text-muted-foreground">
+          <span className="flex items-center gap-1.5">
+            <Folder className="size-3.5 shrink-0 opacity-75" aria-hidden="true" />
+            <span className="truncate">{proj.title}</span>
+          </span>
+          {(formattedTime || conv.message_count > 0 || working || awaitingInput) && (
+            <span className="flex items-center gap-1.5 tabular-nums">
+              <History className="size-3.5 shrink-0 opacity-75" aria-hidden="true" />
+              <span className="truncate">
+                {[
+                  formattedTime
+                    ? t("conversations.updatedAt", { time: formattedTime })
+                    : null,
+                  conv.message_count > 0
+                    ? t("conversations.messagesCount", {
+                        count: conv.message_count,
+                      })
+                    : null,
+                  working
+                    ? t("conversations.activeJob")
+                    : awaitingInput
+                      ? t("conversations.awaitingInput")
+                      : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </span>
+            </span>
+          )}
+        </span>
+      </span>
+    )
+  }
+
   if (orderedProjects.length === 0) return null
 
   // Collapsed 48px icon rail: show each project as a clean folder icon (affectUI AppShell rail pattern)
@@ -359,11 +522,23 @@ export function ProjectConversationsTree({
         {orderedProjects.map((proj) => {
           const isCurrent = proj.id === projectId
           return (
-            <Tooltip key={proj.id} content={proj.title} side="right">
+            <Tooltip
+              key={proj.id}
+              content={renderProjectHoverCard(proj)}
+              side="right"
+              offset={10}
+              delay={200}
+              className="ui-sidebar-hover-card"
+            >
               <button
                 type="button"
                 aria-label={proj.title}
                 aria-current={isCurrent ? "page" : undefined}
+                onPointerEnter={() => {
+                  if (!fetchedProjectsRef.current.has(proj.id)) {
+                    void loadConversations(proj.id)
+                  }
+                }}
                 onClick={() => {
                   onNavigate?.()
                   void navigate({
@@ -411,37 +586,47 @@ export function ProjectConversationsTree({
             <div key={proj.id} className="flex flex-col gap-0.5">
               {/* Project Folder Row — owns expand/collapse with AppShell hover chevron, hover ⋮ menu, and + new chat */}
               <div className="group/proj relative flex h-8 items-center rounded-lg border border-transparent text-muted-foreground transition-colors hover:bg-[var(--hover)] hover:text-foreground">
-                <button
-                  type="button"
-                  aria-expanded={isExpanded}
-                  onClick={() => toggleProject(proj.id)}
-                  className="flex h-full min-w-0 flex-1 items-center gap-2 rounded-lg px-2 text-left focus-visible:outline-2 focus-visible:outline-ring"
+                <Tooltip
+                  content={renderProjectHoverCard(proj)}
+                  side="right"
+                  offset={10}
+                  delay={400}
+                  className="ui-sidebar-hover-card"
                 >
-                  {isExpanded ? (
-                    <FolderOpen
-                      className="size-4 shrink-0 text-muted-foreground/75"
-                      aria-hidden="true"
-                    />
-                  ) : (
-                    <Folder
-                      className="size-4 shrink-0 text-muted-foreground/75"
-                      aria-hidden="true"
-                    />
-                  )}
-                  <span
-                    className="min-w-0 truncate text-[13px] leading-5"
-                    title={proj.title}
+                  <button
+                    type="button"
+                    aria-expanded={isExpanded}
+                    onPointerEnter={() => {
+                      if (!fetchedProjectsRef.current.has(proj.id)) {
+                        void loadConversations(proj.id)
+                      }
+                    }}
+                    onClick={() => toggleProject(proj.id)}
+                    className="flex h-full min-w-0 flex-1 items-center gap-2 rounded-lg px-2 text-left focus-visible:outline-2 focus-visible:outline-ring"
                   >
-                    {proj.title}
-                  </span>
-                  <ChevronRight
-                    className={cn(
-                      "-ml-1 size-3.5 shrink-0 text-muted-foreground/65 opacity-0 transition-[opacity,transform] duration-150 group-hover/proj:opacity-100 group-focus-within/proj:opacity-100 max-md:opacity-100",
-                      isExpanded && "rotate-90",
+                    {isExpanded ? (
+                      <FolderOpen
+                        className="size-4 shrink-0 text-muted-foreground/75"
+                        aria-hidden="true"
+                      />
+                    ) : (
+                      <Folder
+                        className="size-4 shrink-0 text-muted-foreground/75"
+                        aria-hidden="true"
+                      />
                     )}
-                    aria-hidden="true"
-                  />
-                </button>
+                    <span className="min-w-0 truncate text-[13px] leading-5">
+                      {proj.title}
+                    </span>
+                    <ChevronRight
+                      className={cn(
+                        "-ml-1 size-3.5 shrink-0 text-muted-foreground/65 opacity-0 transition-[opacity,transform] duration-150 group-hover/proj:opacity-100 group-focus-within/proj:opacity-100 max-md:opacity-100",
+                        isExpanded && "rotate-90",
+                      )}
+                      aria-hidden="true"
+                    />
+                  </button>
+                </Tooltip>
                 <div className="flex shrink-0 items-center pr-0.5 opacity-0 transition-opacity group-hover/proj:opacity-100 group-focus-within/proj:opacity-100 max-md:opacity-100">
                   <DropdownMenu
                     align="end"
@@ -548,11 +733,23 @@ export function ProjectConversationsTree({
                               : "border-transparent text-muted-foreground hover:bg-[var(--hover)] hover:text-foreground",
                           )}
                         >
-                          <button
-                            type="button"
-                            onClick={() => handleSelect(proj.id, conv.id)}
-                            className="flex h-full min-w-0 flex-1 items-center justify-between gap-2 rounded-lg pl-8 pr-2.5 text-left focus-visible:outline-2 focus-visible:outline-ring"
+                          <Tooltip
+                            content={renderConversationHoverCard(
+                              proj,
+                              conv,
+                              working,
+                              awaitingInput,
+                            )}
+                            side="right"
+                            offset={10}
+                            delay={380}
+                            className="ui-sidebar-hover-card"
                           >
+                            <button
+                              type="button"
+                              onClick={() => handleSelect(proj.id, conv.id)}
+                              className="flex h-full min-w-0 flex-1 items-center justify-between gap-2 rounded-lg pl-8 pr-2.5 text-left focus-visible:outline-2 focus-visible:outline-ring"
+                            >
                             <span
                               className={cn(
                                 "min-w-0 flex-1 truncate text-[13px] leading-5",
@@ -588,32 +785,28 @@ export function ProjectConversationsTree({
                                   />
                                 </span>
                               ) : awaitingInput ? (
-                                <Tooltip
-                                  content={t("conversations.awaitingInput")}
-                                  side="right"
+                                <span
+                                  data-slot="awaiting-input-indicator"
+                                  aria-label={t(
+                                    "conversations.awaitingInput",
+                                  )}
+                                  className="relative inline-flex size-5 items-center justify-center text-foreground/80"
                                 >
+                                  <CircleHelp
+                                    className="size-3.5"
+                                    aria-hidden="true"
+                                  />
                                   <span
-                                    data-slot="awaiting-input-indicator"
-                                    aria-label={t(
-                                      "conversations.awaitingInput",
-                                    )}
-                                    className="relative inline-flex size-5 items-center justify-center text-foreground/80"
-                                  >
-                                    <CircleHelp
-                                      className="size-3.5"
-                                      aria-hidden="true"
-                                    />
-                                    <span
-                                      aria-hidden="true"
-                                      className="absolute right-0 top-0 size-1.5 rounded-full bg-[var(--aui-warning)]"
-                                    />
-                                  </span>
-                                </Tooltip>
+                                    aria-hidden="true"
+                                    className="absolute right-0 top-0 size-1.5 rounded-full bg-[var(--aui-warning)]"
+                                  />
+                                </span>
                               ) : relTime ? (
                                 <span>{relTime}</span>
                               ) : null}
                             </span>
-                          </button>
+                            </button>
+                          </Tooltip>
                           <div className="pointer-events-none absolute inset-y-0.5 right-0.5 flex items-center rounded-r-lg bg-gradient-to-l from-[var(--page)] via-[var(--page)]/90 to-transparent pl-5 pr-1 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-has-[[aria-expanded='true']]:pointer-events-auto group-has-[[aria-expanded='true']]:opacity-100 max-md:pointer-events-auto max-md:opacity-100">
                             <DropdownMenu
                               align="start"

@@ -2426,6 +2426,9 @@ const en = {
     awaitingInput: "Waiting for your input",
     moreActions: "Conversation actions",
     messagesCount: "{{count}} msgs",
+    chatsCount: "{{count}} chats",
+    updatedAt: "Updated {{time}}",
+    latestChat: "Latest: {{title}}",
     empty: "No conversations yet",
   },
   presetsPage: {
