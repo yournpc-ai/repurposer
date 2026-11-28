@@ -1575,3 +1575,42 @@ def test_storyboard_payload_extracts_motion_block_label_highlights_and_caption_n
     assert sc["narration"] == f"{line1} {line2}"
     assert sc["transition_after"] == "crossfade"
     assert sc["sfx_count"] == 1
+
+
+def test_review_visual_targets_avoid_transition_windows():
+    from app.tools.video.review import _active_transitions, _visual_targets
+
+    spec = {
+        "duration_frames": 300,
+        "tracks": [
+            {
+                "kind": "visual",
+                "clips": [
+                    {"clip_id": "clp_1", "scene_id": "scene_1", "start_frame": 0, "end_frame": 150},
+                    {"clip_id": "clp_2", "scene_id": "scene_2", "start_frame": 150, "end_frame": 300},
+                ],
+            },
+            {
+                "kind": "visual",
+                "clips": [
+                    # Caption ends at 144, creating a 6-frame gap [144, 150) wholly inside transition [142, 158)
+                    {"clip_id": "cap_1", "scene_id": "scene_1", "start_frame": 10, "end_frame": 144},
+                ],
+            },
+        ],
+        "transitions": [
+            {
+                "transition_id": "trn_1",
+                "kind": "whip_pan",
+                "from_clip_id": "clp_1",
+                "to_clip_id": "clp_2",
+                "start_frame": 142,
+                "end_frame": 158,
+                "cut_frame": 150,
+            }
+        ],
+    }
+    targets = _visual_targets(spec)
+    assert targets
+    for frame, _ in targets:
+        assert not _active_transitions(spec, int(frame)), f"sampled frame {frame} fell inside transition window"

@@ -1612,7 +1612,16 @@ async def edit_clip(
             raise ValueError("The motion block already has these prop values.")
         extra["props_before"] = target.object.props
         extra["props_after"] = updated_obj.props
-        op = UpdateClip(op="update_clip", clip_id=target.clip_id, object=updated_obj)
+        ops.append(UpdateClip(op="update_clip", clip_id=target.clip_id, object=updated_obj))
+        owning_scene = next((s for s in content.scenes if s.scene_id == target.scene_id), None)
+        if owning_scene and owning_scene.visual_description:
+            ops.append(
+                UpdateScene(
+                    op="update_scene",
+                    scene_id=owning_scene.scene_id,
+                    visual_description=owning_scene.visual_description,
+                )
+            )
     elif isinstance(args, ObjectArgs):
         target = next((clip for _, clip in entries if clip.object.object_id == args.id), None)
         if target is None or not getattr(target.object, "transform", None):

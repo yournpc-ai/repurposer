@@ -703,8 +703,6 @@ def _apply_one(content: CompositionContent, op: Op, bound_digests: dict[UUID, st
         content.timeline.transitions = [t for t in content.timeline.transitions
                                        if t.transition_id != op.transition.transition_id]
         content.timeline.transitions.append(copy.deepcopy(op.transition))
-        for clip_id in (op.transition.from_clip_id, op.transition.to_clip_id):
-            _invalidate_visual_description(content, _find_clip(content, clip_id).scene_id)
     elif isinstance(op, RemoveTransition):
         content.timeline.transitions = [t for t in content.timeline.transitions if t.transition_id != op.transition_id]
     elif isinstance(op, SplitClip):

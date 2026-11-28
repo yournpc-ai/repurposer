@@ -129,14 +129,60 @@ def _fps(spec: dict[str, Any]) -> Fraction:
     return fps
 
 
+def _active_transitions(spec: dict[str, Any], frame: int) -> list[dict[str, Any]]:
+    active: list[dict[str, Any]] = []
+    for tr in spec.get("transitions") or []:
+        t_start = int(tr.get("start_frame") or 0)
+        t_end = int(tr.get("end_frame") or 0)
+        if t_start <= frame < t_end:
+            active.append({
+                "kind": tr.get("kind"),
+                "start_frame": t_start,
+                "end_frame": t_end,
+            })
+    return active
+
+
+def _settled_subinterval(
+    start: int, stop: int, transitions: list[tuple[int, int]]
+) -> tuple[int, int] | None:
+    """Return the widest sub-interval of [start, stop) outside transition windows, or None."""
+    segments = [(start, stop)]
+    for t_start, t_end in transitions:
+        next_segments: list[tuple[int, int]] = []
+        for s_start, s_stop in segments:
+            if t_end <= s_start or t_start >= s_stop:
+                next_segments.append((s_start, s_stop))
+            else:
+                if s_start < t_start:
+                    next_segments.append((s_start, t_start))
+                if t_end < s_stop:
+                    next_segments.append((t_end, s_stop))
+        segments = next_segments
+        if not segments:
+            return None
+    return max(segments, key=lambda seg: seg[1] - seg[0])
+
+
 def _visual_targets(spec: dict[str, Any]) -> list[tuple[Fraction, str | None]]:
-    """Sample each distinct visual interval, including empty gaps, within the frame budget."""
+    """Sample each distinct visual interval, preferring settled frames outside transitions."""
     end = int(spec["duration_frames"])
     clips = [clip for track in spec.get("tracks", []) if track.get("kind") == "visual"
              for clip in track.get("clips", [])]
     cuts = sorted({0, end, *(clip[key] for clip in clips for key in ("start_frame", "end_frame")
                              if 0 < clip[key] < end)})
-    intervals = list(zip(cuts, cuts[1:]))
+    transitions = [
+        (int(tr.get("start_frame") or 0), int(tr.get("end_frame") or 0))
+        for tr in (spec.get("transitions") or [])
+        if int(tr.get("end_frame") or 0) > int(tr.get("start_frame") or 0)
+    ]
+    raw_intervals = list(zip(cuts, cuts[1:]))
+    settled_intervals = [
+        settled
+        for start, stop in raw_intervals
+        if (settled := _settled_subinterval(start, stop, transitions)) is not None
+    ]
+    intervals = settled_intervals or raw_intervals
     if len(intervals) > _MAX_SCENE_FRAMES:
         intervals = [intervals[round(i * (len(intervals) - 1) / (_MAX_SCENE_FRAMES - 1))]
                      for i in range(_MAX_SCENE_FRAMES)]
@@ -219,18 +265,18 @@ def _active_clip_facts(spec: dict[str, Any], frame: int) -> list[dict[str, Any]]
 def _frame_facts(frames: list[ReviewFrame], spec: dict[str, Any]) -> str:
     rows: list[str] = []
     for frame in frames:
-        rows.append(
-            json.dumps(
-                {
-                    "frame_id": frame.frame_id,
-                    "actual_time_seconds": frame.time_seconds,
-                    "actual_frame": frame.frame,
-                    "scene_id": frame.scene_id,
-                    "active_clips": _active_clip_facts(spec, frame.frame),
-                },
-                ensure_ascii=False,
-            )
-        )
+        active_transitions = _active_transitions(spec, frame.frame)
+        row: dict[str, Any] = {
+            "frame_id": frame.frame_id,
+            "actual_time_seconds": frame.time_seconds,
+            "actual_frame": frame.frame,
+            "scene_id": frame.scene_id,
+            "active_clips": _active_clip_facts(spec, frame.frame),
+        }
+        if active_transitions:
+            row["in_transition"] = True
+            row["active_transitions"] = active_transitions
+        rows.append(json.dumps(row, ensure_ascii=False))
     return "\n".join(rows)
 
 
