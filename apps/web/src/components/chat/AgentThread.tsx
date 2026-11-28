@@ -570,9 +570,13 @@ export function AgentThread({
             ...(checkpoint ? { failureCheckpoint: checkpoint } : {}),
             ...(row.display_role && !isFailure ? { displayRole: row.display_role } : {}),
             ...(intentObj?.type === "interim_prose" ? { interim: true, displayRole: "stage_note" as const } : {}),
-            outputRefs: deliveryOutputRefs(row.intent),
+            outputRefs,
             clientVisibleAtMs: row.content?.trim() ? Date.now() : undefined,
-            proseDrainedAtMs: row.blocks?.some((block) => block.kind === "audio_playback" || block.kind === "image_preview") ? Date.now() : undefined,
+            proseDrainedAtMs:
+              outputRefs?.length ||
+              row.blocks?.some((block) => block.kind === "audio_playback" || block.kind === "image_preview")
+                ? Date.now()
+                : undefined,
             turnId,
             ...(rowRunId ? { runId: rowRunId } : {}),
             seq: row.seq ?? undefined,
