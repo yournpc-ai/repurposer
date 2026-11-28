@@ -3786,13 +3786,14 @@ export function AgentThread({
         )}
       </div>
       <div className="mx-auto w-full max-w-3xl shrink-0 px-4 pb-4 pt-2 md:px-6">
-          {pillDock && <div className="-mx-1 mb-2 max-h-[55dvh] overflow-y-auto px-1 pt-1">{pillDock}</div>}
+          {pillDock && <div className="-mx-1 max-h-[55dvh] overflow-y-auto px-1 pt-1">{pillDock}</div>}
           <AsyncJobStrip />
           <Card
             data-slot="chat-composer"
             className={cn(
               "relative w-full rounded-[22px] bg-card",
               fileDragging && "outline-2 outline-dashed outline-ring",
+              Boolean(pillDock) && "hidden",
             )}
             style={{
               ["--ui-crdc-radius" as string]: "22px",

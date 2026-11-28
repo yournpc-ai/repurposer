@@ -2601,7 +2601,7 @@ const zh: Resources = {
     openItemMenu: "打开项目产物或预设",
     resizeHandle: "拖拽调整右侧宽度",
     emptyStageTitle: "待映舞台已就绪",
-    emptyStageText: "创作过程中生成的成片、分镜脚本与关键帧画面会在这里并排呈现。",
+    emptyStageText: "创作过程中生成的成片、分镜表与关键帧画面会在这里并排呈现。",
     projectFilesHeading: "本项目内容",
     tabs: {
       presets: "预设库",
