@@ -467,6 +467,7 @@ DEPRECATED_PLATFORM_MOODS: tuple[str, ...] = (
     "relay-glass",
     "open-window",
     "contact-sheet-101-a",
+    "promo-editorial-truth",
 )
 
 
@@ -754,7 +755,7 @@ MUSIC3_CURATED_CATALOG: list[CuratedMusicEntry] = [
             "Starts calm and intriguing, builds smoothly into an uplifting confident groove for product UI showcase, and resolves warmly on a clean sustained chord. "
             "Clean, polished, pleasant, spacious mix with no harsh or noisy sounds."
         ),
-        use_for=["现代科技网站产品演示与 UI 展示", "OxValue / LegitEvi 官网宣传片（带/无旁白皆宜）", "Modern SaaS & AI website product film"],
+        use_for=["现代科技网站产品演示与 UI 展示", "商业官网与品牌宣传片（带/无旁白皆宜）", "Modern SaaS & AI website product film"],
         avoid=["嘈杂重金属电音", "奇怪实验噪点"],
         compatible_styles=["swiss_paper", "institutional_dark", "vox_editorial"],
         tags=["product-promo", "clean-electronic", "ambient-electro", "ui-demo", "website-promo", "voice-friendly"],
@@ -767,35 +768,6 @@ MUSIC3_CURATED_CATALOG: list[CuratedMusicEntry] = [
         ],
     ),
     _m3_entry(
-        mood="promo-editorial-truth",
-        title="Signal & Evidence",
-        title_zh="冷静现代电子节奏",
-        category="product_promo",
-        format_kind="arc_90s",
-        energy="medium",
-        style="Minimal Electro",
-        bpm=104,
-        target_duration_seconds=136,
-        summary="Calm, poised mid-tempo modern electronic groove with smooth synth bass and subtle electric piano built for LegitEvi-style serious tech storytelling.",
-        generation_prompt=(
-            "Sleek modern corporate tech and minimalist electronic instrumental, 104 BPM, A minor, no vocals. "
-            "Smooth warm synth bassline, clean subtle electric piano chords, crisp light electronic snare and soft steady kick drum, gentle atmospheric synth pad in the background. "
-            "Opens calm and focused, develops a steady confident rhythmic flow ideal for voiceover storytelling, lifts smoothly in the final third, and ends cleanly. "
-            "Smooth, refined, modern, and easy on the ears."
-        ),
-        use_for=["LegitEvi 专业严肃科技网站宣传片", "带中英文旁白的产品主张与功能讲解", "Calm confident tech manifesto & narration bed"],
-        avoid=["刺耳重拍", "廉价欢快广告"],
-        compatible_styles=["vox_editorial", "swiss_paper", "institutional_dark"],
-        tags=["product-promo", "minimal-electro", "legitevi", "calm-rhythmic", "voice-friendly"],
-        section_specs=[
-            {"name": "intro", "label": "Intro", "label_zh": "冷静引入", "start_seconds": 0, "end_seconds": 18, "energy": "calm", "voice_friendly": True, "note": "Quiet opening breath", "note_zh": "安静引入"},
-            {"name": "groove", "label": "Steady Bed", "label_zh": "稳健铺底", "start_seconds": 18, "end_seconds": 45, "energy": "medium", "voice_friendly": True, "recommended": True, "note": "Best entry for voiced storytelling & problem framing", "note_zh": "带旁白痛点拆解推荐切入"},
-            {"name": "highlight", "label": "Core Lift", "label_zh": "中段精华", "start_seconds": 45, "end_seconds": 70, "energy": "energetic", "voice_friendly": True, "recommended": True, "note": "Confident mid-track highlight for proof & features", "note_zh": "核心主张与实证精华段"},
-            {"name": "flow", "label": "Narrative Flow", "label_zh": "叙述推进", "start_seconds": 70, "end_seconds": 115, "energy": "medium", "voice_friendly": True, "note": "Clean steady flow for walkthroughs", "note_zh": "平稳功能讲解段"},
-            {"name": "outro", "label": "Climax & Close", "label_zh": "高潮收尾", "start_seconds": 115, "end_seconds": 136, "energy": "dramatic", "voice_friendly": False, "note": "Strong lift into natural clean ending", "note_zh": "高潮推升并自然收尾"},
-        ],
-    ),
-    _m3_entry(
         mood="promo-hybrid-anthem",
         title="Institutional Deep Pulse",
         title_zh="大气前沿科技大片",
@@ -805,17 +777,17 @@ MUSIC3_CURATED_CATALOG: list[CuratedMusicEntry] = [
         style="Atmospheric Tech",
         bpm=94,
         target_duration_seconds=185,
-        summary="Serene, prestigious atmospheric electronic and soft modern piano underscore crafted for OxValue.AI brand films and executive presentations.",
+        summary="Serene, prestigious atmospheric electronic and soft modern piano underscore crafted for authoritative brand films and executive presentations.",
         generation_prompt=(
             "Inspiring modern technology brand film instrumental, 94 BPM, atmospheric ambient electronic with soft modern piano, no vocals. "
             "Warm flowing analog synth pads, gentle clean piano notes, deep smooth sub bass pulse, and a soft understated electronic beat entering smoothly in the middle. "
             "Opens serene and visionary, grows steadily into a wide hopeful cinematic climax with luminous warm harmonies, and fades gracefully. "
             "Polished, spacious, prestigious, and calm for voiceover narration."
         ),
-        use_for=["OxValue.AI 领导汇报与品牌愿景大片", "从容大气的前沿 AI / 金融科技宣传片", "Prestigious AI brand film & executive voiceover"],
+        use_for=["高管汇报与品牌愿景大片", "从容大气的前沿 AI / 金融科技宣传片", "Prestigious AI brand film & executive voiceover"],
         avoid=["急促快剪", "嘈杂重鼓"],
         compatible_styles=["institutional_dark", "swiss_paper"],
-        tags=["product-promo", "atmospheric-tech", "oxvalue", "brand-film", "piano-electronic", "voice-friendly"],
+        tags=["product-promo", "atmospheric-tech", "institutional", "brand-film", "piano-electronic", "voice-friendly"],
         section_specs=[
             {"name": "intro", "label": "Vision Intro", "label_zh": "静谧起势", "start_seconds": 0, "end_seconds": 15, "energy": "calm", "voice_friendly": True, "note": "Serene piano & pad intro", "note_zh": "静谧钢琴引入"},
             {"name": "groove", "label": "Executive Bed", "label_zh": "沉稳叙事", "start_seconds": 15, "end_seconds": 65, "energy": "medium", "voice_friendly": True, "recommended": True, "note": "Best entry for authoritative voiced brand films", "note_zh": "高管/机构旁白推荐切入"},
