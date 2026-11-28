@@ -342,25 +342,71 @@ export function ChatConversation({
             />
           </div>
         ) : (
-          <>
+          <div className="group/msg">
             {m.content &&
             !(
               deliveryOutputSlot != null &&
               Boolean(m.reviewedVersionId) &&
               LEGACY_DELIVERY_BOILERPLATE.has(m.content.trim())
             ) ? (
-              <div className="group/msg">
-                <AssistantText
-                  text={m.content}
-                  streaming={m.streaming}
-                  hydrated={m.hydrated}
-                  stageNote={Boolean(
-                    m.interim ||
-                      m.displayRole === "stage_note" ||
-                      m.displayRole === "rail_note",
-                  )}
+              <AssistantText
+                text={m.content}
+                streaming={m.streaming}
+                hydrated={m.hydrated}
+                stageNote={Boolean(
+                  m.interim ||
+                    m.displayRole === "stage_note" ||
+                    m.displayRole === "rail_note",
+                )}
+              />
+            ) : null}
+            {deliveryOutputSlot}
+            {/* Candidate Surface (v4.2 C8-c): the candidate card anchors
+                under its turn's reply — replayed from the candidates_log
+                dump or live-born from the SSE frame, same seat. */}
+            {m.candidates ? (
+              <CandidateSurfaceCard
+                surface={m.candidates}
+                hydrated={m.hydrated}
+                serverMessageId={m.serverMessageId}
+                turnId={m.turnId}
+                onStructureVisible={onStructureVisible}
+                onSelectCandidate={onSelectCandidate}
+                selectionDisabled={chatBusy}
+              />
+            ) : null}
+            {m.blocks?.map((block, index) => {
+              const key = `${m.id}-b${index}`
+              const priorDrained = m.hydrated === true || m.proseDrainedAtMs != null
+              const suppressRedundantStoryboard =
+                block.kind === "video_storyboard" &&
+                (deliveryOutputSlot != null || Boolean(m.content?.includes("#workbench:storyboard/")))
+              const slot =
+                block.kind === "video_storyboard" && !suppressRedundantStoryboard
+                  ? { kind: "storyboard" as const, key, message: m, block }
+                  : block.kind === "system_notice"
+                    ? { kind: "systemNotice" as const, key, block, priorDrained, history: m.hydrated }
+                    : block.kind === "audio_playback" || block.kind === "image_preview"
+                      ? { kind: "mediaPreview" as const, key, block, priorDrained, history: m.hydrated }
+                      : null
+              return slot ? (
+                <ComponentSlot
+                  key={key}
+                  slot={slot}
+                  presentationRecovery={presentationRecovery}
+                  structureId={m.serverMessageId}
+                  structureTurnId={m.turnId}
+                  onStructureVisible={onStructureVisible}
                 />
-                {(() => {
+              ) : null
+            })}
+            {m.content &&
+            !(
+              deliveryOutputSlot != null &&
+              Boolean(m.reviewedVersionId) &&
+              LEGACY_DELIVERY_BOILERPLATE.has(m.content.trim())
+            )
+              ? (() => {
                   if (
                     m.streaming ||
                     m.interim ||
@@ -408,10 +454,8 @@ export function ChatConversation({
                       onFeedbackChange={onFeedbackChange}
                     />
                   )
-                })()}
-              </div>
-            ) : null}
-            {deliveryOutputSlot}
+                })()
+              : null}
             {/* 建议 pills (T3 触发回合): the closing review's next steps —
                 quiet outline buttons under the review's own speech, landing
                 only after the prose drains. send = speaks the pill's text
@@ -438,42 +482,7 @@ export function ChatConversation({
                 </div>
               </div>
             ) : null}
-            {/* Candidate Surface (v4.2 C8-c): the candidate card anchors
-                under its turn's reply — replayed from the candidates_log
-                dump or live-born from the SSE frame, same seat. */}
-            {m.candidates ? (
-              <CandidateSurfaceCard
-                surface={m.candidates}
-                hydrated={m.hydrated}
-                serverMessageId={m.serverMessageId}
-                turnId={m.turnId}
-                onStructureVisible={onStructureVisible}
-                onSelectCandidate={onSelectCandidate}
-                selectionDisabled={chatBusy}
-              />
-            ) : null}
-            {m.blocks?.map((block, index) => {
-              const key = `${m.id}-b${index}`
-              const priorDrained = m.hydrated === true || m.proseDrainedAtMs != null
-              const slot = block.kind === "video_storyboard"
-                ? { kind: "storyboard" as const, key, message: m, block }
-                : block.kind === "system_notice"
-                  ? { kind: "systemNotice" as const, key, block, priorDrained, history: m.hydrated }
-                  : block.kind === "audio_playback" || block.kind === "image_preview"
-                    ? { kind: "mediaPreview" as const, key, block, priorDrained, history: m.hydrated }
-                    : null
-              return slot ? (
-                <ComponentSlot
-                  key={key}
-                  slot={slot}
-                  presentationRecovery={presentationRecovery}
-                  structureId={m.serverMessageId}
-                  structureTurnId={m.turnId}
-                  onStructureVisible={onStructureVisible}
-                />
-              ) : null
-            })}
-          </>
+          </div>
         )}
       </MessageScrollerItem>
     </Fragment>

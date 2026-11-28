@@ -1270,7 +1270,7 @@ def test_motion_tool_schema_discovers_blocks_at_call_time(name):
     else:
         fields = parameters["properties"]
     if name == "update_motion_block":
-        assert set(fields) == {"clip_id", "props_patch"}
+        assert set(fields) == {"clip_id", "props_patch", "patches"}
     else:
         assert fields["block_id"].get("type") == "string"
         assert "enum" not in fields["block_id"]
@@ -1614,3 +1614,42 @@ def test_review_visual_targets_avoid_transition_windows():
     assert targets
     for frame, _ in targets:
         assert not _active_transitions(spec, int(frame)), f"sampled frame {frame} fell inside transition window"
+
+
+def test_batch_tool_schemas_and_export_only_routing():
+    from app.chat.editor import EditTextArgs, PreviewRangeArgs, SetTransitionArgs, UpdateMotionBlockArgs
+    from app.chat.prompts import _export_only_request
+
+    batch_text = EditTextArgs(scope="scenes", scene_ids=["scene_2", "scene_3"], position="top")
+    assert batch_text.scene_ids == ["scene_2", "scene_3"]
+    batch_clips = EditTextArgs(scope="clips", clip_ids=["clp_cap_1", "clp_cap_2"], position="top")
+    assert batch_clips.clip_ids == ["clp_cap_1", "clp_cap_2"]
+
+    batch_blocks = UpdateMotionBlockArgs(
+        patches=[
+            {"clip_id": "clp_mg_1", "props_patch": {"camera_preset": "static"}},
+            {"clip_id": "clp_mg_2", "props_patch": {"camera_preset": "zoom_in"}},
+        ]
+    )
+    assert len(batch_blocks.patches) == 2
+
+    batch_transitions = SetTransitionArgs(
+        transitions=[
+            {"from_clip_id": "clp_mg_1", "to_clip_id": "clp_mg_2", "kind": "wipe_reveal", "duration_seconds": 0.4},
+            {"from_clip_id": "clp_mg_2", "to_clip_id": "clp_mg_3", "kind": "crossfade", "duration_seconds": 0.35},
+        ]
+    )
+    assert len(batch_transitions.transitions) == 2
+
+    batch_preview = PreviewRangeArgs(
+        ranges=[
+            {"start_seconds": 0.0, "end_seconds": 10.0},
+            {"start_seconds": 20.0, "end_seconds": 30.0},
+        ]
+    )
+    assert len(batch_preview.ranges) == 2
+
+    assert _export_only_request("直接导出视频") is True
+    assert _export_only_request("不用再修改了，直接交付成片") is True
+    assert _export_only_request("把第二幕字幕改大一点再导出") is False
+    assert _export_only_request("帮我给 https://www.legitevi.com/en 做一条宣传片") is False

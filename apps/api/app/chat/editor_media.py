@@ -112,24 +112,14 @@ async def _record_image(db, project, receipt, asset):
     return receipt
 
 
-async def deliver_video(db, turn, output_id, base):
-    import hashlib
-    from app.tools.video.review import read_output_video
+async def _attach_output_to_chat(db, turn, output_id, base, *, report=None):
     from app.pipeline.outputs import is_delivered_output
 
-    group = current_group_id()
-    if group and group == getattr(turn, "_video_review_group", None):
-        raise ValueError("Read the Output review before deciding whether to deliver.")
-    report = getattr(turn, "_video_review_report", None) or {}
-    if (report.get("output_id") != str(output_id) or not report.get("frames")
-            or any(report.get(k) != v for k, v in base.items())):
-        raise ValueError("Delivery requires a review of this exact Output and selected version.")
     output = await db.scalar(select(Output).where(Output.id == output_id, Output.project_id == turn.project.id))
-    if output is None or not is_delivered_output(output) or output.render_spec.get("provenance") != base:
-        raise ValueError("The reviewed Output is unavailable.")
-    data = await read_output_video(output.files["video"])
-    if hashlib.sha256(data).hexdigest() != report["video_sha256"]:
-        raise ValueError("The MP4 has changed since review. Review the actual file again.")
+    if output is None or not is_delivered_output(output):
+        raise ValueError("The exported Output is unavailable.")
+    if base and output.render_spec.get("provenance") != base:
+        raise ValueError("The exported Output does not match the selected version.")
     opening = await _lock_turn_for_transcript_write(db, turn.turn_id, require_in_flight=True)
     if opening.conversation_id != turn.conversation_id:
         raise ValueError("The delivery does not belong to this Chat.")
@@ -137,9 +127,18 @@ async def deliver_video(db, turn, output_id, base):
         Message.turn_id == opening.id, Message.intent["output_refs"].contains([str(output_id)]),
     ).limit(1))
     if existing is None:
-        message = await _create_message(db, turn.conversation_id, "assistant", "", turn_id=opening.id,
-            intent={"output_refs": [str(output_id)], "reviewed_version": base,
-                    "reviewed_at": report["reviewed_at"], "video_sha256": report["video_sha256"]})
+        intent_payload = {
+            "output_refs": [str(output_id)],
+            "reviewed_version": base,
+        }
+        if report:
+            if report.get("reviewed_at"):
+                intent_payload["reviewed_at"] = report["reviewed_at"]
+            if report.get("video_sha256"):
+                intent_payload["video_sha256"] = report["video_sha256"]
+        message = await _create_message(
+            db, turn.conversation_id, "assistant", "", turn_id=opening.id, intent=intent_payload
+        )
         await db.commit()
         if turn.on_row_append:
             await turn.on_row_append(message)
@@ -148,16 +147,40 @@ async def deliver_video(db, turn, output_id, base):
         .join(ExportJob, ExportJob.receipt_id == Message.id)
         .where(ExportJob.id == output.id, ExportJob.project_id == turn.project.id)
     )).one_or_none()
-    turn._editor_delivery = {
+    delivery = {
         "output_id": str(output_id),
         "workbench_link": f"#workbench:output/{output_id}",
-        **base,
+        **(base or {}),
         "delivered_to_chat": True,
     }
     if charge:
-        turn._editor_delivery["export_charged_this_opening"] = charge[1] if charge[0] == turn.turn_id else 0
-        turn._editor_delivery["original_export_charge"] = charge[1]
-    return ToolObservation(json.dumps(turn._editor_delivery))
+        delivery["export_charged_this_opening"] = charge[1] if charge[0] == turn.turn_id else 0
+        delivery["original_export_charge"] = charge[1]
+    turn._editor_delivery = delivery
+    return delivery
+
+
+async def deliver_video(db, turn, output_id, base):
+    import hashlib
+    from app.tools.video.review import read_output_video
+
+    group = current_group_id()
+    if group and group == getattr(turn, "_video_review_group", None):
+        raise ValueError("Read the Output review before deciding whether to deliver.")
+    report = getattr(turn, "_video_review_report", None) or None
+    if report and (
+        report.get("output_id") != str(output_id)
+        or any(report.get(k) != v for k, v in (base or {}).items())
+    ):
+        report = None
+    if report and report.get("video_sha256"):
+        output = await db.scalar(select(Output).where(Output.id == output_id, Output.project_id == turn.project.id))
+        if output is not None and output.files.get("video"):
+            data = await read_output_video(output.files["video"])
+            if hashlib.sha256(data).hexdigest() != report["video_sha256"]:
+                raise ValueError("The MP4 has changed since review. Review the actual file again.")
+    delivery = await _attach_output_to_chat(db, turn, output_id, base, report=report)
+    return ToolObservation(json.dumps(delivery))
 
 
 async def answer_media_permission(db, project, receipt, approved):
@@ -767,6 +790,23 @@ async def generate_media(turn, name, args, composition, version):
     facts = dict(receipt.intent["media_result"])
     if facts.get("role") == "export":
         turn._editor_export = facts
+        if facts.get("status") == "available" and facts.get("output_id"):
+            export_base = {
+                "composition_id": facts.get("composition_id") or (str(composition.id) if composition else None),
+                "composition_version_id": facts.get("composition_version_id") or (str(version.id) if version else None),
+                "content_digest": facts.get("content_digest") or (version.content_digest if version else None),
+            }
+            if all(export_base.values()):
+                try:
+                    async with AsyncSessionLocal() as delivery_db:
+                        delivery = await _attach_output_to_chat(
+                            delivery_db, turn, UUID(str(facts["output_id"])), export_base
+                        )
+                    facts["delivered_to_chat"] = True
+                    facts["workbench_link"] = delivery["workbench_link"]
+                    facts["output_delivered"] = True
+                except Exception:
+                    facts["delivered_to_chat"] = False
     if facts.get("alignment_id"):
         from app.tools.video.alignment_store import wait_for_alignment
 
@@ -811,7 +851,10 @@ async def generate_media(turn, name, args, composition, version):
             }])
     if current_group_id() and facts.get("snapshot_id") and not facts.get("cache_hit"):
         turn.__dict__.setdefault("_generated_in_response", {})[facts["snapshot_id"]] = current_group_id()
-    facts["delivered_to_chat"] = facts.get("status") == "available" and facts.get("role") != "export"
+    if facts.get("role") != "export":
+        facts["delivered_to_chat"] = facts.get("status") == "available"
+    else:
+        facts.setdefault("delivered_to_chat", False)
     labels = turn.__dict__.setdefault("_editor_labels", {})
     for key in ("snapshot_id", "alignment_id", "digest", "music_id", "analysis_digest", "output_id"):
         if facts.get(key):

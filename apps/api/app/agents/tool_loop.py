@@ -1022,6 +1022,16 @@ class ToolLoopAgent:
             else:
                 assembled = RoundAssembly(tools=restricted_tools, system=effective_system)
             round_tools = assembled.tools
+            # Soft-landing wrap-up on the final iteration of long agent turns:
+            # instead of crashing into LoopExhausted with a hardcoded mechanical
+            # version log, let the model summarize progress naturally with no tools.
+            soft_landing = (
+                self.max_iterations >= 8
+                and iteration == self.max_iterations - 1
+                and bool(round_tools)
+            )
+            if soft_landing:
+                round_tools = []
             # The editor owns video_target even while creating the first draft.
             thinking = "video_target" in (assembled.caller_state or {})
             effective_system = assembled.system
@@ -1033,6 +1043,19 @@ class ToolLoopAgent:
                 shared = [*shared, {"role": "user", "content": observation_wire_content(
                     ToolObservation(assembled.context, images=assembled.media)
                 )}]
+            if soft_landing:
+                shared = [
+                    *shared,
+                    {
+                        "role": "user",
+                        "content": (
+                            "[System notice] This turn has reached its final step. Do not call any tools. "
+                            "Reply concisely in the user's language like a senior creative editor: summarize "
+                            "what is already saved/ready on the current version, state clearly what remains "
+                            "(e.g. final export), and invite the user to reply '继续' or '导出' to complete it immediately."
+                        ),
+                    },
+                ]
             if assembled.observation_tools is not None:
                 retained_call_ids = {
                     message.get("tool_call_id") for message in tail

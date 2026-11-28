@@ -543,7 +543,8 @@ export function AgentThread({
       if (isNonRenderIntent(row.intent, row.blocks)) return
       const facts = messageReceiptFacts(row.intent)
       const { jobReceipt } = facts
-      if (row.role !== "assistant" || (!jobReceipt && !row.content && !row.blocks?.length)) return
+      const outputRefs = deliveryOutputRefs(row.intent)
+      if (row.role !== "assistant" || (!jobReceipt && !row.content && !row.blocks?.length && !outputRefs?.length)) return
       const isFailure = intentObj?.type === "turn_failed"
       const checkpoint =
         intentObj?.checkpoint && typeof intentObj.checkpoint === "object"

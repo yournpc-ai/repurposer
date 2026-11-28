@@ -1848,8 +1848,10 @@ def insert_aligned_captions_ops(
 def edit_text_ops(
     content: CompositionContent,
     *,
-    scope: Literal["clip", "track", "all_derived_captions"],
+    scope: Literal["clip", "clips", "scenes", "track", "all_derived_captions"],
     clip_id: str | None = None,
+    clip_ids: list[str] | None = None,
+    scene_ids: list[str] | None = None,
     track_id: str | None = None,
     text: str | None = None,
     keep_derived: bool = False,
@@ -1879,7 +1881,10 @@ def edit_text_ops(
       preset strips prior ``karaoke_*`` animations; editing ``text`` on an
       active karaoke clip rebuilds its ``karaoke_*`` animations cleanly.
     """
-    if text is not None and scope != "clip":
+    effective_scope = scope
+    if effective_scope == "clip" and not clip_id and clip_ids:
+        effective_scope = "clips"
+    if text is not None and effective_scope != "clip":
         raise RevisionInputError(
             "Editing text content requires scope='clip'.",
             loc=["text"],
@@ -1917,7 +1922,7 @@ def edit_text_ops(
     independent_captions_preserved = 0
     non_caption_text_preserved = 0
 
-    if scope == "clip":
+    if effective_scope == "clip":
         if not clip_id:
             raise RevisionInputError("scope='clip' requires clip_id.", loc=["clip_id"])
         matches = _clip_locations(content, clip_id)
@@ -1935,7 +1940,62 @@ def edit_text_ops(
                 kind="unsupported_target",
             )
         targets.append((track, clip))
-    elif scope == "track":
+    elif effective_scope == "clips":
+        ids = [cid.strip() for cid in (clip_ids or []) if isinstance(cid, str) and cid.strip()]
+        if not ids:
+            raise RevisionInputError("scope='clips' requires a non-empty clip_ids list.", loc=["clip_ids"])
+        seen: set[str] = set()
+        for cid in ids:
+            if cid in seen:
+                continue
+            seen.add(cid)
+            matches = _clip_locations(content, cid)
+            if not matches:
+                raise RevisionInputError(
+                    f"clip {cid!r} does not exist in the base version",
+                    loc=["clip_ids"],
+                    kind="target_not_found",
+                )
+            track, clip = matches[0]
+            if track.kind != "visual" or not isinstance(clip.object, TextObject):
+                raise RevisionInputError(
+                    f"clip {cid!r} is not a visual TextObject.",
+                    loc=["clip_ids"],
+                    kind="unsupported_target",
+                )
+            targets.append((track, clip))
+    elif effective_scope == "scenes":
+        sids = [sid.strip() for sid in (scene_ids or []) if isinstance(sid, str) and sid.strip()]
+        if not sids:
+            raise RevisionInputError("scope='scenes' requires a non-empty scene_ids list.", loc=["scene_ids"])
+        scene_map = {s.scene_id: s for s in content.scenes}
+        missing = [sid for sid in sids if sid not in scene_map]
+        if missing:
+            raise RevisionInputError(
+                f"scene {missing[0]!r} does not exist in the base version",
+                loc=["scene_ids"],
+                kind="target_not_found",
+            )
+        selected_scenes = [scene_map[sid] for sid in dict.fromkeys(sids)]
+        selected_ids = set(sids)
+        for track in content.timeline.tracks:
+            if track.kind != "visual":
+                continue
+            for clip in track.clips:
+                if not isinstance(clip.object, TextObject):
+                    continue
+                if clip.scene_id in selected_ids or any(
+                    sc.range.start < clip.range.end and clip.range.start < sc.range.end
+                    for sc in selected_scenes
+                ):
+                    targets.append((track, clip))
+        if not targets:
+            raise RevisionInputError(
+                "No TextObject clips found in the requested scene_ids.",
+                loc=["scene_ids"],
+                kind="target_not_found",
+            )
+    elif effective_scope == "track":
         if not track_id:
             raise RevisionInputError("scope='track' requires track_id.", loc=["track_id"])
         track = next((t for t in content.timeline.tracks if t.track_id == track_id), None)
@@ -1958,7 +2018,7 @@ def edit_text_ops(
                 loc=["track_id"],
                 kind="target_not_found",
             )
-    elif scope == "all_derived_captions":
+    elif effective_scope == "all_derived_captions":
         for track in content.timeline.tracks:
             if track.kind != "visual":
                 continue

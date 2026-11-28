@@ -125,6 +125,31 @@ def _pending_question_context(pending) -> dict | None:
     return result
 
 
+def _export_only_request(user_text: str) -> bool:
+    """True when the user asks solely to export/deliver an existing draft without requesting edits."""
+    text = (user_text or "").strip().lower()
+    if not text or len(text) > 120:
+        return False
+    has_export_verb = bool(
+        re.search(
+            r"(直接导出|导出视频|导出成片|渲染导出|直接交付|交付成片|出片吧|直接出片|export\s+(now|this|the\s+video|mp4)|deliver\s+(now|this|the\s+video))",
+            text,
+        )
+    )
+    if not has_export_verb:
+        return False
+    no_edit_override = bool(re.search(r"(不用再改|不用再修改|不要再改|直接.*导出|直接.*交付|without\s+edits?)", text))
+    if no_edit_override:
+        return True
+    has_edit_verb = bool(
+        re.search(
+            r"(修改|调整|改一下|换成|替换|删掉|去掉|加上|增加|缩短|延长|重做|重录|重新制作|做一条|做一个|https?://|\bedit\b|\bchange\b|\btrim\b|\bextend\b|\bfix\b|\bmake\b|\bcreate\b)",
+            text,
+        )
+    )
+    return not has_edit_verb
+
+
 def assemble_video_round(facts: dict) -> RoundAssembly:
     confirmation = facts.get("video_confirmation")
     if confirmation and confirmation["action"] in {"wait", "stale", "existing_export"}:
@@ -376,10 +401,29 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
             and selected is not None
             and not (facts.get("delivered") or {}).get("composition_version_id") == selected["version_id"]
         ):
-            context["delivery_scope"] = (
-                "The user requested a finished video. After finishing edits and checking with preview_range, "
-                "proceed directly to export_video, review_video, and deliver_video to deliver the final MP4."
-            )
+            if _export_only_request(user_text) and not facts.get("authorized_media"):
+                exported_cur = facts.get("exported") or {}
+                if (
+                    exported_cur.get("status") == "available"
+                    and exported_cur.get("output_id")
+                    and exported_cur.get("composition_version_id") == selected["version_id"]
+                ):
+                    names.intersection_update({"deliver_video", "answer"})
+                    context["delivery_scope"] = (
+                        "The user requested direct delivery of the already-exported MP4 for this version without further edits. "
+                        "Call deliver_video immediately and reply with your concise editor handoff."
+                    )
+                else:
+                    names.intersection_update({"export_video", "answer"})
+                    context["delivery_scope"] = (
+                        "The user requested immediate formal export of the current saved draft without further edits. "
+                        "Call export_video once (which renders and delivers the final MP4 directly) and reply with your concise editor handoff."
+                    )
+            else:
+                context["delivery_scope"] = (
+                    "The user requested a finished video. Complete all visual/audio quality checks during free preview_range, "
+                    "then call export_video ONCE to render and deliver the final MP4 directly to the user (do not re-run review_video or re-export after export_video succeeds)."
+                )
         if draft_only_request(user_text):
             context["delivery_scope"] = "Save the requested work and report any requested preview. Formal export is outside this request."
             context.pop("revised_delivery", None)
@@ -480,7 +524,7 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
         bare_production_feedback = (
             "你刚才只输出了过程说明而没有调用工具，成片尚未完成交付。"
             "请立即调用下一步工具继续推进（素材已齐就直接调用 create_video 一次性成稿；"
-            "已成稿则预览后依次调用 export_video → review_video → deliver_video 交付成片）。"
+            "已成稿则在免费预览自检通过后调用 export_video 一次性正式导出并直接交付成片）。"
             "只有遇到无法恢复的错误必须中止时，才调用 answer 工具如实说明。"
             if (
                 asks_for_export(user_text)

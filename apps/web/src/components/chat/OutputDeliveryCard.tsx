@@ -87,59 +87,60 @@ export function OutputDeliveryCard({
           "group relative overflow-hidden rounded-xl border border-subtle bg-muted shadow-xs",
           portrait ? "h-80 max-w-full" : "w-full",
         )}
-        style={{ aspectRatio: aspect }}
       >
-        {playing && resolvedUrl ? (
-          <video
-            src={resolvedUrl}
-            poster={poster ?? undefined}
-            controls
-            autoPlay
-            playsInline
-            className="h-full w-full bg-black object-contain"
-          />
-        ) : (
+        <div className={cn("relative", portrait ? "h-full" : "w-full")} style={{ aspectRatio: aspect }}>
+          {playing && resolvedUrl ? (
+            <video
+              src={resolvedUrl}
+              poster={poster ?? undefined}
+              controls
+              autoPlay
+              playsInline
+              className="block h-full w-full bg-muted object-cover"
+            />
+          ) : (
+            <button
+              type="button"
+              disabled={resolving}
+              aria-label={t(rawVideoUrl ? "chat.anchorCards.play" : "chat.anchorCards.view", { name: label })}
+              onClick={() => void handlePlay()}
+              className="relative block h-full w-full text-left focus-visible:outline-2 focus-visible:outline-ring/30"
+            >
+              <OutputPosterImage output={output} className="object-cover" />
+              <span
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent"
+              />
+              <span
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-0 flex items-center justify-center"
+              >
+                <span className="flex h-12 w-12 items-center justify-center rounded-full bg-black/55 text-white shadow-md ring-1 ring-white/25 backdrop-blur-md transition-transform group-hover:scale-105 group-focus-visible:scale-105 motion-reduce:transition-none">
+                  <Play className="ml-0.5 h-5 w-5 fill-current" />
+                </span>
+              </span>
+              <span className="pointer-events-none absolute right-3 bottom-2.5 left-3 flex items-center justify-between gap-2">
+                <span className="truncate text-[13px] font-medium text-white drop-shadow-xs">
+                  {label}
+                </span>
+                {card.durationSec != null ? (
+                  <span className="shrink-0 rounded-md bg-black/60 px-1.5 py-0.5 font-mono text-[11px] leading-4 text-white backdrop-blur-sm">
+                    {formatDuration(card.durationSec)}
+                  </span>
+                ) : null}
+              </span>
+            </button>
+          )}
           <button
             type="button"
-            disabled={resolving}
-            aria-label={t(rawVideoUrl ? "chat.anchorCards.play" : "chat.anchorCards.view", { name: label })}
-            onClick={() => void handlePlay()}
-            className="relative block h-full w-full text-left focus-visible:outline-2 focus-visible:outline-ring/30"
+            aria-label={t("chat.anchorCards.openInWorkbench", { name: label })}
+            title={t("chat.anchorCards.openInWorkbench", { name: label })}
+            onClick={() => onOpen(output.id)}
+            className="absolute right-2.5 top-2.5 z-10 flex h-7 w-7 items-center justify-center rounded-md border border-subtle bg-background/85 text-foreground shadow-xs backdrop-blur-sm transition-colors hover:bg-background focus-visible:outline-2 focus-visible:outline-ring/30"
           >
-            <OutputPosterImage output={output} className="object-cover" />
-            <span
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent"
-            />
-            <span
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-0 flex items-center justify-center"
-            >
-              <span className="flex h-12 w-12 items-center justify-center rounded-full bg-black/55 text-white shadow-md ring-1 ring-white/25 backdrop-blur-md transition-transform group-hover:scale-105 group-focus-visible:scale-105 motion-reduce:transition-none">
-                <Play className="ml-0.5 h-5 w-5 fill-current" />
-              </span>
-            </span>
-            <span className="pointer-events-none absolute right-3 bottom-2.5 left-3 flex items-center justify-between gap-2">
-              <span className="truncate text-[13px] font-medium text-white drop-shadow-xs">
-                {label}
-              </span>
-              {card.durationSec != null ? (
-                <span className="shrink-0 rounded-md bg-black/60 px-1.5 py-0.5 font-mono text-[11px] leading-4 text-white backdrop-blur-sm">
-                  {formatDuration(card.durationSec)}
-                </span>
-              ) : null}
-            </span>
+            <Maximize2 className="h-3.5 w-3.5" />
           </button>
-        )}
-        <button
-          type="button"
-          aria-label={t("chat.anchorCards.openInWorkbench", { name: label })}
-          title={t("chat.anchorCards.openInWorkbench", { name: label })}
-          onClick={() => onOpen(output.id)}
-          className="absolute right-2.5 top-2.5 z-10 flex h-7 w-7 items-center justify-center rounded-md border border-subtle bg-background/85 text-foreground shadow-xs backdrop-blur-sm transition-colors hover:bg-background focus-visible:outline-2 focus-visible:outline-ring/30"
-        >
-          <Maximize2 className="h-3.5 w-3.5" />
-        </button>
+        </div>
       </div>
     </div>
   )

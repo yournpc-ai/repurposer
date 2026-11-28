@@ -251,7 +251,7 @@ class EditAudioClipArgs(BaseModel):
         return self
 
 
-class SetTransitionArgs(BaseModel):
+class TransitionPatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
     from_clip_id: str = Field(min_length=1, max_length=64, description="Outgoing clip_id on the visual track.")
     to_clip_id: str = Field(min_length=1, max_length=64, description="Adjacent incoming clip_id on the same visual track.")
@@ -263,6 +263,34 @@ class SetTransitionArgs(BaseModel):
         default=0.4, ge=0.1, le=2.0, allow_inf_nan=False,
         description="Centered transition overlap duration in seconds (typically 0.35-0.5s).",
     )
+
+
+class SetTransitionArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    from_clip_id: str | None = Field(default=None, min_length=1, max_length=64, description="Outgoing clip_id for a single transition.")
+    to_clip_id: str | None = Field(default=None, min_length=1, max_length=64, description="Adjacent incoming clip_id for a single transition.")
+    kind: TransitionKind = Field(
+        default="crossfade",
+        description="Transition style: 'crossfade', 'whip_pan', 'wipe_reveal', 'zoom_through', or 'iris_focus'.",
+    )
+    duration_seconds: float = Field(
+        default=0.4, ge=0.1, le=2.0, allow_inf_nan=False,
+        description="Centered transition overlap duration in seconds (typically 0.35-0.5s).",
+    )
+    transitions: list[TransitionPatch] | None = Field(
+        default=None,
+        min_length=1,
+        max_length=20,
+        description="Batch list of transitions to apply atomically in one version instead of calling set_transition repeatedly.",
+    )
+
+    @model_validator(mode="after")
+    def _validate_target(self):
+        if self.transitions:
+            return self
+        if not self.from_clip_id or not self.to_clip_id:
+            raise ValueError("Provide either (from_clip_id and to_clip_id) or a non-empty transitions list.")
+        return self
 
 
 class InsertMotionBlockArgs(SelectedMotionBlock):
@@ -284,13 +312,60 @@ class InsertMotionBlockArgs(SelectedMotionBlock):
         return self
 
 
-class UpdateMotionBlockArgs(BaseModel):
+class MotionBlockPatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
     clip_id: str = Field(min_length=1, max_length=64)
     props_patch: dict[str, Any] = Field(
         min_length=1,
         description="Partial props for the existing block. Inspect its schema with get_blocks.",
     )
+
+
+class UpdateMotionBlockArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    clip_id: str | None = Field(default=None, min_length=1, max_length=64, description="Target clip_id for a single update.")
+    props_patch: dict[str, Any] | None = Field(
+        default=None,
+        min_length=1,
+        description="Partial props for a single block update. Inspect its schema with get_blocks.",
+    )
+    patches: list[MotionBlockPatch] | None = Field(
+        default=None,
+        min_length=1,
+        max_length=16,
+        description="Batch list of {clip_id, props_patch} updates applied atomically in one version.",
+    )
+
+    @model_validator(mode="after")
+    def _validate_patch(self):
+        if self.patches:
+            return self
+        if not self.clip_id or not self.props_patch:
+            raise ValueError("Provide either (clip_id and props_patch) or a non-empty patches list.")
+        return self
+
+
+class PreviewRangeArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    kind: Literal["range"] = "range"
+    start_seconds: float | None = Field(default=None, ge=0, allow_inf_nan=False, description="Inclusive start time (seconds) for a single preview window.")
+    end_seconds: float | None = Field(default=None, gt=0, allow_inf_nan=False, description="Exclusive end time (seconds) for a single preview window (up to 12s).")
+    ranges: list[VideoRangeScrubTarget] | None = Field(
+        default=None,
+        min_length=1,
+        max_length=4,
+        description="Optional batch of 1-4 preview windows (each up to 12s) to render and inspect in a single call instead of serial preview_range calls.",
+    )
+
+    @model_validator(mode="after")
+    def _validate_windows(self):
+        if self.ranges:
+            return self
+        if self.start_seconds is None or self.end_seconds is None:
+            raise ValueError("Provide either (start_seconds and end_seconds) or a non-empty ranges list.")
+        if not 0 < self.end_seconds - self.start_seconds <= 12:
+            raise ValueError("Choose a positive preview window of up to 12 seconds.")
+        return self
 
 
 class SetCompositionStyleArgs(BaseModel):
@@ -394,12 +469,20 @@ class InsertTextArgs(BaseModel):
 
 class EditTextArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-    scope: Literal["clip", "track", "all_derived_captions"] = Field(
-        description="Target scope: 'clip' (single clip_id), 'track' (all TextObjects on track_id), or 'all_derived_captions' (all derived captions only, strictly protecting independent user-edited captions and non-caption text)."
+    scope: Literal["clip", "clips", "scenes", "track", "all_derived_captions"] = Field(
+        description="Target scope: 'clip' (single clip_id), 'clips' (batch clip_ids array), 'scenes' (all text/captions in scene_ids array), 'track' (all TextObjects on track_id), or 'all_derived_captions' (all derived captions only)."
     )
     clip_id: str | None = Field(
         default=None, min_length=1, max_length=64,
         description="Required when scope='clip'. Exact TextObject clip ID.",
+    )
+    clip_ids: list[str] | None = Field(
+        default=None, min_length=1, max_length=64,
+        description="Required when scope='clips'. Batch list of TextObject clip IDs updated atomically in one version.",
+    )
+    scene_ids: list[str] | None = Field(
+        default=None, min_length=1, max_length=32,
+        description="Required when scope='scenes'. Batch list of scene IDs whose captions/text are updated atomically in one version.",
     )
     track_id: str | None = Field(
         default=None, min_length=1, max_length=64,
@@ -619,7 +702,7 @@ EDITOR_TOOLS = (
         ExtendStillArgs, "extendStill",
     ),
     _editor_tool(
-        "export_video", "Export the selected, previewed version as a formal MP4. Returns the exact Output for review.",
+        "export_video", "Export the selected, previewed version as a formal 1080p MP4 and automatically deliver it directly to Chat (no post-export review_video or deliver_video step required).",
         ExportVideoArgs, "exportVideo",
     ),
     _editor_tool("bind_clip_source", "Bind a fixed project snapshot to a pending voice or image clip. Preserve timing and layout; inspect the saved version before export.",
@@ -755,8 +838,8 @@ EDITOR_TOOLS = (
     ),
     _editor_tool(
         "preview_range",
-        "Play the current draft across all tracks and publish the selected window in Chat with sampled visual frames plus audio_windows and masking_warnings (respect audio_available_to_model before claiming subjective audio impressions). Choose a local edit, a join, or the whole short film as needed. Recently edited clip windows are suggestions. Honor an explicitly requested range exactly. Use absolute seconds (up to 12 seconds per window).",
-        VideoRangeScrubTarget,
+        "Play the current draft across all tracks and publish the selected window(s) in Chat with sampled visual frames plus audio_windows and masking_warnings. Pass either (start_seconds, end_seconds) for one window or ranges=[...] (up to 4 windows, each <= 12s) to audit multiple acts in a single call.",
+        PreviewRangeArgs,
         "previewRange",
     ),
 )
@@ -1339,35 +1422,57 @@ async def edit_clip(
         extra["source_after"] = new_source_id
         ops.append(UpdateClip(op="update_clip", clip_id=target.clip_id, **update_fields))
     elif isinstance(args, SetTransitionArgs):
-        if args.from_clip_id not in clips or args.to_clip_id not in clips:
-            raise ValueError("Both from_clip_id and to_clip_id must exist on the current timeline.")
-        existing = next(
-            (
-                t for t in content.timeline.transitions
-                if t.from_clip_id == args.from_clip_id and t.to_clip_id == args.to_clip_id
-            ),
-            None,
+        items = (
+            list(args.transitions)
+            if args.transitions
+            else [
+                TransitionPatch(
+                    from_clip_id=args.from_clip_id or "",
+                    to_clip_id=args.to_clip_id or "",
+                    kind=args.kind,
+                    duration_seconds=args.duration_seconds,
+                )
+            ]
         )
-        duration_ticks = _ticks(args.duration_seconds, rate)
-        transition_id = existing.transition_id if existing else f"trn_{identity.hex[:16]}"
-        transition = Transition(
-            transition_id=transition_id,
-            from_clip_id=args.from_clip_id,
-            to_clip_id=args.to_clip_id,
-            kind=args.kind,
-            duration=duration_ticks,
-            alignment="center",
-        )
-        if existing is not None and existing == transition:
+        applied_transitions: list[dict[str, Any]] = []
+        for idx, item in enumerate(items):
+            if item.from_clip_id not in clips or item.to_clip_id not in clips:
+                raise ValueError(
+                    f"Both from_clip_id ({item.from_clip_id!r}) and to_clip_id ({item.to_clip_id!r}) must exist on the current timeline."
+                )
+            existing = next(
+                (
+                    t for t in content.timeline.transitions
+                    if t.from_clip_id == item.from_clip_id and t.to_clip_id == item.to_clip_id
+                ),
+                None,
+            )
+            duration_ticks = _ticks(item.duration_seconds, rate)
+            transition_id = existing.transition_id if existing else f"trn_{identity.hex[:12]}_{idx}"
+            transition = Transition(
+                transition_id=transition_id,
+                from_clip_id=item.from_clip_id,
+                to_clip_id=item.to_clip_id,
+                kind=item.kind,
+                duration=duration_ticks,
+                alignment="center",
+            )
+            if existing is not None and existing == transition:
+                continue
+            applied_transitions.append({
+                "transition_id": transition_id,
+                "from_clip_id": item.from_clip_id,
+                "to_clip_id": item.to_clip_id,
+                "kind": item.kind,
+                "duration_seconds": item.duration_seconds,
+            })
+            ops.append(SetTransition(op="set_transition", transition=transition))
+        if not ops:
             raise ValueError("This transition already has these settings.")
-        extra["transition"] = {
-            "transition_id": transition_id,
-            "from_clip_id": args.from_clip_id,
-            "to_clip_id": args.to_clip_id,
-            "kind": args.kind,
-            "duration_seconds": args.duration_seconds,
-        }
-        ops.append(SetTransition(op="set_transition", transition=transition))
+        if len(applied_transitions) == 1:
+            extra["transition"] = applied_transitions[0]
+        else:
+            extra["transitions"] = applied_transitions
     elif isinstance(args, InsertMotionBlockArgs):
         from app.chat.editor_create import resolve_motion_block_resources
         from app.editing.edits import AddScene
@@ -1531,6 +1636,8 @@ async def edit_clip(
             content,
             scope=args.scope,
             clip_id=args.clip_id,
+            clip_ids=args.clip_ids,
+            scene_ids=args.scene_ids,
             track_id=args.track_id,
             text=args.text,
             keep_derived=args.keep_derived,
@@ -1556,72 +1663,89 @@ async def edit_clip(
         from app.models.tables import SourceSnapshot
         from app.tools.video.narration import snapshot_narration_cues
 
-        target = clips.get(args.clip_id)
-        if target is None or not isinstance(target.object, MotionBlockObject):
-            raise ValueError("Select an existing motion_block clip to update.")
-        merged_raw = {**target.object.props, **args.props_patch}
-        if {"headline", "words", "word_cues"} & args.props_patch.keys() and "word_reveals_s" not in args.props_patch:
-            merged_raw.pop("word_reveals_s", None)
-        # Resolve any authoring-time cue_phrase patches against overlapping narration cues.
-        narration_text: str | None = None
-        narration_cues: list[dict[str, Any]] | None = None
-        narration_lead_s = 0.0
-        spoken_seconds = None
-        duration_s = (target.range.end - target.range.start) / rate
-        for trk in content.timeline.tracks:
-            if trk.kind != "audio" or trk.role != "dialogue":
-                continue
-            for ac in trk.clips:
-                if ac.range.start < target.range.end and target.range.start < ac.range.end and ac.source:
-                    snap = await db.get(SourceSnapshot, ac.source.snapshot_id)
-                    if snap is None or snap.owner_id != project.user_id or snap.digest != ac.source.snapshot_digest:
-                        raise ValueError("The dialogue source no longer matches the fixed recording.")
-                    narration_text, narration_cues = await snapshot_narration_cues(db, snap)
-                    source_start = ac.source.source_range.start / SOURCE_TIMEBASE if ac.source.source_range else 0
-                    narration_lead_s = (ac.range.start - target.range.start) / rate - source_start
-                    if ac.scene_id is None and narration_cues and all(c.get("words") for c in narration_cues):
-                        measured = measured_narration_cues(narration_cues, snap.duration_ticks / SOURCE_TIMEBASE)
-                        overlap_start = max(0, (ac.range.start - target.range.start) / rate)
-                        overlap_end = (min(ac.range.end, target.range.end) - target.range.start) / rate
-                        narration_text, narration_cues, narration_lead_s, spoken_seconds = local_narration_window(
-                            measured, narration_lead_s - overlap_start, overlap_end - overlap_start,
-                        )
-                        narration_lead_s += overlap_start
+        patch_items = (
+            list(args.patches)
+            if args.patches
+            else [MotionBlockPatch(clip_id=args.clip_id or "", props_patch=args.props_patch or {})]
+        )
+        batch_changes: list[dict[str, Any]] = []
+        for patch_item in patch_items:
+            target = clips.get(patch_item.clip_id)
+            if target is None or not isinstance(target.object, MotionBlockObject):
+                raise ValueError(f"Select an existing motion_block clip to update ({patch_item.clip_id!r} not found).")
+            merged_raw = {**target.object.props, **patch_item.props_patch}
+            if {"headline", "words", "word_cues"} & patch_item.props_patch.keys() and "word_reveals_s" not in patch_item.props_patch:
+                merged_raw.pop("word_reveals_s", None)
+            # Resolve any authoring-time cue_phrase patches against overlapping narration cues.
+            narration_text: str | None = None
+            narration_cues: list[dict[str, Any]] | None = None
+            narration_lead_s = 0.0
+            spoken_seconds = None
+            duration_s = (target.range.end - target.range.start) / rate
+            for trk in content.timeline.tracks:
+                if trk.kind != "audio" or trk.role != "dialogue":
+                    continue
+                for ac in trk.clips:
+                    if ac.range.start < target.range.end and target.range.start < ac.range.end and ac.source:
+                        snap = await db.get(SourceSnapshot, ac.source.snapshot_id)
+                        if snap is None or snap.owner_id != project.user_id or snap.digest != ac.source.snapshot_digest:
+                            raise ValueError("The dialogue source no longer matches the fixed recording.")
+                        narration_text, narration_cues = await snapshot_narration_cues(db, snap)
+                        source_start = ac.source.source_range.start / SOURCE_TIMEBASE if ac.source.source_range else 0
+                        narration_lead_s = (ac.range.start - target.range.start) / rate - source_start
+                        if ac.scene_id is None and narration_cues and all(c.get("words") for c in narration_cues):
+                            measured = measured_narration_cues(narration_cues, snap.duration_ticks / SOURCE_TIMEBASE)
+                            overlap_start = max(0, (ac.range.start - target.range.start) / rate)
+                            overlap_end = (min(ac.range.end, target.range.end) - target.range.start) / rate
+                            narration_text, narration_cues, narration_lead_s, spoken_seconds = local_narration_window(
+                                measured, narration_lead_s - overlap_start, overlap_end - overlap_start,
+                            )
+                            narration_lead_s += overlap_start
+                        break
+                if narration_text:
                     break
-            if narration_text:
-                break
-        resolved_patch = resolve_motion_block_cue_phrases(
-            target.object.block_id,
-            merged_raw,
-            narration=narration_text,
-            cues=narration_cues,
-            duration_s=duration_s,
-            speech_lead_s=narration_lead_s,
-            spoken_seconds=spoken_seconds,
-            acoustic_edges=spoken_seconds is not None,
-        )
-        merged_props = coerce_motion_block_props(
-            target.object.block_id,
-            resolved_patch,
-        )
-        updated_obj = MotionBlockObject.model_validate({
-            **target.object.model_dump(mode="json"),
-            "props": merged_props,
-        })
-        if updated_obj.props == target.object.props:
-            raise ValueError("The motion block already has these prop values.")
-        extra["props_before"] = target.object.props
-        extra["props_after"] = updated_obj.props
-        ops.append(UpdateClip(op="update_clip", clip_id=target.clip_id, object=updated_obj))
-        owning_scene = next((s for s in content.scenes if s.scene_id == target.scene_id), None)
-        if owning_scene and owning_scene.visual_description:
-            ops.append(
-                UpdateScene(
-                    op="update_scene",
-                    scene_id=owning_scene.scene_id,
-                    visual_description=owning_scene.visual_description,
-                )
+            resolved_patch = resolve_motion_block_cue_phrases(
+                target.object.block_id,
+                merged_raw,
+                narration=narration_text,
+                cues=narration_cues,
+                duration_s=duration_s,
+                speech_lead_s=narration_lead_s,
+                spoken_seconds=spoken_seconds,
+                acoustic_edges=spoken_seconds is not None,
             )
+            merged_props = coerce_motion_block_props(
+                target.object.block_id,
+                resolved_patch,
+            )
+            updated_obj = MotionBlockObject.model_validate({
+                **target.object.model_dump(mode="json"),
+                "props": merged_props,
+            })
+            if updated_obj.props == target.object.props:
+                continue
+            batch_changes.append({
+                "clip_id": target.clip_id,
+                "props_before": target.object.props,
+                "props_after": updated_obj.props,
+            })
+            ops.append(UpdateClip(op="update_clip", clip_id=target.clip_id, object=updated_obj))
+            owning_scene = next((s for s in content.scenes if s.scene_id == target.scene_id), None)
+            if owning_scene and owning_scene.visual_description:
+                ops.append(
+                    UpdateScene(
+                        op="update_scene",
+                        scene_id=owning_scene.scene_id,
+                        visual_description=owning_scene.visual_description,
+                    )
+                )
+        if not ops:
+            raise ValueError("The motion block already has these prop values.")
+        if len(batch_changes) == 1:
+            extra["props_before"] = batch_changes[0]["props_before"]
+            extra["props_after"] = batch_changes[0]["props_after"]
+        else:
+            extra["updated_blocks"] = [c["clip_id"] for c in batch_changes]
     elif isinstance(args, ObjectArgs):
         target = next((clip for _, clip in entries if clip.object.object_id == args.id), None)
         if target is None or not getattr(target.object, "transform", None):
@@ -2213,8 +2337,102 @@ async def execute_editor(turn, name, args):
                 source_framing,
             )
 
+            requested_windows = (
+                list(args.ranges)
+                if getattr(args, "ranges", None)
+                else [
+                    VideoRangeScrubTarget(
+                        kind="range",
+                        start_seconds=args.start_seconds,
+                        end_seconds=args.end_seconds,
+                    )
+                ]
+            )
+            if len(requested_windows) > 1:
+                comp_content_obj = content_of(version)
+                read_base = await video_version_read(
+                    db, owner_id=turn.project.user_id, version_id=version.id
+                )
+                prepared_items: list[tuple[VideoRangeScrubTarget, bool, dict[str, Any]]] = []
+                for req_win in requested_windows:
+                    eff_t, adj = snap_preview_range_to_transitions(comp_content_obj, req_win)
+                    r_win = await prepare_saved_video_scrub(
+                        db, dict(read_base), owner_id=turn.project.user_id, target=eff_t
+                    )
+                    pv = r_win["video_preview"]
+                    if pv["status"] != "ready":
+                        reason = pv.get("reason") or pv["status"]
+                        if pv.get("detail"):
+                            reason += f": {pv['detail']}"
+                        raise ValueError(reason)
+                    prepared_items.append((req_win, adj, r_win))
+                await db.close()
+                combined_media: list[Any] = []
+                window_evidences: list[dict[str, Any]] = []
+                all_windows: list[Any] = []
+                last_read = prepared_items[-1][2]
+                version_id_str = str(version.id)
+                blocks = [
+                    existing
+                    for existing in turn.__dict__.get("_editor_preview_blocks", [])
+                    if existing.get("composition_version_id") == version_id_str
+                ]
+                for req_win, adj, r_win in prepared_items:
+                    pv = r_win["video_preview"]
+                    m_items, ev = await saved_preview_media(pv, version.id)
+                    if adj:
+                        ev["requested_range_seconds"] = {
+                            "start": req_win.start_seconds,
+                            "end": req_win.end_seconds,
+                        }
+                        ev["transition_boundary_adjusted"] = True
+                    combined_media.extend(m_items)
+                    win = pv["scope"]["source_range_seconds"]
+                    all_windows.append(win)
+                    window_evidences.append(ev)
+                    blk = storyboard_block(r_win)
+                    if blk not in blocks:
+                        blocks.append(blk)
+                if not combined_media:
+                    raise ValueError("The configured model cannot receive visual evidence for these windows.")
+                last_ev = window_evidences[-1]
+                turn._editor_last_preview = {
+                    **base,
+                    "version_id": version_id_str,
+                    "mp4_sha256": last_ev["mp4_sha256"],
+                    "decision": current_group_id(),
+                    "window_seconds": all_windows[-1],
+                    "windows": all_windows,
+                    "sample_seconds": last_ev["sample_seconds"],
+                    "model_media": [item.type for item in combined_media],
+                    "audio_available_to_model": last_ev["audio_available_to_model"],
+                }
+                turn._editor_preview_blocks = blocks
+                turn._video_presentation_pending = last_read
+                batch_payload = {
+                    **base,
+                    "window_count": len(window_evidences),
+                    "windows": window_evidences,
+                    "audio_available_to_model": last_ev["audio_available_to_model"],
+                    "coverage": "Batch preview of all requested windows on this version across all tracks.",
+                }
+                return ToolObservation(
+                    json.dumps(batch_payload),
+                    images=tuple(combined_media),
+                    valid_for_key=version_key,
+                    project_text=json.dumps(
+                        {
+                            "windows": all_windows,
+                            "observed_on_version": version_id_str,
+                            "frames_omitted_after_newer_version": True,
+                        },
+                        ensure_ascii=False,
+                    ),
+                )
+
+            single_target = requested_windows[0]
             effective_target, boundary_adjusted = snap_preview_range_to_transitions(
-                content_of(version), args
+                content_of(version), single_target
             )
             read = await video_version_read(
                 db, owner_id=turn.project.user_id, version_id=version.id
@@ -2233,8 +2451,8 @@ async def execute_editor(turn, name, args):
             media, evidence = await saved_preview_media(preview, version.id)
             if boundary_adjusted:
                 evidence["requested_range_seconds"] = {
-                    "start": args.start_seconds,
-                    "end": args.end_seconds,
+                    "start": single_target.start_seconds,
+                    "end": single_target.end_seconds,
                 }
                 evidence["transition_boundary_adjusted"] = True
             covered = set(preview["scope"]["clip_ids"])
