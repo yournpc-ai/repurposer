@@ -467,7 +467,6 @@ DEPRECATED_PLATFORM_MOODS: tuple[str, ...] = (
     "relay-glass",
     "open-window",
     "contact-sheet-101-a",
-    "promo-editorial-truth",
 )
 
 
@@ -765,6 +764,35 @@ MUSIC3_CURATED_CATALOG: list[CuratedMusicEntry] = [
             {"name": "highlight", "label": "Highlight Peak", "label_zh": "丰满高潮段", "start_seconds": 55, "end_seconds": 130, "energy": "energetic", "voice_friendly": False, "recommended": True, "note": "Full uplifting momentum for product highlights", "note_zh": "产品亮点展示精华段"},
             {"name": "bridge", "label": "Breath Bridge", "label_zh": "呼吸留白", "start_seconds": 130, "end_seconds": 150, "energy": "calm", "voice_friendly": True, "note": "Calm transition for key narrative pause", "note_zh": "轻盈过渡留白"},
             {"name": "finale", "label": "Finale Lift", "label_zh": "升华收束", "start_seconds": 150, "end_seconds": 171, "energy": "energetic", "voice_friendly": True, "note": "Warm confident closing lift", "note_zh": "收尾升华"},
+        ],
+    ),
+    _m3_entry(
+        mood="promo-editorial-truth",
+        title="Signal & Evidence",
+        title_zh="冷静瑞士极简电子律动",
+        category="product_promo",
+        format_kind="arc_90s",
+        energy="medium",
+        style="Minimal Electro",
+        bpm=106,
+        target_duration_seconds=107,
+        summary="Pure instrumental minimalist Swiss-editorial electronic underscore with crisp dry percussion, warm sub-bass pulse, and open mid-range space for voiceover.",
+        generation_prompt=(
+            "Pure instrumental only, strictly no vocals, no lyrics, no humming, no choirs, no vocal chops, no spoken words. "
+            "Minimalist modern Swiss editorial electronic underscore, 106 BPM, C minor, clean studio production. "
+            "Deep warm rounded sub-bass pulse, crisp subtle dry rim-clicks and soft brushed hi-hats, delicate high-register muted analog synth plucks with generous open space in the mid-range frequencies so it never clashes with speech. "
+            "Enters with a clean poised groove within the first 3 seconds, maintains a calm confident forward momentum with a gentle luminous pad lift around the middle, and resolves cleanly on a soft sustained chord."
+        ),
+        use_for=["严肃专业科技与研究类产品宣传片", "带中英文旁白的产品主张与机制讲解", "Calm confident editorial tech manifesto & narration bed"],
+        avoid=["刺耳重拍", "廉价欢快广告"],
+        compatible_styles=["vox_editorial", "swiss_paper", "institutional_dark"],
+        tags=["product-promo", "minimal-electro", "editorial", "calm-rhythmic", "voice-friendly"],
+        section_specs=[
+            {"name": "intro", "label": "Crisp Pluck Intro", "label_zh": "利落拨弦起势", "start_seconds": 0, "end_seconds": 9, "energy": "calm", "voice_friendly": True, "note": "Instant crisp minimalist pluck & rim-click opener", "note_zh": "前 9 秒利落极简起势"},
+            {"name": "groove", "label": "Editorial Groove", "label_zh": "稳健极简主律动", "start_seconds": 9, "end_seconds": 36, "energy": "medium", "voice_friendly": True, "recommended": True, "note": "Tight sub-bass and open mid-range ideal for voiced storytelling", "note_zh": "带旁白痛点与主张讲述推荐切入"},
+            {"name": "lift", "label": "Layered Lift", "label_zh": "层次推进", "start_seconds": 36, "end_seconds": 55, "energy": "energetic", "voice_friendly": True, "recommended": True, "note": "Shimmering pluck momentum for product proof & workflow", "note_zh": "产品机制与亮点展示精华段"},
+            {"name": "breath", "label": "Minimal Breath", "label_zh": "极简留白", "start_seconds": 55, "end_seconds": 72, "energy": "calm", "voice_friendly": True, "note": "Sparse dry percussion pocket for clear narrative pause", "note_zh": "克制打击乐留白段"},
+            {"name": "finale", "label": "Climax & Resolve", "label_zh": "高潮与利落收尾", "start_seconds": 72, "end_seconds": 107, "energy": "energetic", "voice_friendly": True, "note": "Confident melodic lift into clean minimalist outro", "note_zh": "高潮推升并干净收束"},
         ],
     ),
     _m3_entry(

@@ -34,8 +34,8 @@ _MOOD_SYNONYMS = {
     "corporate": "promo-keynote-percussion",
     "professional": "promo-keynote-percussion",
     "business": "promo-keynote-percussion",
-    "saas": "promo-keynote-percussion",
-    "manifesto": "promo-keynote-percussion",
+    "saas": "promo-editorial-truth",
+    "manifesto": "promo-editorial-truth",
     "editorial": "explainer-vox-pluck",
     "calm": "explainer-minimal-rhodes",
 }

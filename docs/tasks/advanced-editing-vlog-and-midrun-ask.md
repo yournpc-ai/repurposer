@@ -1,6 +1,6 @@
 # Batch 3 · Mid-Run Ask User、高级剪辑原语与 Vlog 首页演示（施工合同）
 
-> **状态（2026-11-29 修订）**：READY FOR BRANCH（待在新分支开工）。本合同整合三项强关联施工块，并按交付收益重排落地顺序：**Stage 1 · 底座 A（执行中与修改轮 `ask_user` 同轨挂起、无感续跑与非写死决策记忆）** → **Stage 2 · 底座 B2-A（React / TSX + HTML + SVG 受控代码画笔：解锁并跨平台化现有 `remotion-project` 运行时，独立可交付商业大片跃升）** → **Stage 3 · 底座 B1（实拍高级剪辑原语：画中画、层序、关键帧、蒙版、变速、Top 10 参数化滤镜、视频 Motion Block 与源帧感知）+ 底座 B2-B/B3（定格与视频 Luma Matte 抠像）+ 前台 C（隐藏「模板」Tab 与首页货架/标杆成片）**。
+> **状态（2026-11-29 修订 · 基线 `main@73081a28`）**：READY FOR BRANCH（基于最新 `main` 切新分支开工）。本合同整合三项强关联施工块，并按交付收益重排落地顺序：**Stage 1 · 底座 A（执行中与修改轮 `ask_user` 同轨挂起、去独立 QA 气泡藏入 Tool Call、可选 `answer` 过稿暂停与统一 `working_context`）** → **Stage 2 · 底座 B2-A（新分支紧接推进：React / TSX + HTML + SVG 受控代码画笔，解锁并跨平台化现有 `remotion-project` 运行时，独立可交付商业大片跃升）** → **Stage 3 · 底座 B1（实拍高级剪辑原语：画中画、层序、关键帧、蒙版、变速、Top 10 参数化滤镜、视频 Motion Block 与源帧感知）+ 底座 B2-B/B3（定格与视频 Luma Matte 抠像）+ 前台 C（隐藏「模板」Tab 与首页货架/标杆成片）**。
 >
 > 上位架构与硬约束以 [Agent Editor 主合同](new-agent.md)、[作品模型](../VIDEO_PROJECT.md)、[渲染契约](../RENDERING.md)、[声音合同](../MUSIC_ARCHITECTURE.md)、[账本与授权](../BILLING.md) 及 [进度 §0](../PROGRESS.md) 为准。
 
@@ -27,44 +27,53 @@
 4. **渲染双端确定性与可编辑性**：所有新增 `video-spec` 字段（`playback_rate`、`preserve_pitch`、`color_grade`、`crop`、`frame`、`mask`、`matte_source_id`、视频资源挂载及对应 `AnimatableProperty`）必须在 Python 编译器、Zod Schema、Web `@remotion/player` 与服务端 `apps/render` 保持 Py↔TS 逐帧一致，缺省值不序列化出多余 `null` 键以保证历史 `content_digest` 零漂移；所有合成结果保留图层身份，支持后续自然语言单对象续改。
 5. **技法由“完备原语 + 提示词”按需组合，绝不写死为默认效果**：高级剪辑技法（画中画、蒙版、相似形匹配、瑞士网格排版、重调色、变速等）属于创作者可按需唤起的技术能力，**默认剪辑保持干净克制**，绝不把高风格化特效硬编码为所有视频的默认模板；首页 Demo 通过精细的 Hover/Use 提示词示范“如何用自然语言组合这些高级技法”。
 6. **诚实样片、版权合规与测试门禁**：首页正式上架样片必须由 Rookie 真实链路制作并经视听与局部修订验证（不得用外部手剪冒充验收通过）；实拍素材与配乐须使用许可清晰可核验的开源/免版权或自拍源；施工按改动面通过 `make test-fast` / `test-chat` / `test-web` / `test-render` / `test-e2e`。
+7. **守住动态上下文后置与 Prompt Cache（~93% 命中率）**：`tool_loop.py` 已将动态 `*shared`（`project_evidence`）后置于 `*round_dialogue, *tail, *feedback` 之后。一切运行时动态状态（含 `working_context`）**严格只走后置 `RoundAssembly.context`（尾段 `*shared`）**，严禁写入 `system_prompt` 或扰动前缀；已加载 Skill 复用 `ConversationContext` 历史中的 `load_skill` 结果，不在系统提示词中重复注入整篇 `SKILL.md`。
 
 ---
 
-## 3. 底座 A · Mid-Run 与修改轮 `ask_user` 同轨挂起、无感续跑与决策协同
+## 3. 底座 A · Mid-Run 与修改轮 `ask_user` 同轨挂起、过稿暂停与统一 Context 工程
 
-### 3.1 解除现有过度限制（Backend）
+### 3.1 解除现有过度限制与硬编码拦截（Backend）
 
 | 目标文件 | 现状限制 | 改造方案 |
 | :--- | :--- | :--- |
-| `apps/api/app/chat/prompts.py` | ① Line 351 隐藏路径 `names.discard("ask_user")`；② Line 492 `dialogue_wire` 裁掉 `slot`，Line 493 `not native_creation` 裁掉 `items`；③ Line 497 `authorized_media.status == "available"` 丢弃 `ask_user` | ① 制作/编辑/修改阶段全量开放 `ask_user` 的自由题与 `items` 多题数组；② 解除 Line 351 / 497 的过宽丢弃，**与最新 `export_video` 导出即自动交付机制对齐**（仅在“本轮已完成正式交付、只剩最终收尾回复”的窄态禁用 `ask_user`），其余创作、媒体就绪后与后续修改轮均允许调用 `ask_user` |
-| `apps/api/app/chat/plan_turn.py` & `apps/api/app/models/schemas.py` | Lines 860–896 `missing_brief_question_items` 强制把 `items` 绑定到旧 `Brief` 固定槽位；`merged_brief.asked` 阻断同槽二次追问 | 保留旧 `Brief` 槽位兼容，同时全面放行 **无固定枚举的自由临时题（ad-hoc item）**（不要求预定义槽位表，任意创作分叉或修改方案确认均可直接发起） |
-| `apps/api/app/chat/service.py` & `routes.py` | ① 调 `ask_user` 后终止并结算当前步骤；② `_continue_chat_answer`（Lines 1329–1336）把初始 `opening.content` 原封不动重拼进 `reply`，中途续行易误导模型重做全片；③ 自由题答案未投影给后续修改轮 | ① 持久化问题行携带 `mid_run_ask: true` 与所属 `opening_id` / 当前 `steps` 快照（**不把 `in_progress` 步骤误结为 `done`**）；② 中途/修改轮续行构造**增量续行上下文**（明确标出当前已保存 `version_id`、已完成工具回执与用户刚作出的决定），**不再把初始 `opening.content` 伪装成新指令重发**；③ 见 §3.2 轻量决策投影 |
-| `apps/api/app/prompts/chat/video_editor.j2` | 明文禁止“确认卡后再问第二次”、禁止弹卡前调 `update_steps` | 改写为**克制提问与修改协同宪法**：① 允许在多步执行中途（选片/选帧/音画取舍/明显审美分叉）以及**成片后模糊修改请求**（如“第 3 幕改清爽点”给出 2–3 个具体改法选项先对齐再动手）发起单卡 `ask_user`；② 纯技术参数（坐标、缓动、音效配方、闪避 dB）严禁打扰用户；③ 每次提问必给 `recommended_id` 与 `default_path`（一键跳过按推荐继续） |
+| `apps/api/app/chat/prompts.py` | ① Line 351 隐藏路径 `names.discard("ask_user")`；② Line 492 `dialogue_wire` 裁掉 `slot`，Line 493 `not native_creation` 裁掉 `items`；③ Line 497 `authorized_media.status == "available"` 丢弃 `ask_user`；④ Line 579 非 `native_creation` 传 `opening_text` 触发 `tool_loop.py` 清空 `history_messages` | ① 制作/编辑/修改阶段全量开放 `ask_user` 的自由题与 `items` 多题数组；② 同时解除 Line 351 / 497 的过宽丢弃，**与 `export_video` 导出即自动交付对齐**（仅在“本轮已完成正式交付、仅剩最终收尾回复”的窄态限制 `ask_user`）；③ 非 `native_creation` 续跑不再借 `opening_text` 抹空 `history_messages`；④ **不额外派生冗余 `context.available_capabilities`**（模型在每轮 `tools` schema 与 `assets`/`fixed_media` 中已掌握真实能力，避免双真相源与白耗 token） |
+| `apps/api/app/chat/conversation_context.py` | ① Line 88 `select_items` 写死 `if item["turn_id"] == str(current_turn): continue`，导致同 `opening_id` 挂起续跑后丢光挂起前查到的 `search_music`/`prepare_video_materials`/`load_skill` 结果；② `restore()` 在已有 `composition` 时直接返回空 `ConversationHistory()`；③ `_method_visible` 在跨轮无显式 `/skill` 时隐藏先前 `load_skill` | ① `select_items` 改为仅跳过当前内存 `ToolLoop` 已持有的 `call_id`，完整恢复同 `opening` 挂起前已落库的工具观察；② 解除 `restore()` 在已有 `composition` 时一刀切返回空的短路；③ `_method_visible` 对当前对话已激活的 `active_skills` 自动放行，直接靠历史 `load_skill` 保留方法论而不重复注入 `system_prompt` |
+| `apps/api/app/chat/plan_turn.py` & `apps/api/app/models/schemas.py` | ① `BriefQuestionItem.slot` / `missing_brief_question_items` 强绑定旧 `Brief` 固定槽位；② `merged_brief.asked` 阻断基于新上下文的合法追问；③ `_stamp_turn_metadata` 无条件 `finalize_steps` 将挂起中 `in_progress` 步骤误结为 `done`；④ `already_saved_this_turn` 仅在导出回流时重建 | ① `BriefQuestionItem.slot` / `BriefAnswerItem.slot` 放开为任意合法 `topic_key: str`（缺省自动补 `item_N`），`Option` 支持可选 `value`（如透传真实 `music_id`），保留旧 `Brief` 槽位校验与回填兼容，全面放行无固定枚举自由题；② `_ask_user` 校验通过落库问题行时**单写口原子创建 1 条 `ask_user` 活动行**（`tool_name="ask_user"`、`status="active"`、`call_state="awaiting_user"`、`key="chat.activity.askUser"`、带原 `run_id`）并推送 `row.append`（不走 `ActivityProjector` 杜绝双写）；③ 挂起态与 `answer` 过稿尚有 `pending` 步骤时不把 `in_progress` 强行改为 `done`；④ 任意续跑均从 `opening.intent["editor_commits"]` 重建 `already_saved_this_turn` |
+| `apps/api/app/chat/service.py` & `routes.py` & `editor_recovery.py` | ① 挂起时将 `opening.turn_state` 置 `"settled"`、`_sweep_activities` 提前结算活动行；② `_answer_stream` 每次新造 `run_id` 且 `_interim_prose_callback` 归零，必然撕裂工作轨；③ `_continue_chat_answer` 把 `opening.content` 与 `Question:` 文本脏拼接进 `reply`，污染正则且单题自由题 `bail` 不续跑、多题 `bail` 丢附件；④ `recover_interrupted_edits` 未豁免未答 `ask_user`、`stop_turn_at_visible_frontier` 未结算未答 `ask_user` | ① 待答 `ask_user` 保持 `opening.turn_state = "in_flight"`，`_sweep_activities` 跳过 `call_state == "awaiting_user"`，`recover_interrupted_edits` 豁免未答 `ask_user`（与 `media_permission` 同权，防刷新误报中断），`stop_turn_at_visible_frontier` 同步结算未答 `ask_user` 为 `bail("Stopped")` 及活动行 `cancelled`；② `answer_question` 原地更新对应 `ask_user` 活动行为 `completed` + `receipt={"kind": "ask_user", ...}` 并推 `row.update`；③ `_answer_stream` 复用问题行记录的原 `run_id`，续跑同轨时 `_interim_prose_callback` 初始走 `rail_note=True`；④ 单题与多题 `bail`（跳过按推荐）全路径续跑并继承原 `opening` 的 `mentions`/`attachments`；等待期若用户直接在输入框打字回复/改口，平稳结算原挂起 `opening`（旁路插话保留待决卡） |
+| `apps/api/app/tools/video/design.py` & `editor_create.py` & `editor_media.py` & `context.py` | `asks_for_export`、`voice_generation_forbidden`、`media_generation_forbidden`、`draft_only_request`、`explicit_design_constraints` 直接正则扫描脏拼接后的 `user_text`（导致问“要不要旁白 / 做多久”反向锁死或旧开场数字覆盖新答案）；`context.py` 用 `item.get("slot")` 做键导致自由题 `slot=None` 碰撞 | ① 全部守卫与约束解析改为只读“干净的原始需求 + 结构化 `working_context.user_decisions` + 用户最新表态”（后决策覆盖先决策），**严禁正则扫描 `Question:` 正文与未选选项描述**；② `context.py` 按 `topic_key` 索引多题答案，杜绝键碰撞 |
+| `apps/api/app/agents/tool_loop.py` & `apps/api/app/providers/llm/turn_trace.py` | ① `tool_loop.py` 在 `batched` 模式下跳过同批 `terminal=True` 工具，导致 `[update_steps/update_focus, ask_user]` 被拒多浪费一轮；② Per-Turn Trace 未记录 `mid_run_ask` 挂起/续跑与 `working_context` 字节数 | ① 放行“零副作用遥测工具（`update_focus`/`update_steps`）+ 1 个终结工具（`ask_user`/`answer`）”同批一次执行；② `turn_trace.py` 补充 `mid_run_ask` 挂起/续跑事件与 `working_context` 在 `context_sources` 中的字节数审计 |
+| `apps/api/app/prompts/chat/video_editor.j2` | 明文禁止“确认卡后再问第二次”、禁止弹卡前调 `update_steps`、将 `answer` 限制为“仅无法恢复错误才调用” | **保留现有宣传片音画工艺不动**，仅增量升级为**能力边界内 Agentic 协作宪法**：① 由模型自主判断问不问、何时问（信息齐直接做，不做机械固定套路）；② 离散取舍（如查完曲库挑 BGM、多段实拍选片、选帧、方向/语言/时长、成片后模糊修改方案对齐）在能力边界内调 `ask_user`（选项必须来自真实工具结果/可用能力，必给 `recommended_id` 与 `default_path`，纯技术参数禁问）；③ 遇高价值长内容（如完整口播主轴文字稿或重大创作方案）需用户细读把关时，可选在正文呈稿并调用 `answer` 征求批准后再动工 |
 
-### 3.2 轻量非写死决策记忆与修改协同（Antigravity / Neon 风格）
+### 3.2 统一 `working_context`、Agentic 双原语与修改协同
 
-`ask_user` 不只是“提问”，本质上是用户在创作与修改途中注入的**权威决策**。严禁为此新建写死字段的数据库表或固定枚举槽位，采用与顶级 Agent 一致的**无模式（schema-less）对话记录投影**：
-1. **直接复用持久化 Q&A 记录（零新表、零写死槽位）**：每一次用户已作答的 `ask_user` 行本就持久化在 `messages`（含 `question`、`answer`、`turn_id` 及当时关联的 `version_id` / `scene_id` 语境）。
-2. **上下文轻量投影（防跨轮失忆与修改回退）**：在 `prompts.py` 组装当前轮与后续任意**修改轮**上下文时，自动从会话最近已作答的 `ask_user` 记录中投影一个紧凑、自由格式的 `settled_user_decisions` 列表（每条仅含 `question`、`user_choice`、`at_version`），同时纳入 Per-Turn Trace（`turn_trace.py`）的 `context_sources` 审计。
-3. **续行自由响应策略**：用户提交答案进入续行 `ToolLoop` 后，模型完全自主决定响应方式：
-   - **静音直调工具（允许零前置 prose）**：直接按用户决定发出下一批工具调用（如 `update_motion_block` / `insert_visual_component` / `create_video`），不强制吐过渡废话；
-   - **简短确认 + 调工具**：先用 1 句自然确认句交代动作再并行调工具；
-   - **直接文本答复结束**：若用户明确取消或仅需说明，直接正文答复结束，不误触发强逼继续导出。
+采用 **0 新 SQL 表、无固定枚举（schema-less）** 的 Conversation 级上下文工程：
+
+1. **持久化载体与并发安全**：状态存入 `Conversation.context["working_context"]`，复用 `conversation_context.py` 的 `Conversation` `FOR UPDATE KEY SHARE` 行锁读写，彻底避免与工具历史 `items` 并发写 JSONB 覆写。**所有投影严格经 `RoundAssembly.context` 后置送入尾段 `*shared`，零污染前缀缓存**。
+2. **三项精简字段与优先级纪律**：
+   - **`user_decisions`（全周期决策账本，服务同轮续跑与后续所有修改轮）**：每次已作答 `ask_user`（单选/多题/自由输入/跳过按推荐）以自由结构追加 `{question_id, topic_key, question, mode, option_id, label, value, description, at_version, decided_at}`；不仅服务同轮续跑，也在**后续第 2、3 轮修改轮**持续后置投影，防止修改回退；
+   - **`active_goal`（目标与交付意图生命周期）**：记录当前顶层请求、`wants_delivery` 与 `delivered` 标记。**对齐最新「导出即自动交付」链路：`export_video` 自动交付成功与 `deliver_video` 均置 `delivered = True`**；且 **`active_goal.wants_delivery` 绝不凌驾于用户最新表态**——若用户中途说“先只改第 3 幕不导出”或“帮我聊聊方案”，当前用户最新语义永远覆盖旧 `active_goal`；仅在 `delivered == False` 且用户回复是对刚呈交方案/脚本的批准或推进时，自动继承交付意图；
+   - **`latest_preview`（预览门禁指纹）**：记录最近一次 `preview_range` 的 `{composition_version_id, content_digest, mp4_sha256}`，跨 `ask_user` 挂起或跨轮直接满足 `export_video` 预览门禁；已加载 Skill 复用 `ConversationContext` 历史中的 `load_skill` 记录（经 `active_skills` 列表放行 `_method_visible`），不在 `system_prompt` 重复重注整篇 `SKILL.md`。
+3. **双协作原语与续行自由响应策略**：
+   - **`ask_user`（轨内挂起轻决策）**：挂起同一工作轨等待用户点选/跳过；用户提交答案续行后，模型完全自主选择**静音直调工具（允许零前置 prose）**、**1 句确认 + 调工具**，或在用户明确取消时**直接正文收尾**（抑制 `bare_production_feedback`）；
+   - **`answer`（主动呈稿/汇报交回话筒）**：显式调用 `answer`（如呈交口播主轴稿征求批准）正常结束本轮（`opening.turn_state = "settled"`），与“裸文本漏调工具”清晰区分（后者继续由 `bare_production_feedback` 拉回正轨）。
 
 ### 3.3 等待期与回答后的前端无感连续态（Frontend）
 
-核心改造点位于 `apps/web/src/components/chat/timeline/liveState.ts`、`ChatConversation.tsx`、`ThinkingState`（`thinking-state-clean.tsx`）与 `DecisionCard`：
+核心改造点位于 `apps/web/src/components/chat/timeline/{types,history,activity,project,liveState}.ts`、`ActivityStream.tsx`、`ChatConversation.tsx`、`AgentThread.tsx` 与 `en.ts` / `zh.ts`：
 
-1. **等待作答期间保持“进行中（ing）”观感**：
-   - 在 `selectChatLiveState` 中引入挂起态判定（当当前活跃 `opening` 存在未作答的 `mid_run_ask` 卡片，或已有 open `activityFold` 且处于 `mid_run_ask` 等待时）：
-     - `mode` **保持在进行态（不跌落为 `idle` / `settled`）**；
-     - 工作轨顶栏**严禁切换为 `Worked for Xs`、已停止或完成态 UI**，而是保持进行中的微动状态与当前 `liveFocus` / 活跃步骤（`in_progress`）；
-     - **收起态完全无感**：若用户已折叠过程状态行，顶栏只维持自然进行中的状态条，同时输入区上方平滑浮出 `DecisionCard`，用户看不到任何“停止 → 重启”的视觉割裂。
-2. **回答后原地折叠进同一工作轨**：
-   - 用户在 `DecisionCard` 完成选择（或跳过）后，卡片收回并在**同一个 `activityFold` 内部**沉淀为一条紧凑、可展开/收起的 Q&A 纪要块（展示问题摘要与用户选择），紧接着续行工具步骤、阶段说明继续追加在同一工作轨下；
-   - 只有当整个 `opening` 真正完成交付/给出最终答复（或被用户显式 Stop / 遇到终态失败）时，整个工作轨才统一结算为单条 `Worked for Xs ›`。
-3. **与 `confirm_credits` 授权卡的视觉与语义边界**：
-   - `media_permission` 付费授权卡继续作为独立高醒目确认卡（`ApprovalCard`）呈现报价与积分上限，与创作类 `DecisionCard` 清晰区分；二者互不覆盖、互不放行。
+1. **去掉独立 `AnsweredQuestion` 灰气泡，将 `ask_user` 彻底收编进 `WorkSegmentRow` 工具列表**：
+   - `mapHistoryRows` 与 `AgentThread`（`handleAnswer` / `decision.committed`）不再生成聊天流内独立的右对齐灰色 `AnsweredQuestion`（`independentKind: "qa"`）气泡；历史存量问答行读容忍自动归入同 turn 的 `ask_user` 活动行；
+   - 轨内 `mid_run_ask` 不再在流外吐出切裂工作轨的 `questionEcho` 气泡；
+   - 新增 `AskUserReceipt`（`kind: "ask_user"`）、`TOOL_ACTIONS.ask_user`、`PRIMARY_LIVE_TOOLS.add("ask_user")` 与 `AskUserEvidence`：在工具列表内默认紧凑展示 `已向用户确认` + 选择摘要 chip（如所选音乐名），**hover（兼支持 click / focus 无障碍）展开查看完整问答明细**，遵守 Clean 语义 token 与双主题，同步补齐 `en.ts` / `zh.ts` 词条。
+2. **等待作答期保持“进行中（ing）”观感且输入框可用**：
+   - **`chatBusy` 与工作轨活态严格解耦**：等待用户作答期间 `chatBusy` 保持 `false`（输入框不锁死、刷新后不触发 2.5s 空轮询）；
+   - `selectChatLiveState` 识别开放 fold 中处于 `status === "active" && call_state === "awaiting_user"` 的 `ask_user` 行，单独将工作轨维持在 `mode = "live_working"`、`liveWorkFoldKey = fold.rowKey`、`nowRow = askUserActivity`：上方 `StepsPlanCard` 保持展开（当前步骤脉冲 `in_progress`），下方顶栏持续显示 **`正在向用户提问…` + 持续计时**（刷新后沿原时间戳续算，绝不结算成 `Worked for Xs`），输入区上方平滑浮出 `DecisionCard`；
+   - `turn.completed` / `answer.completed` 收到待答 `ask_user` 时跳过 `closeWorkSegment` 与 `settleActivities("completed")`；`handleAnswer` 续跑同轨时保留原 open fold 的 `rowKey`（不清空 `currentActivityRowKeysRef`）；
+   - 只有整轮真正完成交付/给出最终答复（或显式 Stop / 终态失败）时，整个工作轨才统一结算为单条 `Worked for Xs ›`。
+3. **守住既有失败恢复卡折叠与 `confirm_credits` 正交边界**：
+   - 修改 `ChatConversation.tsx`、`ActivityStream.tsx` 与 `liveState.ts` 时，**完整保留既有失败恢复卡（`FailureCheckpointCard` `recovered` 折叠 / `isCheckpoint` / `isIsolatedFailure` / `isAssistantOutcome`）去重与折叠行为及全部单测绿灯**；
+   - `media_permission` 付费授权卡继续作为独立高醒目确认卡（`ApprovalCard`）呈现报价与积分上限，不合并进 `ask_user` 工具行，二者互不覆盖、互不放行。
 
 ---
 
@@ -228,7 +237,7 @@
 
 | 阶段 | 施工内容 | 确定性门禁 | 真实浏览器 & 视听验收 |
 | :--- | :--- | :--- | :--- |
-| **Stage 1 · 底座 A（Mid-Run & 修改轮 `ask_user`）** | `ask_user` 全量解绑（`prompts.py:351/492/493/497`、`plan_turn.py:860-896`、`video_editor.j2`，对齐最新导出即交付流程）+ 修复 `_continue_chat_answer` 重复拼接 `opening.content` + 无模式 `settled_user_decisions` 对话投影（防后续修改轮失忆回退）+ 续行静音直调工具 + `liveState.ts` / `ChatConversation.tsx` 进行态保持与轨内 Q&A 折叠 + `confirm_credits` 正交测试 + Per-Turn Trace 埋点 | `make test-fast`、`make test-chat`、`make test-web`、`make test-e2e` | Chrome 实测：① 多步执行中途与成片后模糊修改轮均可弹出自由多题卡，顶栏（展开与收起态）保持 ing 不出现 `Worked for Xs`；② 刷新页面挂起态与步骤不丢；③ 回答后 Q&A 收进同一工作轨、续行不重做已保存版本且后续第 2/3 轮修改仍记住已拍板决定；④ `confirm_credits` 与 `ask_user` 严格正交 |
-| **Stage 2 · 底座 B2-A（提前！React/TSX + HTML + SVG 代码画笔）** | 解锁并升级 `remotion-project`：`bake.ts` 单槽硬拒改为有界 FIFO 队列 + 跨平台 Chromium 路径 + Linux 生产无网 Sidecar 隔离（保留本地 macOS Seatbelt）+ `insert_visual_component` / `update_visual_component`（支持 `props_patch` 参数化微调，严防做成“半个 OpenFilm”）+ `generative-motion/SKILL.md` + Per-Turn Trace 烘焙/修复诊断。**完成 Stage 1 + Stage 2 即达到可直接给领导演示的视觉跃升交付点** | `make test-api`、`make test-render`、`make test-web`（含 AST 安全审计、并发队列排队、隔离逃逸/断网/超时、确定性帧与 `props_patch` 重烘回归） | ① 真实跑出 15 秒 React/SVG 动态设计师 Showreel（多边形形变+线框残影、点阵波场、3D 发光丝带）及带定制粒子/微交互幕的商业官网宣传片；② 验证 `update_visual_component(props_patch=...)` 精准改字号/配色/文案不漂移且周围音轨字幕不动；③ 验证原生 `TextObject` 字幕叠在代码画笔之上可 0ms 单独修改 |
+| **Stage 1 · 底座 A（基于最新 `main` 新分支：Mid-Run & 修改轮 `ask_user` + `answer` 过稿 + 统一 `working_context`）** | `ask_user` 全量解绑（`prompts.py:351/492/493/497/579`、`plan_turn.py`、`schemas.py`、`video_editor.j2`，对齐 `export_video` 导出即自动交付）+ `Conversation.context["working_context"]`（经行锁持久化 `user_decisions`/`active_goal`/`latest_preview` 且仅走后置 `RoundAssembly.context` 守住 ~93% Prompt Cache；`active_goal` 服从最新用户语义；`user_decisions` 覆盖后续所有修改轮；`export_video` 与 `deliver_video` 均置 `delivered=True`）+ `conversation_context.py` 按 `call_id` 恢复同 `turn_id` 历史与放通 `load_skill` + 消灭正则扫 `Question:` 脏拼接与 `bail` 全路径续跑 + `tool_loop.py` 放行遥测+终结同批 + `ask_user` 单写口活动行/刷新豁免/Stop 结算/同 `run_id` 续跑 + 前端去独立 `AnsweredQuestion` 灰气泡改为 `WorkSegmentRow` 工具行 hover/点击展开、等待期 `chatBusy=false` 保持 `正在向用户提问…` ing 态与 `StepsPlanCard` 展开并守住失败恢复卡折叠 + `turn_trace.py` 埋点 + `confirm_credits` 正交回归 | `make test-fast`、`make test-chat`、`make test-web`（含失败恢复卡折叠单测与 EN↔ZH parity）、`make test-e2e` | Chrome 实测：① 多步执行中途（如查完曲库选 BGM）与成片后模糊修改轮均可弹出自由卡，顶栏保持 `正在向用户提问…` ing 态不出现 `Worked for Xs` 且输入框可用；② 刷新页面挂起态与步骤不丢且无误报中断；③ 回答后无独立 QA 灰气泡、问答藏在 tool call 内 hover/点击可见，后续真正用所选 `music_id` 成片且第 2/3 轮修改仍记住已拍板决定；④ 呈交口播稿 `answer` 过稿后用户批准无缝制作交付；⑤ Prompt Cache 命中率无回退、`confirm_credits` 与 `ask_user` 严格正交 |
+| **Stage 2 · 底座 B2-A（Stage 1 完成后紧接新分支：React/TSX + HTML + SVG 代码画笔）** | 解锁并升级 `remotion-project`：`bake.ts` 单槽硬拒改为有界 FIFO 队列 + 跨平台 Chromium 路径 + Linux 生产无网 Sidecar 隔离（保留本地 macOS Seatbelt）+ `insert_visual_component` / `update_visual_component`（支持 `props_patch` 参数化微调，严防做成“半个 OpenFilm”）+ `generative-motion/SKILL.md` + Per-Turn Trace 烘焙/修复诊断。**完成 Stage 1 + Stage 2 即达到可直接给领导演示的视觉跃升交付点** | `make test-api`、`make test-render`、`make test-web`（含 AST 安全审计、并发队列排队、隔离逃逸/断网/超时、确定性帧与 `props_patch` 重烘回归） | ① 真实跑出 15 秒 React/SVG 动态设计师 Showreel（多边形形变+线框残影、点阵波场、3D 发光丝带）及带定制粒子/微交互幕的商业官网宣传片；② 验证 `update_visual_component(props_patch=...)` 精准改字号/配色/文案不漂移且周围音轨字幕不动；③ 验证原生 `TextObject` 字幕叠在代码画笔之上可 0ms 单独修改 |
 | **Stage 3A · 底座 B1（Vlog 高级剪辑原语）** | `playback_rate`/`color_grade`（Top 10 目录 + 参数微调）/`crop`/`frame`/`mask` Schema + `Video.tsx` 渲染 + `MotionBlockObject` 视频源挂载与 `editorial_grid_frame` + `insert_visual` 视频 PiP + `set_layer_order` + `animate_object` + `set_mask` + `set_clip_speed` + `set_color_grade` + `inspect_source_frames` + `vlog-editing` & 升级 `talking-head-video` Skills | `make test-all`（含 Py↔TS Zod/动画/蒙版/滤镜/变速 parity 与旧 digest 零漂移） | 真实上传实拍素材走 `/api/v1/chat`，分别跑通：① 胶片旅拍 Vlog（居中画中画 + 局部变速 + `fuji_classic` 微调）；② 瑞士动态网格视频块；③ 圆形蒙版相似形匹配快剪；验证 Web Player 与 1080p MP4 逐帧对齐及单对象续改 |
 | **Stage 3B · 底座 B2-B → B3 & 前台 C（抠像与首页重构）** | **B2-B**：`extract_subject(image \| freeze_frame)` + `layered-compositing` Skill；**B3**：独立启动 `extract_subject(video_clip)` Luma Matte 管线与边缘/时序/成本专项验收；**前台 C**：隐藏「模板」Tab，重构 `DemoGallery.tsx` 与 Landing，上架首批真实标杆成片 | `make test-api`、`make test-web`（含 EN↔ZH 键与槽位 parity）、`make test-e2e` | ① 核对定格/视频抠像在 Web Player 与 1080p MP4 中的透明边缘、文字穿人后可二次改字及积分台账；② Chrome 实测桌面/手机、中英、明暗、reduced-motion 下的混画幅播放与填空 Brief |
