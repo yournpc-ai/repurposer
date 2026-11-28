@@ -93,8 +93,8 @@ function AppLayout() {
       replace: true,
     })
   }, [checkout, orderId, checkoutSurface, location.pathname, handleCheckoutReturn, navigate])
-  const shell = (
-    <div ref={appRef} className="ui-as-app">
+  const shell = activeProjectId ? (
+    <div ref={appRef} className="ui-as-app" data-workspace-header="true">
       <AppSidebar defaultOpen={sidebarOpen} />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <StudioHeader />
@@ -104,11 +104,19 @@ function AppLayout() {
               <Outlet />
             </div>
           </main>
-          {activeProjectId ? (
-            <WorkbenchPane containerRef={appRef} tabsInHeader />
-          ) : null}
+          <WorkbenchPane containerRef={appRef} tabsInHeader />
         </div>
       </div>
+    </div>
+  ) : (
+    <div ref={appRef} className="ui-as-app">
+      <AppSidebar defaultOpen={sidebarOpen} />
+      <main className="ui-as-main">
+        <StudioHeader />
+        <div className="min-h-0 flex-1 overflow-auto">
+          <Outlet />
+        </div>
+      </main>
     </div>
   )
   return (

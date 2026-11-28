@@ -27,7 +27,8 @@ export function StudioHeader() {
     <header
       data-slot="studio-header"
       className={cn(
-        "sticky top-0 z-30 flex h-12 shrink-0 items-center justify-between gap-2 bg-background/95 px-3 backdrop-blur-sm border-b border-border/40 md:static md:border-b-0 md:bg-transparent md:pl-1.5 md:pr-2.5 md:backdrop-blur-none",
+        "sticky top-0 z-30 flex h-12 shrink-0 items-center justify-between gap-2 bg-background/95 px-3 backdrop-blur-sm border-b border-border/40 md:border-b-0 md:bg-transparent md:backdrop-blur-none",
+        onProjectChat ? "md:static md:pl-1.5 md:pr-2.5" : "md:px-4",
         !hasRouteSlot && "md:border-b-0 md:bg-transparent md:backdrop-blur-none",
       )}
     >

@@ -36,7 +36,8 @@
   --select: rgba(255, 255, 255, 0.08);
   --chip: rgba(255, 255, 255, 0.06);
 }
-.ui-as-side { display: flex; flex-direction: column; flex: none; gap: 12px; width: 48px; min-height: 0; padding: 8px 8px 8px 10px; }
+.ui-as-side { display: flex; flex-direction: column; flex: none; gap: 12px; width: 48px; min-height: 0; padding: 10px 8px 8px 10px; }
+.ui-as-app[data-workspace-header="true"] .ui-as-side { padding-top: 8px; }
 .ui-as-side[data-expanded="true"] { width: 240px; }
 .ui-as-side__item { display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 6px 8px; border-radius: calc(var(--aui-radius-sm, 5px) + 3px); font-size: 13px; color: var(--text); transition: background-color 140ms ease, color 140ms ease; }
 .ui-as-side__item svg { flex: none; color: var(--as-muted); }
@@ -60,7 +61,7 @@
   container: ui-as-main / inline-size;
   position: relative;
   min-width: 0;
-  margin: 0 var(--frame-gap) var(--frame-gap) 0;
+  margin: var(--frame-gap) var(--frame-gap) var(--frame-gap) 0;
   overflow-y: auto;
   /* No rubber-band bounce at the ends – sticky headers stay put */
   overscroll-behavior: none;
@@ -70,6 +71,9 @@
   border: 1px solid var(--line);
   border-radius: var(--radius-panel);
   background: var(--panel);
+}
+.ui-as-app[data-workspace-header="true"] .ui-as-main {
+  margin-top: 0;
 }
 .ui-as-panel {
   margin: 0 var(--frame-gap) var(--frame-gap) 0;
