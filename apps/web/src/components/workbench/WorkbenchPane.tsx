@@ -47,6 +47,7 @@ import type { MediaRegionSelection } from "@/lib/mediaRegionSelection"
 import { cn, formatDuration, formatTimestamp } from "@/lib/utils"
 import type { WorkbenchAsset, WorkbenchOutput } from "@/lib/workbench"
 import {
+  useOptionalWorkbench,
   useWorkbench,
   type WorkbenchArtifact,
   type WorkbenchPresetKind,
@@ -70,7 +71,6 @@ const VoiceLibraryPanel = lazy(() => import("./VoiceLibraryPanel"))
 const SoundLabPanel = lazy(() => import("./SoundLabPanel"))
 
 const WIDTH_STORAGE_KEY = "repurposer-workbench-width"
-const DEFAULT_WIDTH = 480
 const MIN_WIDTH = 360
 const MAX_SCRUB_WINDOW_S = 12
 
@@ -1744,80 +1744,11 @@ function artifactTabIcon(artifact: WorkbenchArtifact) {
   }
 }
 
-export function WorkbenchPane({
-  containerRef,
-}: {
-  containerRef?: React.RefObject<HTMLElement | null>
-}) {
+function useResolveArtifactLabel() {
   const { t } = useTranslation()
-  const mobile = useIsMobile()
-  const prefersReducedMotion = useReducedMotion()
-  const {
-    isOpen,
-    closeWorkbench,
-    openArtifacts,
-    activeArtifact,
-    openArtifact,
-    closeArtifact,
-    activateArtifact,
-    workbench,
-  } = useWorkbench()
-  const [width, setWidth] = useState(DEFAULT_WIDTH)
-  const [resizing, setResizing] = useState(false)
-
-  useEffect(() => {
-    try {
-      const saved = window.localStorage.getItem(WIDTH_STORAGE_KEY)
-      if (saved) {
-        const parsed = Number.parseInt(saved, 10)
-        if (Number.isFinite(parsed) && parsed >= MIN_WIDTH) {
-          setWidth(parsed)
-        }
-      }
-    } catch {
-      // Ignore storage access errors
-    }
-  }, [])
-
-  const clampWidth = useCallback(
-    (next: number) => {
-      const parentWidth =
-        containerRef?.current?.clientWidth ?? window.innerWidth
-      const maxWidth = Math.max(MIN_WIDTH, Math.floor(parentWidth * 0.56))
-      return Math.min(maxWidth, Math.max(MIN_WIDTH, Math.round(next)))
-    },
-    [containerRef],
-  )
-
-  const onResizePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0) return
-    event.preventDefault()
-    const startX = event.clientX
-    const startWidth = width
-    setResizing(true)
-
-    const onMove = (e: PointerEvent) => {
-      const delta = startX - e.clientX
-      setWidth(clampWidth(startWidth + delta))
-    }
-    const onUp = (e: PointerEvent) => {
-      const delta = startX - e.clientX
-      const finalWidth = clampWidth(startWidth + delta)
-      setWidth(finalWidth)
-      setResizing(false)
-      try {
-        window.localStorage.setItem(WIDTH_STORAGE_KEY, String(finalWidth))
-      } catch {
-        // Ignore storage errors
-      }
-      window.removeEventListener("pointermove", onMove)
-      window.removeEventListener("pointerup", onUp)
-    }
-    window.addEventListener("pointermove", onMove)
-    window.addEventListener("pointerup", onUp)
-  }
-
-  const resolveArtifactLabel = useCallback(
+  const ctx = useOptionalWorkbench()
+  const workbench = ctx?.workbench
+  return useCallback(
     (artifact: WorkbenchArtifact): string => {
       if (artifact.title?.trim()) return artifact.title.trim()
       if (artifact.kind === "output") {
@@ -1856,6 +1787,141 @@ export function WorkbenchPane({
     },
     [workbench, t],
   )
+}
+
+export function WorkbenchTabStrip({ className }: { className?: string }) {
+  const { t } = useTranslation()
+  const ctx = useOptionalWorkbench()
+  const resolveArtifactLabel = useResolveArtifactLabel()
+  if (!ctx || ctx.openArtifacts.length === 0) return null
+  const { openArtifacts, activeArtifact, activateArtifact, closeArtifact } = ctx
+
+  return (
+    <div
+      role="tablist"
+      aria-label={t("workbench.title")}
+      className={cn(
+        "flex min-w-0 flex-1 items-center gap-1 overflow-x-auto py-1 no-scrollbar",
+        className,
+      )}
+    >
+      {openArtifacts.map((artifact) => {
+        const selected = artifact.key === activeArtifact?.key
+        const label = resolveArtifactLabel(artifact)
+        return (
+          <div
+            key={artifact.key}
+            className={cn(
+              "group flex h-7 max-w-[180px] shrink-0 items-center gap-1 rounded-md border px-2 text-xs transition-colors",
+              selected
+                ? "border-border/70 bg-[var(--panel,var(--card))] font-medium text-foreground shadow-[0_1px_2px_rgba(0,0,0,0.05)]"
+                : "border-transparent text-muted-foreground hover:bg-accent/70 hover:text-foreground",
+            )}
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={selected}
+              onClick={() => activateArtifact(artifact.key)}
+              title={label}
+              className="flex min-w-0 items-center gap-1.5 focus-visible:outline-2 focus-visible:outline-ring"
+            >
+              {artifactTabIcon(artifact)}
+              <span className="truncate">{label}</span>
+            </button>
+            <button
+              type="button"
+              aria-label={t("workbench.closeTab", { title: label })}
+              onClick={(e) => {
+                e.stopPropagation()
+                closeArtifact(artifact.key)
+              }}
+              className="ml-0.5 rounded-sm p-0.5 text-muted-foreground opacity-60 transition-opacity hover:bg-accent hover:text-foreground hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-ring"
+            >
+              <X className="size-3" />
+            </button>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+export function WorkbenchPane({
+  containerRef,
+  tabsInHeader = false,
+}: {
+  containerRef?: React.RefObject<HTMLElement | null>
+  /** When true, desktop artifact tabs live in the outer gray StudioHeader bar above the pane. */
+  tabsInHeader?: boolean
+}) {
+  const { t } = useTranslation()
+  const mobile = useIsMobile()
+  const prefersReducedMotion = useReducedMotion()
+  const {
+    isOpen,
+    closeWorkbench,
+    openArtifacts,
+    activeArtifact,
+    openArtifact,
+    workbench,
+    paneWidth: width,
+    setPaneWidth: setWidth,
+  } = useWorkbench()
+  const resolveArtifactLabel = useResolveArtifactLabel()
+  const [resizing, setResizing] = useState(false)
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(WIDTH_STORAGE_KEY)
+      if (saved) {
+        const parsed = Number.parseInt(saved, 10)
+        if (Number.isFinite(parsed) && parsed >= MIN_WIDTH) {
+          setWidth(parsed)
+        }
+      }
+    } catch {
+      // Ignore storage access errors
+    }
+  }, [setWidth])
+
+  const clampWidth = useCallback(
+    (next: number) => {
+      const parentWidth =
+        containerRef?.current?.clientWidth ?? window.innerWidth
+      const maxWidth = Math.max(MIN_WIDTH, Math.floor(parentWidth * 0.56))
+      return Math.min(maxWidth, Math.max(MIN_WIDTH, Math.round(next)))
+    },
+    [containerRef],
+  )
+
+  const onResizePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return
+    event.preventDefault()
+    const startX = event.clientX
+    const startWidth = width
+    setResizing(true)
+
+    const onMove = (e: PointerEvent) => {
+      const delta = startX - e.clientX
+      setWidth(clampWidth(startWidth + delta))
+    }
+    const onUp = (e: PointerEvent) => {
+      const delta = startX - e.clientX
+      const finalWidth = clampWidth(startWidth + delta)
+      setWidth(finalWidth)
+      setResizing(false)
+      try {
+        window.localStorage.setItem(WIDTH_STORAGE_KEY, String(finalWidth))
+      } catch {
+        // Ignore storage errors
+      }
+      window.removeEventListener("pointermove", onMove)
+      window.removeEventListener("pointerup", onUp)
+    }
+    window.addEventListener("pointermove", onMove)
+    window.addEventListener("pointerup", onUp)
+  }
 
   const availableItems = useMemo<
     { key: string; label: string; meta?: string; icon: React.ReactNode; artifact: WorkbenchArtifact }[]
@@ -1952,56 +2018,14 @@ export function WorkbenchPane({
     return items
   }, [workbench, t])
 
+  const showInternalTabBar = mobile || (!tabsInHeader && openArtifacts.length > 0)
+
   const paneContent = (
-    <div className="flex h-full min-h-0 flex-col bg-background">
-      {/* Single Antigravity-style Tab Bar (desktop: shown when tabs open; mobile: always hosts the single close × so there is zero duplicate title row) */}
-      {openArtifacts.length > 0 || mobile ? (
+    <div className="flex h-full min-h-0 flex-col bg-transparent">
+      {showInternalTabBar ? (
         <div className="flex h-11 shrink-0 items-center gap-1.5 border-b border-subtle px-2.5">
           {openArtifacts.length > 0 ? (
-            <div
-              role="tablist"
-              aria-label={t("workbench.title")}
-              className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto py-1 no-scrollbar"
-            >
-              {openArtifacts.map((artifact) => {
-                const selected = artifact.key === activeArtifact?.key
-                const label = resolveArtifactLabel(artifact)
-                return (
-                  <div
-                    key={artifact.key}
-                    className={cn(
-                      "group flex h-7 max-w-[196px] shrink-0 items-center gap-1 rounded-md border px-2 text-xs transition-colors",
-                      selected
-                        ? "border-border/80 bg-card font-medium text-foreground"
-                        : "border-transparent text-muted-foreground hover:bg-accent/70 hover:text-foreground",
-                    )}
-                  >
-                    <button
-                      type="button"
-                      role="tab"
-                      aria-selected={selected}
-                      onClick={() => activateArtifact(artifact.key)}
-                      title={label}
-                      className="flex min-w-0 items-center gap-1.5 focus-visible:outline-2 focus-visible:outline-ring"
-                    >
-                      {artifactTabIcon(artifact)}
-                      <span className="truncate">{label}</span>
-                    </button>
-                    <button
-                      type="button"
-                      aria-label={t("workbench.closeTab", { title: label })}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        closeArtifact(artifact.key)
-                      }}
-                      className="ml-0.5 rounded-sm p-0.5 text-muted-foreground opacity-60 transition-opacity hover:bg-accent hover:text-foreground hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-ring"
-                    >
-                      <X className="size-3" />
-                    </button>
-                  </div>
-                )
-              })}
-            </div>
+            <WorkbenchTabStrip />
           ) : (
             <span className="flex-1 truncate px-1 text-xs font-medium text-foreground">
               {t("workbench.title")}
@@ -2150,7 +2174,7 @@ export function WorkbenchPane({
               : { type: "spring", stiffness: 420, damping: 36 }
           }
           style={{ width }}
-          className="ui-as-panel relative flex h-full shrink-0 flex-col overflow-hidden bg-[var(--page)]"
+          className="ui-as-panel relative flex min-h-0 shrink-0 flex-col overflow-hidden"
         >
           {/* Left-edge drag-resize handle */}
           <div

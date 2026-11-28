@@ -96,13 +96,19 @@ function AppLayout() {
   const shell = (
     <div ref={appRef} className="ui-as-app">
       <AppSidebar defaultOpen={sidebarOpen} />
-      <main className="ui-as-main">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <StudioHeader />
-        <div className="min-h-0 flex-1 overflow-auto">
-          <Outlet />
+        <div className="flex min-h-0 min-w-0 flex-1">
+          <main className="ui-as-main">
+            <div className="min-h-0 flex-1 overflow-auto">
+              <Outlet />
+            </div>
+          </main>
+          {activeProjectId ? (
+            <WorkbenchPane containerRef={appRef} tabsInHeader />
+          ) : null}
         </div>
-      </main>
-      {activeProjectId ? <WorkbenchPane containerRef={appRef} /> : null}
+      </div>
     </div>
   )
   return (

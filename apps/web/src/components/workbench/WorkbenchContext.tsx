@@ -120,6 +120,9 @@ export interface WorkbenchContextValue {
   setSelectedOutputId: (id: string | null) => void
   setSelectedAssetId: (id: string | null) => void
   setSelectedSkillVersionId: (id: string | null) => void
+  /** Registered desktop pane width (px) so outer header tabs align flush over the pane. */
+  paneWidth: number
+  setPaneWidth: (width: number) => void
   /** Register the active AgentThread composer mention-injection handler. */
   registerMentionHandler: (handler: ((mention: ChatMention) => void) | null) => void
   /** Inject a mention (+ optional region selection) into the active composer. */
@@ -282,6 +285,7 @@ export function WorkbenchProvider({
   const [workbench, setWorkbench] = useState<WorkbenchData | null>(initialData)
   const [loading, setLoading] = useState(initialData == null)
   const [isOpen, setIsOpen] = useState(defaultOpen)
+  const [paneWidth, setPaneWidth] = useState(480)
   const [openArtifacts, setOpenArtifacts] = useState<WorkbenchArtifact[]>(() => {
     if (!defaultOpen) return []
     const primary = pickPrimaryArtifact(initialData)
@@ -813,6 +817,8 @@ export function WorkbenchProvider({
       setSelectedOutputId,
       setSelectedAssetId,
       setSelectedSkillVersionId,
+      paneWidth,
+      setPaneWidth,
       registerMentionHandler,
       registerTextHandler,
       citeText,
@@ -824,6 +830,7 @@ export function WorkbenchProvider({
       loading,
       refresh,
       isOpen,
+      paneWidth,
       openArtifacts,
       activeArtifact,
       openArtifact,
