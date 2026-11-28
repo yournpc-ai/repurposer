@@ -260,12 +260,15 @@ def resolve_motion_block_cue_phrases(
                 if hit is not None:
                     anchors[i] = hit[0]
                     after = hit[0] + (0.001 if acoustic_edges else 0.051)
-            start = max(0, speech_lead_s)
-            end = start + 0.75 * max(0, _spoken_end_s() - start)
             if block_id == "statement_hook" and len(anchors) * 2 < len(tokens):
                 anchors.clear()
-            if anchors or block_id == "statement_hook":
-                anchors.setdefault(0, min(start, min(anchors.values(), default=start)))
+            if anchors:
+                start = max(0, speech_lead_s)
+                end = min(
+                    start + 0.75 * max(0, _spoken_end_s() - start),
+                    max(anchors.values()) + 0.35 * max(1, len(tokens) - 1 - max(anchors)),
+                )
+                anchors.setdefault(0, min(start, min(anchors.values())))
                 anchors.setdefault(len(tokens) - 1, max(end, max(anchors.values())))
                 ordered = sorted(anchors)
                 times = [anchors[0]]
@@ -436,15 +439,6 @@ def resolve_motion_block_cue_phrases(
                     item = updated[i]
                     label = " ".join(str(item[k]) for k in ("value", "label", "title", "text") if k in item)
                     detail = {"list": list_key, "item_index": i, "label": label}
-                    if auto_hits[i] is None:
-                        diagnostics.append({
-                            "kind": "orphan_item",
-                            **detail,
-                            "message": (
-                                "Remove this extra item or bind its cue_phrase to a natural phrase already spoken "
-                                "in this act (never rewrite smooth prose into a noun list)."
-                            ),
-                        })
                     for raw, value in spoken_numbers(str(item.get("value", ""))):
                         if any(number == value for _, number in numbers):
                             continue
@@ -497,29 +491,6 @@ def resolve_motion_block_cue_phrases(
                             clamped = round(min(duration_s, max(0, prev_t, t_val)), 3)
                         updated[idx_in_list]["reveal_at_s"] = clamped
                         prev_t = clamped
-                elif explicit_count == 0 and spoken_span >= 2.5:
-                    # Guardrail against premature static freeze: if guessed reveals finish in <45% of spoken time,
-                    # pace them rhythmically across the spoken arc instead of finishing at 1.1s and freezing.
-                    raw_reveals: list[float] = []
-                    for i in dict_indices:
-                        rv = updated[i].get("reveal_at_s")
-                        if rv is not None:
-                            try:
-                                raw_reveals.append(float(rv))
-                            except (TypeError, ValueError):
-                                pass
-                    premature = (
-                        not raw_reveals
-                        or len(raw_reveals) < n_items
-                        or max(raw_reveals) < speech_lead_s + spoken_span * 0.45
-                    )
-                    if premature:
-                        start_arc = round(max(0.15, speech_lead_s), 3)
-                        end_arc = round(min(duration_s - 0.5, speech_lead_s + spoken_span * 0.72), 3)
-                        if end_arc > start_arc + 0.35:
-                            for k, idx_in_list in enumerate(dict_indices):
-                                frac = k / max(1, n_items - 1)
-                                updated[idx_in_list]["reveal_at_s"] = round(start_arc + (end_arc - start_arc) * frac, 3)
 
             result[list_key] = updated
 
@@ -561,35 +532,6 @@ def _visual_cues(block_id: str, props: dict[str, Any]) -> list[tuple[float, str,
         for at, token in zip(props["word_reveals_s"], tokens, strict=True):
             add(at, "reveal" if hook else "word_flip", token)
     return events
-
-
-def _dead_hold_seconds(block_id: str, props: dict, duration: float, events: list) -> float:
-    # Measure the tail after the last semantic action, including entrance/count-up settling.
-    if props.get("callout_steps") or props.get("camera_preset") == "scroll_reveal":
-        return 0.0
-    last = max((at for at, _, _ in events), default=0.0)
-    if block_id == "statement_hook":
-        return duration - max(last + 0.35, (props.get("highlight_at_s") or 0) + 0.55, props["entrance_duration_s"])
-    if block_id == "kinetic_title":
-        return duration - props["entrance_duration_s"] - props["exit_duration_s"]
-    if block_id == "quote_proof":
-        return duration - max(last + 0.55, duration * 0.62 + 0.36)
-    if block_id == "closing_cta":
-        return duration - (props["entrance_duration_s"] * 0.85 + 1.1)
-    if block_id == "kinetic_beat" and props["mode"] == "impact_cut":
-        return duration - props["entrance_duration_s"]
-    if block_id not in {"metric_grid", "step_timeline", "flow_diagram", "bento_features", "split_compare", "data_chart"}:
-        return 0.0
-    for key in ("items", "steps", "nodes", "cards", "left_items", "right_items", "points"):
-        items = props.get(key, [])
-        for i, item in enumerate(items):
-            at = item.get("reveal_at_s")
-            if at is None:
-                at = (0.22 + i * props["stagger_s"] if block_id == "metric_grid" else
-                      0.25 + i * max(0, duration * 0.72 - 0.25) / max(1, len(items) - 1))
-            last = max(last, at)
-    settle = 1.08 if block_id == "metric_grid" else 0.7 if block_id == "split_compare" else 0.55
-    return duration - last - settle
 
 
 def media_generation_forbidden(text: str) -> bool:
@@ -795,11 +737,15 @@ class CreateVideoArgs(BaseModel):
         description="Optional offset inside the BGM recording (seconds) to start from a recommended groove/highlight section instead of 0s (check recommended_start/sections from search_music).",
     )
     bgm_gain_db: float = Field(
-        default=-21.0,
+        default=0.0,
         ge=-40.0,
-        le=0.0,
+        le=6.0,
         allow_inf_nan=False,
-        description="Optional BGM gain in dB when music_id is provided (defaults to -22 dB under narration, -14 dB without narration).",
+        description=(
+            "BGM clip gain in dB when music_id is provided (defaults to 0.0 dB unity gain). "
+            "Inspect each track's measured LUFS from search_music and choose the mix level intentionally "
+            "(e.g. attenuate under voiceover or keep higher energy on music-led cuts)."
+        ),
     )
     caption_preset: Annotated[TextStylePresetId, WithJsonSchema({"type": "string"})] | None = Field(
         default=None,
@@ -1608,15 +1554,7 @@ async def create_video(db, turn, args: CreateVideoArgs):
                 default=0,
             )
             if total_ticks > 0:
-                has_dialogue = any(
-                    trk.kind == "audio" and trk.role == "dialogue" and trk.clips
-                    for trk in comp_content.timeline.tracks
-                )
-                eff_bgm_gain = (
-                    args.bgm_gain_db
-                    if "bgm_gain_db" in args.model_fields_set
-                    else (-22.0 if has_dialogue else -14.0)
-                )
+                eff_bgm_gain = args.bgm_gain_db
                 bgm_source_start_ticks = (
                     output_ticks_to_source_ticks(
                         round(args.bgm_source_start_seconds * comp_content.settings.timebase),
@@ -1755,10 +1693,6 @@ async def create_video(db, turn, args: CreateVideoArgs):
             events = _visual_cues(block_id, props)
             visual_cues.extend({**context, "kind": kind, "label": label, "at_seconds": round(start + at, 3)}
                                for at, kind, label in events if 0 <= at < duration)
-            hold = _dead_hold_seconds(block_id, props, duration, events)
-            if hold > 1.3 and hold > duration * 0.38:
-                warnings.append({**context, "kind": "dead_hold", "seconds": round(hold, 3),
-                                 "message": "Bring the cut closer or add a later visual event."})
     duration_meta: dict[str, Any] = {}
     if args.motion_blocks and required.get("target_seconds") is not None:
         target_s = float(required["target_seconds"])

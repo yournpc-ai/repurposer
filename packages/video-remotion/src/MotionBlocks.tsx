@@ -198,8 +198,8 @@ const ProductShowcaseBlock: React.FC<{
   const sinceReveal = step ? cueSec - step.start_s : tSec - entranceDur * 0.68;
   const calloutT = callout ? springOut(Math.max(0, sinceReveal), 11.5, 0.84) : 0;
   const calloutAlpha = callout ? easeOutCubic(sinceReveal / 0.42) : 0;
-  const bracketLen = Math.round(18 * scaleUnit);
-  const bracketThick = Math.max(2, Math.round(3 * scaleUnit));
+  const bracketLen = Math.round(14 * scaleUnit);
+  const bracketThick = Math.max(1.5, Math.round(2 * scaleUnit));
 
   return (
     <div
@@ -403,21 +403,21 @@ const ProductShowcaseBlock: React.FC<{
                       top: `${callout.y * 100}%`,
                       width: `${callout.width * 100}%`,
                       height: `${callout.height * 100}%`,
-                      borderRadius: Math.round(12 * scaleUnit),
+                      borderRadius: Math.round(10 * scaleUnit),
                       boxSizing: "border-box",
-                      border: `1.5px solid ${hexToRgba(accent, 0.85)}`,
-                      boxShadow: `0 0 0 9999px rgba(7, 11, 17, ${0.26 * calloutAlpha}), 0 0 ${Math.round(28 * scaleUnit)}px ${hexToRgba(accent, 0.32)}`,
+                      border: `1px solid ${hexToRgba(accent, isDark ? 0.52 : 0.36)}`,
+                      boxShadow: `0 0 0 9999px rgba(${isDark ? "7, 11, 17" : "15, 23, 42"}, ${(isDark ? 0.3 : 0.16) * calloutAlpha}), inset 0 0 0 1px ${isDark ? "rgba(255, 255, 255, 0.14)" : "rgba(255, 255, 255, 0.65)"}, 0 ${Math.round(8 * scaleUnit)}px ${Math.round(24 * scaleUnit)}px ${hexToRgba(accent, isDark ? 0.22 : 0.14)}`,
                       opacity: calloutAlpha,
-                      transform: step ? undefined : `scale(${0.96 + 0.04 * calloutT})`,
+                      transform: step ? undefined : `scale(${0.97 + 0.03 * calloutT})`,
                       pointerEvents: "none",
                       zIndex: 3,
                     }}
                   >
-                    {/* Precision corner L-brackets */}
-                    <span style={{ position: "absolute", top: -1, left: -1, width: bracketLen, height: bracketLen, borderTop: `${bracketThick}px solid ${accent}`, borderLeft: `${bracketThick}px solid ${accent}`, borderTopLeftRadius: Math.round(10 * scaleUnit) }} />
-                    <span style={{ position: "absolute", top: -1, right: -1, width: bracketLen, height: bracketLen, borderTop: `${bracketThick}px solid ${accent}`, borderRight: `${bracketThick}px solid ${accent}`, borderTopRightRadius: Math.round(10 * scaleUnit) }} />
-                    <span style={{ position: "absolute", bottom: -1, left: -1, width: bracketLen, height: bracketLen, borderBottom: `${bracketThick}px solid ${accent}`, borderLeft: `${bracketThick}px solid ${accent}`, borderBottomLeftRadius: Math.round(10 * scaleUnit) }} />
-                    <span style={{ position: "absolute", bottom: -1, right: -1, width: bracketLen, height: bracketLen, borderBottom: `${bracketThick}px solid ${accent}`, borderRight: `${bracketThick}px solid ${accent}`, borderBottomRightRadius: Math.round(10 * scaleUnit) }} />
+                    {/* Subtle precision corner ticks */}
+                    <span style={{ position: "absolute", top: -1, left: -1, width: bracketLen, height: bracketLen, borderTop: `${bracketThick}px solid ${hexToRgba(accent, 0.85)}`, borderLeft: `${bracketThick}px solid ${hexToRgba(accent, 0.85)}`, borderTopLeftRadius: Math.round(9 * scaleUnit) }} />
+                    <span style={{ position: "absolute", top: -1, right: -1, width: bracketLen, height: bracketLen, borderTop: `${bracketThick}px solid ${hexToRgba(accent, 0.85)}`, borderRight: `${bracketThick}px solid ${hexToRgba(accent, 0.85)}`, borderTopRightRadius: Math.round(9 * scaleUnit) }} />
+                    <span style={{ position: "absolute", bottom: -1, left: -1, width: bracketLen, height: bracketLen, borderBottom: `${bracketThick}px solid ${hexToRgba(accent, 0.85)}`, borderLeft: `${bracketThick}px solid ${hexToRgba(accent, 0.85)}`, borderBottomLeftRadius: Math.round(9 * scaleUnit) }} />
+                    <span style={{ position: "absolute", bottom: -1, right: -1, width: bracketLen, height: bracketLen, borderBottom: `${bracketThick}px solid ${hexToRgba(accent, 0.85)}`, borderRight: `${bracketThick}px solid ${hexToRgba(accent, 0.85)}`, borderBottomRightRadius: Math.round(9 * scaleUnit) }} />
 
                     {callout.label ? (
                       <div
@@ -429,20 +429,20 @@ const ProductShowcaseBlock: React.FC<{
                             : { top: "100%", marginTop: Math.round(10 * scaleUnit) }),
                           display: "inline-flex",
                           alignItems: "center",
-                          gap: Math.round(8 * scaleUnit),
-                          padding: `${Math.round(7 * scaleUnit)}px ${Math.round(14 * scaleUnit)}px`,
+                          gap: Math.round(7 * scaleUnit),
+                          padding: `${Math.round(6 * scaleUnit)}px ${Math.round(13 * scaleUnit)}px`,
                           borderRadius: 999,
-                          background: "rgba(9, 17, 24, 0.92)",
-                          border: `1px solid ${hexToRgba(accent, 0.55)}`,
+                          background: isDark ? "rgba(11, 17, 26, 0.9)" : "rgba(15, 23, 42, 0.86)",
+                          border: `1px solid ${hexToRgba(accent, 0.4)}`,
                           color: "#F8FAFC",
-                          fontSize: Math.max(12, Math.round(14 * scaleUnit)),
+                          fontSize: Math.max(12, Math.round(13.5 * scaleUnit)),
                           fontWeight: 600,
-                          letterSpacing: "0.02em",
+                          letterSpacing: "0.015em",
                           whiteSpace: "nowrap",
-                          boxShadow: `0 ${Math.round(10 * scaleUnit)}px ${Math.round(28 * scaleUnit)}px rgba(0, 0, 0, 0.38)`,
+                          boxShadow: `0 ${Math.round(8 * scaleUnit)}px ${Math.round(22 * scaleUnit)}px rgba(0, 0, 0, 0.24)`,
                         }}
                       >
-                        <span style={{ width: Math.max(6, Math.round(7 * scaleUnit)), height: Math.max(6, Math.round(7 * scaleUnit)), borderRadius: "50%", background: accent }} />
+                        <span style={{ width: Math.max(5, Math.round(6 * scaleUnit)), height: Math.max(5, Math.round(6 * scaleUnit)), borderRadius: "50%", background: accent }} />
                         {callout.label}
                       </div>
                     ) : null}

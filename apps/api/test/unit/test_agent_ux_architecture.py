@@ -609,7 +609,6 @@ def test_resolve_motion_block_cue_phrases_maps_words_to_numeric_props():
      {"word_reveals_s": [0.35, 1.55]}),
     ("statement_hook", {"headline": "Prepare Launch", "highlight_phrase": "Launch"},
      {"word_reveals_s": [0.35, 1.55], "highlight_at_s": 1.47}),
-    ("statement_hook", {"headline": "另一句"}, {"word_reveals_s": [0.15, 0.9, 1.65]}),
 ])
 def test_interaction_uses_acoustic_onsets_and_serializes_only_numeric_cues(block, props, times):
     from app.chat.editor_create import resolve_motion_block_cue_phrases
@@ -629,8 +628,23 @@ def test_interaction_uses_acoustic_onsets_and_serializes_only_numeric_cues(block
     assert not {"cue_phrase", "type_cue_phrase", "load_cue_phrase", "word_cues"} & saved.keys()
 
 
+def test_unmatched_statement_hook_is_not_artificially_stretched():
+    from app.chat.editor_create import resolve_motion_block_cue_phrases
+
+    words = [{"word": "Prepare", "time_begin": 200, "time_end": 650},
+             {"word": "Launch", "time_begin": 1400, "time_end": 2000}]
+    result = resolve_motion_block_cue_phrases(
+        "statement_hook",
+        {"headline": "另一句"},
+        narration="Prepare Launch",
+        cues=[{"text": "Prepare Launch", "time_begin": 0, "time_end": 2000, "words": words}],
+        duration_s=4,
+    )
+    assert "word_reveals_s" not in result
+
+
 @pytest.mark.parametrize("spoken", ["一千八百万", "eighteen million", "18m", "十八"])
-def test_metric_sync_warnings_distinguish_orphans_precision_and_density(spoken):
+def test_metric_sync_warnings_distinguish_precision_density_and_unmatched_cues(spoken):
     from app.chat.editor_create import resolve_motion_block_cue_phrases
 
     props = {"items": [{"value": "£18.7m", "label": "估值"}, {"value": "94%", "label": "覆盖率"},
@@ -638,10 +652,9 @@ def test_metric_sync_warnings_distinguish_orphans_precision_and_density(spoken):
     warnings = []
     resolve_motion_block_cue_phrases("metric_grid", props, narration=f"估值{spoken}，覆盖率百分之九十四。",
                                      cues=None, duration_s=3.1, spoken_seconds=2.5, warnings=warnings)
-    assert {w["kind"] for w in warnings} == {"orphan_item", "numeric_parity", "density", "unmatched_cue"}
+    assert {w["kind"] for w in warnings} == {"numeric_parity", "density", "unmatched_cue"}
     assert [(w["item_index"], w["visual"], w["spoken"]) for w in warnings if w["kind"] == "numeric_parity"] == [
         (0, "18.7m", spoken)]
-    assert [w["item_index"] for w in warnings if w["kind"] == "orphan_item"] == [2]
 
     for precise in ("一千八百七十万", "eighteen point seven million", "18.7m"):
         warnings.clear()

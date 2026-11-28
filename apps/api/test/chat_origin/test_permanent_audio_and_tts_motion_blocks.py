@@ -505,11 +505,11 @@ async def test_chat_origin_permanent_audio_flywheel_and_tts_motion_blocks(
         reviewed = next(c for t in content_of(version).timeline.tracks for c in t.clips if c.clip_id == caps[0].clip_id)
         assert reviewed.object.text == "Reviewed wording" and reviewed.object.caption.state == "independent"
 
-        # Music track has full-length BGM clips automatically ducked to -22 dB with fades!
+        # Music track uses caller's explicit gain (0.0 dB unity default; no silent backend ducking).
         music_tracks = [t for t in content.timeline.tracks if t.kind == "audio" and t.role == "music"]
         assert len(music_tracks) == 1
         assert len(music_tracks[0].clips) >= 1
-        assert music_tracks[0].clips[0].object.gain_db == pytest.approx(-22.0)
+        assert music_tracks[0].clips[0].object.gain_db == pytest.approx(0.0)
         assert any(a.property == "audio.gain" for c in music_tracks[0].clips for a in c.animations)
 
 
@@ -575,7 +575,7 @@ async def test_create_video_motion_block_pending_speech_and_voice_forbidden_guar
             {"act_index": 3, "clip_id": "clp_mg_3", "block_id": "metric_grid", "kind": "reveal",
              "label": label, "at_seconds": at} for label, at in [("Speed", start), ("Coverage", start + 1)]
         ]
-        assert any(w["kind"] == "dead_hold" and w["act_index"] == 3 for w in result["sync_warnings"])
+        assert not any(w["kind"] == "dead_hold" for w in result["sync_warnings"])
         with bind_progress("create-pending-vo-1", None):
             replay = await create_video(db, turn, args)
         assert replay == result
@@ -858,9 +858,9 @@ async def test_continuous_voice_job_cuts_captions_and_local_edits(database, tmp_
             (2, "Go", 0.55), (2, "repeat", 1.25), (5, "Go", 5.15), (5, "again", 5.63),
         ]
         warnings = result["sync_warnings"]
-        assert {w["kind"] for w in warnings if w["act_index"] == 3} >= {"orphan_item", "numeric_parity", "density"}
+        assert {w["kind"] for w in warnings if w["act_index"] == 3} >= {"numeric_parity", "density"}
         assert next(w for w in warnings if w["kind"] == "density")["spoken_seconds"] == 0.52
-        assert any(w["kind"] == "dead_hold" and w["act_index"] == 4 for w in warnings)
+        assert not any(w["kind"] in {"orphan_item", "dead_hold"} for w in warnings)
         version = await db.get(CompositionVersion, UUID(result["version_id"]))
         content = content_of(version)
         caps = next(t.clips for t in content.timeline.tracks if t.track_id == "trk_caption")
@@ -947,4 +947,4 @@ async def test_music_only_keeps_planned_beats_and_unvoiced_mix(database, tmp_pat
             result = await create_video(db, turn, args)
         assert result["narration_clips"] == [] and result["shots"] == []
         assert result["duration_seconds"] == 1.25
-        assert [clip["gain_db"] for clip in result["bgm_clips"]] == [-14.0]
+        assert [clip["gain_db"] for clip in result["bgm_clips"]] == [0.0]
