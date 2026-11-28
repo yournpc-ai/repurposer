@@ -73,17 +73,26 @@ export function TurnErrorRow({ text }: { text: string }) {
 export function FailureCheckpointCard({
   text,
   checkpoint,
+  recovered = false,
   retrying = false,
   disabled = false,
   onRetry,
 }: {
   text: string
   checkpoint?: FailureCheckpoint
+  recovered?: boolean
   retrying?: boolean
   disabled?: boolean
   onRetry?: () => void
 }) {
   const { t } = useTranslation()
+  if (recovered) {
+    return (
+      <p data-slot="failure-checkpoint-note" className="text-xs text-muted-foreground/70">
+        {t("chat.checkpoint.continued")}
+      </p>
+    )
+  }
   const canRetry = Boolean(onRetry && (checkpoint?.retryable ?? true))
   const showPreservedNote = Boolean(
     checkpoint?.decision_committed &&

@@ -1989,6 +1989,7 @@ const zh: Resources = {
     completed: "完成",
     failed: "抱歉，这次没能完成修改，请再试一次。",
     checkpoint: {
+      continued: "此步骤曾中断，后续已继续。",
       retry: "重试当前步骤",
       retrying: "正在重试…",
       preservedNote: "你的偏好选择与已采集素材已安全保留。",

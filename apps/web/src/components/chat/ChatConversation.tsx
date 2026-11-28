@@ -6,7 +6,7 @@ import { Fragment, useEffect, useMemo, useRef, useState, type RefObject } from "
 import { useTranslation } from "react-i18next"
 import { Download, Minimize2 } from "@/components/ui/icons"
 
-import { ActivityRow, activityText, StepsPlanCard, WorkSegmentRow, type NowRowPayload } from "@/components/chat/ActivityStream"
+import { ActivityRow, activityText, isSyntheticRepair, StepsPlanCard, WorkSegmentRow, type NowRowPayload } from "@/components/chat/ActivityStream"
 import { AnsweredQuestion } from "@/components/chat/AnsweredQuestion"
 import { CandidateSurfaceCard } from "@/components/chat/CandidateSurface"
 import { TurnMinimap, type TurnMinimapItem } from "@/components/chat/TurnMinimap"
@@ -88,6 +88,27 @@ function CompactContextDivider({ summary }: { summary: CompactSummary }) {
       <span className="h-px flex-1 bg-border/80" />
     </div>
   )
+}
+
+function isCheckpoint(slot: ConversationUnit) {
+  return slot.kind === "message" && slot.message.meta === "error" &&
+    Boolean(slot.message.failureCheckpoint) && !slot.message.creditTopup
+}
+
+function isIsolatedFailure(slot: ConversationUnit) {
+  if (slot.kind === "activity") return slot.activity.status === "failed" && isSyntheticRepair(slot.activity)
+  if (slot.kind !== "activityFold" || slot.liveActivity) return false
+  const rows = slot.failure ? [...slot.rows, slot.failure] : slot.rows
+  return rows.some(row => row.status === "failed") && rows.every(isSyntheticRepair) &&
+    slot.trail.every(entry => entry.kind === "activity" && isSyntheticRepair(entry.activity))
+}
+
+function isAssistantOutcome(slot: ConversationUnit) {
+  if (slot.kind !== "message") return false
+  const m = slot.message
+  return m.role === "assistant" && !m.meta && !m.streaming && !m.interim &&
+    m.displayRole !== "stage_note" && m.displayRole !== "rail_note" &&
+    Boolean(m.content.trim() || m.outputRefs?.length || m.blocks?.length)
 }
 
 function blockMaxSeq(block: ConversationBlock): number | null {
@@ -249,7 +270,7 @@ export function ChatConversation({
    * in-flight live plan card anchors after its own echo bubble. */
   const renderConversationMessage = (
     m: OverlayMessage,
-    opts?: { checkpointSuperseded?: boolean },
+    opts?: { checkpointSuperseded?: boolean; checkpointRecovered?: boolean },
   ) => {
     const deliveryOutputSlot = hasMessageOutputs(m) ? (
       <div data-message-scroller-reading-edge>
@@ -311,6 +332,7 @@ export function ChatConversation({
             <FailureCheckpointCard
               text={m.content}
               checkpoint={m.failureCheckpoint}
+              recovered={opts?.checkpointRecovered}
               disabled={chatBusy}
               onRetry={opts?.checkpointSuperseded ? undefined : onRetryCheckpoint}
             />
@@ -540,6 +562,9 @@ export function ChatConversation({
   }
 
   const conversationBlocks = buildConversationBlocks(conversationUnits)
+  const lastOutcomeBlock = conversationBlocks.reduce(
+    (last, block, index) => block.slots.some(isAssistantOutcome) ? index : last, -1,
+  )
   let bottomSeatBlockKey: string | null = null
   for (const block of conversationBlocks) {
     // An answer resumes the same server turn, but starts a new visible
@@ -619,16 +644,6 @@ export function ChatConversation({
     return map
   }, [activeRunId, bottomSeatBlockKey, chatBusy, conversationBlocks, liveSteps])
 
-  const renderUnit = (
-    unit: ConversationUnit,
-    recovered = false,
-    attachedSteps?: StepPlanItem[],
-    checkpointSuperseded = false,
-  ) =>
-    unit.kind === "message"
-      ? renderConversationMessage(unit.message, { checkpointSuperseded })
-      : renderActivityUnit(unit, recovered, attachedSteps)
-
   return (
     <MessageScrollerProvider>
       <ScrollerSendBridge apiRef={scrollerSendRef} />
@@ -647,10 +662,19 @@ export function ChatConversation({
             {conversationBlocks.map((block, blockIndex) => {
               const blockSteps = block.kind === "turn" ? turnStepsByBlockKey.get(block.key) : undefined
               const hasStepsCard = Boolean(blockSteps && blockSteps.length >= 2)
+              const checkpointRuns = block.slots.flatMap(slot =>
+                slot.kind === "message" && isCheckpoint(slot)
+                  ? [slot.message.runId ?? slot.message.failureCheckpoint?.run_id]
+                  : [],
+              )
+              const visibleSlots = checkpointRuns.length ? block.slots.filter(slot =>
+                slot.kind === "message" || !isIsolatedFailure(slot) ||
+                !checkpointRuns.some(run => !run || !slot.runId || slot.runId === run),
+              ) : block.slots
               let stepsHostIndex = -1
               if (hasStepsCard) {
-                for (let i = block.slots.length - 1; i >= 0; i -= 1) {
-                  if (block.slots[i].kind === "activityFold") {
+                for (let i = visibleSlots.length - 1; i >= 0; i -= 1) {
+                  if (visibleSlots[i].kind === "activityFold") {
                     stepsHostIndex = i
                     break
                   }
@@ -661,8 +685,8 @@ export function ChatConversation({
                 stepsHostIndex < 0 &&
                 block.key === bottomSeatBlockKey &&
                 bottomStatusLabel !== null
-              const slots = block.slots.map((slot, slotIndex) => {
-                const laterSlots = block.slots.slice(slotIndex + 1)
+              const slots = visibleSlots.map((slot, slotIndex) => {
+                const laterSlots = visibleSlots.slice(slotIndex + 1)
                 const hasJobFailure =
                   slot.kind === "activityFold" &&
                   slot.rows.some(
@@ -686,25 +710,18 @@ export function ChatConversation({
                             later.message.blocks?.length,
                         )),
                   )
-                const checkpointSuperseded =
-                  slot.kind === "message" &&
-                  slot.message.meta === "error" &&
-                  Boolean(slot.message.failureCheckpoint) &&
-                  (blockIndex < conversationBlocks.length - 1 ||
-                    laterSlots.some(
-                      (later) =>
-                        later.kind === "activityFold" ||
-                        later.kind === "activity" ||
-                        (later.kind === "message" &&
-                          later.message.role === "assistant" &&
-                          (later.message.meta !== "error" || Boolean(later.message.failureCheckpoint))),
-                    ))
-                return renderUnit(
-                  slot,
-                  hasLaterOutcome,
-                  slotIndex === stepsHostIndex ? blockSteps : undefined,
-                  checkpointSuperseded,
-                )
+                if (slot.kind === "message") {
+                  const checkpointSuperseded = isCheckpoint(slot) && (
+                    blockIndex < conversationBlocks.length - 1 ||
+                    laterSlots.some(later => later.kind !== "message" || isCheckpoint(later) || isAssistantOutcome(later))
+                  )
+                  return renderConversationMessage(slot.message, {
+                    checkpointSuperseded,
+                    checkpointRecovered: checkpointSuperseded &&
+                      (lastOutcomeBlock > blockIndex || laterSlots.some(isAssistantOutcome)),
+                  })
+                }
+                return renderActivityUnit(slot, hasLaterOutcome, slotIndex === stepsHostIndex ? blockSteps : undefined)
               })
               const divider =
                 compactSummary && blockIndex === compactAfterBlockIndex ? (

@@ -10,6 +10,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -66,9 +67,12 @@ def _trace_write(record: dict[str, Any]) -> None:
     path = _trace_path()
     if path is None:
         return
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(_trace_safe(record, path), ensure_ascii=False) + "\n")
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(_trace_safe(record, path), ensure_ascii=False) + "\n")
+    except Exception:
+        pass
 
 
 def trace_payload_inventory(payload: dict[str, Any]) -> dict[str, Any]:
@@ -111,6 +115,10 @@ def trace_start(payload: dict[str, Any], seat: str, *, provider: str, model: str
         assembly["model_call_id"] = call_id
         assembly["provider"] = provider
         assembly["model"] = model
+    from app.providers.llm.turn_trace import collector
+
+    if active := collector():
+        active.model_starts[call_id] = time.monotonic()
     inventory = trace_payload_inventory(payload) if _trace_path() is not None else None
     logger.info("model_request_started", model_call_id=call_id, seat=seat,
                 provider=provider, model=model,
@@ -170,3 +178,24 @@ def trace_finish(call_id: str, *, provider: str, model: str,
         "response": response,
         "error": None if error is None else {"type": type(error).__name__, "message": str(error)},
     })
+
+    from app.metering import _cached_tokens_of
+    from app.providers.llm.turn_trace import collector, record_llm_exchange
+
+    if active := collector():
+        started = active.model_starts.pop(call_id, None)
+        data = response if isinstance(response, dict) else {}
+        usage = data.get("usage") or {}
+        try:
+            message = (data.get("choices") or [{}])[0].get("message") or data
+            calls = [{"id": item.get("id"), "name": (item.get("function") or item).get("name")}
+                     for item in message.get("tool_calls") or []]
+            record_llm_exchange(
+                iteration=assembly.get("iteration") if assembly else None, model_call_id=call_id,
+                provider=provider, model=model, prompt_tokens=usage.get("prompt_tokens"),
+                cached_tokens=_cached_tokens_of(usage), completion_tokens=usage.get("completion_tokens"),
+                duration_ms=int((time.monotonic() - started) * 1000) if started is not None else None,
+                tool_calls=calls, error={"type": type(error).__name__, "message": str(error)} if error else None,
+            )
+        except (AttributeError, TypeError, ValueError, IndexError, KeyError):
+            pass

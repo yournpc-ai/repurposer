@@ -68,7 +68,7 @@ from app.agents.candidate_correction import (
 )
 from app.agents.tool_progress import ToolProgress, bind_progress
 from app.metering import bind_model_prompt
-from app.providers.llm import get_llm_client
+from app.providers.llm import get_llm_client, turn_trace
 from app.providers.llm.base import LLMClient, LLMError, LLMSchemaError
 from app.providers.llm.trace import trace_argument_normalization
 
@@ -338,6 +338,7 @@ class RoundAssembly:
     project_reply: Callable[[str], str] | None = None
     # When true, non-empty prose with no tool calls settles cleanly as a direct reply.
     allow_bare_reply: bool = False
+    trace: dict = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -580,6 +581,49 @@ LoopExecute = Callable[
 ]
 
 
+async def _execute_call(execute, *, iteration, call_id, name, params, speech, group_id, on_loop_event):
+    if turn_trace.collector() is None:
+        with bind_progress(call_id, on_loop_event, group_id):
+            return await execute(name, params, speech)
+
+    steps = []
+
+    async def progress(event):
+        steps.append(event.step)
+        await _emit(on_loop_event, event)
+
+    started = time.monotonic()
+    error = None
+    outcome = None
+    try:
+        with bind_progress(call_id, progress, group_id):
+            outcome = await execute(name, params, speech)
+        return outcome
+    except BaseException as exc:
+        error = {"type": type(exc).__name__, "message": str(exc)}
+        raise
+    finally:
+        observation = isinstance(outcome, ToolObservation)
+        ok = error is None and (outcome is None or observation and outcome.ok)
+        fields = {}
+        if observation and outcome.text.lstrip().startswith("{"):
+            try:
+                fields = json.loads(outcome.text)
+            except (ValueError, RecursionError):
+                pass
+        if not ok and error is None:
+            message = (outcome.user_error or outcome.text) if observation else getattr(outcome, "reason", outcome)
+            error = {"type": type(outcome).__name__, "message": message}
+        version = {k: fields[k] for k in ("version", "version_id", "composition_version_id") if k in fields}
+        turn_trace.record_tool_span(
+            iteration=iteration, tool_call_id=call_id, tool_name=name,
+            args_summary=sorted(params.model_fields_set) if params is not None else [],
+            duration_ms=int((time.monotonic() - started) * 1000), ok=ok,
+            produced_version=version or None, produced_output_id=fields.get("output_id"),
+            sub_steps=steps, error=error,
+        )
+
+
 # A stage can start with a silent tool call. Announce the work once, before
 # its activity row; only actual tool results can substantiate completion.
 class ToolLoopAgent:
@@ -623,6 +667,7 @@ class ToolLoopAgent:
             raise RuntimeError(f"Duplicate agent declaration: {name}")
         AGENTS[name] = self
 
+    @turn_trace.trace_loop()
     async def call_loop(
         self,
         execute: LoopExecute,
@@ -786,16 +831,19 @@ class ToolLoopAgent:
             result.observations = list(observation_results)
             result.version_saved = version_saved
             result.rejections = list(rejections)
+            outcome = result.tool_name or "bare_reply"
+            if result.exhausted:
+                outcome = "exhausted"
+            elif result.no_progress_tool is not None:
+                outcome = f"no_progress:{result.no_progress_tool}"
+            turn_trace.finalize_turn_trace(
+                outcome=f"refused:{result.ended_by}" if result.ended_by else outcome,
+                total_iterations=result.iterations,
+            )
             logger.info(
                 "tool_loop_turn",
                 agent=self.name,
-                outcome=(
-                    "exhausted"
-                    if result.exhausted
-                    else f"no_progress:{result.no_progress_tool}"
-                    if result.no_progress_tool is not None
-                    else result.tool_name or "bare_reply"
-                ),
+                outcome=outcome,
                 iterations=result.iterations,
                 reads=accepted_reads,
                 interim_proses=interim_proses_sent,
@@ -902,7 +950,10 @@ class ToolLoopAgent:
 
         assembled_result_count = 0
         prev_iteration_had_rejection = False
+        trace = turn_trace.collector()
         for iteration in range(self.max_iterations):
+            if trace is not None:
+                trace.iterations = iteration + 1
             suppress_retry_interim = prev_rejected or prev_iteration_had_rejection
             prev_iteration_had_rejection = False
             if iteration and prev_rejected and on_repair is not None:
@@ -1199,6 +1250,15 @@ class ToolLoopAgent:
                                      "project_context": list(range(project_start, project_start + len(shared))),
                                      "dialogue": list(range(dialogue_start, dialogue_start + len(round_dialogue or [])))},
             }
+            if trace is not None:
+                sources = [*assembly["system_sources"], *(assembly["user_sources"] if opening and assembled.opening_text is None else [])]
+                turn_trace.record_prompt_assembly(
+                    iteration=iteration, agent=self.name,
+                    template_files=[s["template"] for s in sources] + assembled.trace.get("template_files", []),
+                    context_sources=assembled.trace.get("context_sources", {}),
+                    project_resources=assembled.trace.get("project_resources", {}),
+                    offered_tools=[tool.name for tool in round_tools],
+                )
             try:
                 with bind_model_prompt(assembly):
                     if streaming:
@@ -1551,8 +1611,8 @@ class ToolLoopAgent:
 
             async def inspect_member(member, validated):
                 start = time.monotonic()
-                with bind_progress(member.call_id, on_loop_event, group_id):
-                    observed = await execute(member.tool_name, validated, "")
+                observed = await _execute_call(execute, iteration=iteration, call_id=member.call_id,
+                    name=member.tool_name, params=validated, speech="", group_id=group_id, on_loop_event=on_loop_event)
                 duration = int((time.monotonic() - start) * 1000)
                 return member, observed, duration
 
@@ -1820,8 +1880,8 @@ class ToolLoopAgent:
                 if parallel_params:
                     outcome = read_results[call_id]
                 else:
-                    with bind_progress(call_id, on_loop_event, group_id):
-                        outcome = await execute(dispatch_name, params, speech)
+                    outcome = await _execute_call(execute, iteration=iteration, call_id=call_id,
+                        name=dispatch_name, params=params, speech=speech, group_id=group_id, on_loop_event=on_loop_event)
                 if isinstance(outcome, CandidateRejected):
                     if not tool.repairable:
                         raise RuntimeError(f"{dispatch_name} returned candidate validation without repairable=True")

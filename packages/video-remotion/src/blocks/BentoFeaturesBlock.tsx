@@ -35,7 +35,7 @@ export function BentoFeaturesBlock({ props, frame }: { props: BentoProps; frame:
       <div
         style={{
           position: "absolute",
-          inset: "322px 132px 124px",
+          inset: "322px 132px 164px",
           display: "grid",
           gap: 22,
           gridTemplateColumns: three ? "1.12fr 1fr" : "1fr 1fr",

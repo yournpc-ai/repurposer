@@ -1044,3 +1044,36 @@ it("shows Thinking honestly during live_post_tool_thinking instead of snapping b
   expect(title).toContain("chat.thinking")
   expect(title).not.toContain("正在编排 45 秒分镜与字幕")
 })
+
+it.each(["standalone marker", "folded marker"])("keeps only the actionable checkpoint beside a %s", (shape) => {
+  const checkpoint: OverlayMessage = {
+    id: "checkpoint", role: "assistant", content: "The step was interrupted.", turnId: "turn",
+    meta: "error", failureCheckpoint: { retryable: true },
+  }
+  const marker: OverlayMessage = {
+    id: "marker", role: "assistant", content: "", turnId: "turn",
+    activity: { activity_id: "repair", kind: "repair", status: "failed", key: "chat.activity.repair", duration_ms: 2000 },
+  }
+  const options = props([user, checkpoint, marker], { onRetryCheckpoint: vi.fn() })
+  if (shape === "folded marker") {
+    options.conversationUnits = options.conversationUnits.map(slot => slot.kind !== "activity" ? slot : ({
+      kind: "activityFold", rows: [], failure: slot.activity, trail: [], rowKey: slot.rowKey, turnId: slot.turnId,
+      clockRowKey: slot.rowKey, firstActivityAt: undefined, startedAtMs: null, endedAtMs: null,
+      elapsedMs: 2000, openTail: false,
+    }))
+  }
+  const { container, rerender } = render(<ChatConversation {...options} />)
+  expect(screen.getByRole("button", { name: "chat.checkpoint.retry" })).toBeTruthy()
+  expect(screen.queryByText("chat.activity.repair")).toBeNull()
+  expect(screen.queryByText("chat.activityFold.worked")).toBeNull()
+
+  rerender(<ChatConversation {...options} conversationUnits={[
+    ...options.conversationUnits,
+    { kind: "message", message: { id: "done", role: "assistant", turnId: "turn", content: "Your video is ready." } },
+  ]} />)
+  expect(screen.getByText("Your video is ready.")).toBeTruthy()
+  expect(container.querySelector('[data-slot="failure-checkpoint-note"]')?.textContent).toBe("chat.checkpoint.continued")
+  expect(container.querySelector('[data-slot="failure-checkpoint-card"]')).toBeNull()
+  expect(screen.queryByText(checkpoint.content)).toBeNull()
+  expect(screen.queryByRole("button", { name: "chat.checkpoint.retry" })).toBeNull()
+})

@@ -198,6 +198,11 @@ export function activityText(activity: NowRowPayload, t: TFunction): string {
     : t(status === "failed" ? "chat.failed" : status === "completed" ? "chat.completed" : "chat.thinking")
 }
 
+export function isSyntheticRepair(row: ActivityRowFrame) {
+  return !row.tool_name && !row.call_id && !row.group_id && !row.jobReceipt && !row.receipt &&
+    (row.kind === "repair" || row.key === "chat.activity.repair")
+}
+
 /** A terminal failure without preceding work stays visible in the conversation. */
 export function ActivityRow({ activity }: { activity: ActivityRowFrame }) {
   const { t } = useTranslation()
@@ -840,10 +845,10 @@ export function WorkSegmentRow({
   }
   const filteredTrail = trail.filter((entry) => {
     if (entry.kind !== "activity") return true
-    const { status, call_state, tool_name, error: rawError, key, kind } = entry.activity
+    const { status, call_state, tool_name, error: rawError } = entry.activity
     // Synthetic non-tool repair/exhaustion markers ("这次没能完成 · 0s") belong
     // to the assistant's own status reply, never inside the tool work trail.
-    if (!tool_name && (kind === "repair" || key === "chat.activity.repair")) {
+    if (isSyntheticRepair(entry.activity)) {
       return false
     }
     // Hide self-healed internal schema validation retries and non-batchable
@@ -895,7 +900,7 @@ export function WorkSegmentRow({
       startedAtMs: postToolThinking.startedAtMs,
     })
   }
-  if (failure && !(!failure.tool_name && (failure.kind === "repair" || failure.key === "chat.activity.repair"))) {
+  if (failure && !isSyntheticRepair(failure)) {
     error = trailStep({ kind: "activity", activity: failure, rowKey: failure.activity_id }, false, t, onOpen)
     steps.push(error)
   }

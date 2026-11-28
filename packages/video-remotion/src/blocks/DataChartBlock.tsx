@@ -63,7 +63,7 @@ export function DataChartBlock({ props, frame }: { props: ChartProps; frame: Fra
           {props.subtitle}
         </div>
       )}
-      <div style={{ position: "absolute", left: 140, top: 374, width, height: 580 }}>
+      <div style={{ position: "absolute", left: 140, top: 358, width, height: 580 }}>
         <svg width={width} height="475" style={{ position: "absolute", overflow: "visible" }}>
           {[0, 0.25, 0.5, 0.75, 1].map((t) => (
             <path
@@ -189,7 +189,7 @@ export function DataChartBlock({ props, frame }: { props: ChartProps; frame: Fra
                   position: "absolute",
                   left: i * column + 5,
                   width: column - 10,
-                  top: 481,
+                  top: 463,
                   textAlign: "center",
                   lineHeight: 1.18,
                   fontWeight: selected ? 700 : 500,

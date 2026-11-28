@@ -2060,6 +2060,7 @@ const en = {
     completed: "Done",
     failed: "Sorry, I couldn't update this. Please try again.",
     checkpoint: {
+      continued: "Work continued after this interruption.",
       retry: "Retry step",
       retrying: "Retrying…",
       preservedNote: "Your selections and gathered materials are safely preserved.",

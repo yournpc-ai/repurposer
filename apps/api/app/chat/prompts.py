@@ -7,6 +7,7 @@ from dataclasses import replace
 from app.agents.base import jinja_env
 from app.agents.tool_loop import RoundAssembly, prune_wire_parameters
 from app.chat.editor import EDITOR_NAMES, project_editor_reply
+from app.providers.llm.turn_trace import collector
 
 def chat_system() -> str:
     return jinja_env.get_template("chat/system.j2").render()
@@ -151,6 +152,35 @@ def _export_only_request(user_text: str) -> bool:
 
 
 def assemble_video_round(facts: dict) -> RoundAssembly:
+    def finish(*, context, prefix="", template_files=(), **kwargs):
+        trace = {}
+        if collector() is not None:
+            resources = getattr(facts.get("snapshot"), "resources", ())
+            project = next((r for _, r in resources if r.get("kind") == "project"), {})
+            selected = (kwargs.get("caller_state") or {}).get("video_target") or {}
+            files = list(template_files)
+            if "bound_skill_method" in context:
+                skill = context.get("skill_reference") or {}
+                identity = skill.get("skill_version_id") or skill.get("skill_id")
+                files.append(f"{identity}/SKILL.md" if identity else "SKILL.md")
+            output_ids = {
+                key: fact["output_id"] for key in ("preceding_delivery", "target_hint", "exported", "delivered")
+                if (fact := facts.get(key)) and fact.get("output_id")
+            }
+            trace = {
+                "template_files": files,
+                "context_sources": {key: len(json.dumps(value, ensure_ascii=False).encode())
+                                    for key, value in context.items()},
+                "project_resources": {
+                    "resource_counts": project.get("resource_counts"), "outputs": output_ids,
+                    "versions": {r["composition_id"]: r.get("version_id") for _, r in resources
+                                 if r.get("kind") == "composition" and r.get("composition_id")},
+                    "selected": {k: selected[k] for k in ("composition_id", "version_id", "version") if k in selected},
+                    "visible_snapshots": sum(key.startswith("snapshot:") for key, _ in resources),
+                },
+            }
+        return RoundAssembly(context=prefix + json.dumps(context, ensure_ascii=False), trace=trace, **kwargs)
+
     confirmation = facts.get("video_confirmation")
     if confirmation and confirmation["action"] in {"wait", "stale", "existing_export"}:
         action = confirmation["action"]
@@ -159,10 +189,10 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
             "stale": "说明引用的版本已过期，询问要使用哪一版。",
             "existing_export": "按导出任务的实际状态和回执作答。有交付消息时才能说已交付。",
         }
-        return RoundAssembly(
+        return finish(
             tools=[tool for tool in facts["tools"] if tool.name == "answer"],
             system=f"用用户在本次对话中使用的语言作答。{rules[action]} 若只需告知情况，先在消息正文中说明，再调用 answer。",
-            context=json.dumps({"video_confirmation": confirmation}, ensure_ascii=False),
+            context={"video_confirmation": confirmation},
             stage="video_confirmation", include_project_context=False,
             include_observation_media=False, opening_text=facts.get("user_text") or "",
         )
@@ -187,10 +217,11 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
         present_ctx: dict = {"video_stage": "version_present"}
         if pending and (pending_ctx := _pending_question_context(pending)):
             present_ctx["pending_question"] = pending_ctx
-        return RoundAssembly(
+        return finish(
             tools=[tool for tool in facts["tools"] if tool.name == "answer"],
             system="用用户在本次对话中使用的语言作答。作品已经保存。根据本次保存回执展示实际版本，然后调用 answer（若无需结算待决卡也可直接在正文答复）。\n" + presentation,
-            context="当前视频轮次（目标和状态由服务端提供）：\n" + json.dumps(present_ctx, ensure_ascii=False),
+            context=present_ctx, prefix="当前视频轮次（目标和状态由服务端提供）：\n",
+            template_files=["chat/_video_presentation.j2"],
             stage="version_present", include_project_context=False,
             include_observation_media=False, observation_tools=frozenset({"create_video", "instantiate_skill_blueprint"}),
             stream_prose=not facts.get("editor_labels"),
@@ -541,10 +572,10 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
         system_prompt = jinja_env.get_template("chat/video_editor.j2").render(
             website_evidence_rule=website_evidence_rule,
         )
-        return RoundAssembly(
+        return finish(
             tools=tools,
             system=system_prompt,
-            context=json.dumps(context, ensure_ascii=False), include_project_context=False,
+            context=context, include_project_context=False,
             opening_text=None if native_creation else user_text, enforce_offered_tools=True,
             stream_prose=not media_ready and not facts.get("editor_labels") and (
                 native_creation or bool(selected and not facts.get("authorized_media"))
@@ -556,21 +587,21 @@ def assemble_video_round(facts: dict) -> RoundAssembly:
             allow_bare_reply=bare_production_feedback is None,
         )
     if pending and (pending_ctx := _pending_question_context(pending)):
-        return RoundAssembly(
+        return finish(
             tools=[tool for tool in facts["tools"] if tool.name == "answer"],
             system=(
                 "用用户在本次对话中使用的语言自然、完整地回答用户刚发的消息。"
                 "当前仍有待确认的问题卡：若用户只是顺口提问，保持 pending_disposition='none' 并在结尾用一句同事口吻温和拉回原问题；"
                 "若用户明确取消或改走新方向，传入 pending_disposition='skip'。不要暴露内部机制，也无需重复提问。"
             ),
-            context=json.dumps({"pending_question": pending_ctx}, ensure_ascii=False),
+            context={"pending_question": pending_ctx},
             include_project_context=False, opening_text=user_text, enforce_offered_tools=True,
             allow_bare_reply=True,
         )
-    return RoundAssembly(
+    return finish(
         tools=[tool for tool in facts["tools"] if tool.name == "answer"],
         system="保留现有成果。当前无法确定可编辑作品时，如实说明，不调用旧创作协议。",
-        context=json.dumps({"video_target": "unresolved"}, ensure_ascii=False),
+        context={"video_target": "unresolved"},
         include_project_context=False, opening_text=user_text, enforce_offered_tools=True,
         allow_bare_reply=True,
     )
