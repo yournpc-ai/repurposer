@@ -3,7 +3,7 @@ import { Maximize2, Play, Video } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 
 import { anchorCardOf, anchorLabel, isChatVideoOutput } from "@/lib/anchorCards"
-import { toAbsoluteUrl } from "@/lib/api"
+import { authorizePlayback, playbackPath, toAbsoluteUrl } from "@/lib/api"
 import { useOutputPoster } from "@/lib/outputPoster"
 import { outputAspect } from "@/lib/outputAspect"
 import { cn, formatDuration } from "@/lib/utils"
@@ -38,9 +38,13 @@ export function OutputDeliveryCard({
   const { t } = useTranslation()
   const poster = useOutputPoster(output)
   const [playing, setPlaying] = useState(false)
+  const [resolvedUrl, setResolvedUrl] = useState<string | null>(null)
+  const [resolving, setResolving] = useState(false)
 
   useEffect(() => {
     setPlaying(false)
+    setResolvedUrl(null)
+    setResolving(false)
   }, [output.id])
 
   if (!isChatVideoOutput(output)) return null
@@ -49,7 +53,31 @@ export function OutputDeliveryCard({
   const label = anchorLabel(card, typeWord, null)
   const aspect = outputAspect(output)
   const portrait = aspect < 1
-  const videoUrl = toAbsoluteUrl(card.videoUrl)
+  const rawVideoUrl = toAbsoluteUrl(card.videoUrl)
+
+  const handlePlay = async () => {
+    if (!rawVideoUrl) {
+      onOpen(output.id)
+      return
+    }
+    const privatePath = playbackPath(rawVideoUrl)
+    if (!privatePath) {
+      setResolvedUrl(rawVideoUrl)
+      setPlaying(true)
+      return
+    }
+    if (resolving) return
+    setResolving(true)
+    try {
+      const auth = await authorizePlayback(privatePath)
+      setResolvedUrl(auth.url)
+      setPlaying(true)
+    } catch {
+      onOpen(output.id)
+    } finally {
+      setResolving(false)
+    }
+  }
 
   return (
     <div className={cn(portrait ? "w-fit max-w-full" : "w-full max-w-[520px]")}>
@@ -61,9 +89,9 @@ export function OutputDeliveryCard({
         )}
         style={{ aspectRatio: aspect }}
       >
-        {playing && videoUrl ? (
+        {playing && resolvedUrl ? (
           <video
-            src={videoUrl}
+            src={resolvedUrl}
             poster={poster ?? undefined}
             controls
             autoPlay
@@ -73,14 +101,9 @@ export function OutputDeliveryCard({
         ) : (
           <button
             type="button"
-            aria-label={t(videoUrl ? "chat.anchorCards.play" : "chat.anchorCards.view", { name: label })}
-            onClick={() => {
-              if (videoUrl) {
-                setPlaying(true)
-              } else {
-                onOpen(output.id)
-              }
-            }}
+            disabled={resolving}
+            aria-label={t(rawVideoUrl ? "chat.anchorCards.play" : "chat.anchorCards.view", { name: label })}
+            onClick={() => void handlePlay()}
             className="relative block h-full w-full text-left focus-visible:outline-2 focus-visible:outline-ring/30"
           >
             <OutputPosterImage output={output} className="object-cover" />
