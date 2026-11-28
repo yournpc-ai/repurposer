@@ -3790,12 +3790,14 @@ export function AgentThread({
           <AsyncJobStrip />
           <Card
             data-slot="chat-composer"
+            aria-hidden={Boolean(pillDock) || undefined}
             className={cn(
               "relative w-full rounded-[22px] bg-card",
               fileDragging && "outline-2 outline-dashed outline-ring",
-              Boolean(pillDock) && "hidden",
+              Boolean(pillDock) && "!hidden",
             )}
             style={{
+              ...(pillDock ? { display: "none" } : null),
               ["--ui-crdc-radius" as string]: "22px",
               ["--ui-crdc-pad" as string]: "12px 14px",
             }}

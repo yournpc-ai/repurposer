@@ -1179,6 +1179,7 @@ async def create_video(db, turn, args: CreateVideoArgs):
 
             narration_language = (args.narration_language or "").strip().lower()
             deferred_captions: list[tuple[str | None, int, int, str, Any, CaptionDerivation | SourceCaptionDerivation]] = []
+            deferred_visual_descriptions: list[tuple[str, str]] = []
             voiceover = None
             if args.voiceover_snapshot_id:
                 from app.tools.video.narration import snapshot_narration_cues
@@ -1500,6 +1501,8 @@ async def create_video(db, turn, args: CreateVideoArgs):
                     "",
                 )
                 placed_blocks.append((clip_id, landed_track_id, start, end, mb))
+                if mb.visual_description and mb.visual_description.strip():
+                    deferred_visual_descriptions.append((scene_id, mb.visual_description.strip()))
 
             if deferred_captions:
                 caption_ops: list[Any] = []
@@ -1569,17 +1572,19 @@ async def create_video(db, turn, args: CreateVideoArgs):
                     )
             if transition_ops:
                 comp_content = apply_ops(comp_content, transition_ops, bound_digests)
-            visual_desc_ops = [
-                UpdateScene(
-                    op="update_scene",
-                    scene_id=f"scn_mg_{idx + 1}",
-                    visual_description=mb.visual_description.strip(),
+            if deferred_visual_descriptions:
+                comp_content = apply_ops(
+                    comp_content,
+                    [
+                        UpdateScene(
+                            op="update_scene",
+                            scene_id=v_scene_id,
+                            visual_description=v_desc,
+                        )
+                        for v_scene_id, v_desc in deferred_visual_descriptions
+                    ],
+                    bound_digests,
                 )
-                for idx, (_, _, _, _, mb) in enumerate(placed_blocks)
-                if mb.visual_description and mb.visual_description.strip()
-            ]
-            if visual_desc_ops:
-                comp_content = apply_ops(comp_content, visual_desc_ops, bound_digests)
             content = comp_content.model_dump(mode="json")
 
         if args.music_id is not None:
